@@ -496,6 +496,9 @@ existing signal control.
 - `POST /v1/delivery-art/review-packets/prepare-finalization`
 - `POST /v1/delivery-art/review-packets/operating-readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
+- `POST /v1/delivery-art/architecture-packets/draft`
+- `POST /v1/delivery-art/architecture-packets/persist`
+- `POST /v1/delivery-art/architecture-packets/current`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`

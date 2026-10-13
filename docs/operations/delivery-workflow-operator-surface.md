@@ -491,7 +491,7 @@ merge-ready architecture fidelity. A missing, invalid, mismatched, or incomplete
 profile blocks before a session, worktree, branch, or source credential is
 created; rerun preflight after the owner profile is repaired on the accepted
 base.
-For architecture v5, that configured-path request carries both merge-ready and
+For architecture v5 or v6, that configured-path request carries both merge-ready and
 operating-ready conformance cases plus the required evidence kinds across the
 authenticated source-executor boundary. The transport must preserve those
 inputs; inspecting only the session would silently bypass the accepted-base
@@ -652,7 +652,7 @@ artifacts, and Review Packets remain canonical.
 
 `start` records one explicit Landing Unit decision, owner repo, branch plan,
 base commit, rollback boundary, and architecture binding. For Architecture
-Packet v3 through v5, applicable human gates are derived from the durable
+Packet v3 through v6, applicable human gates are derived from the durable
 packet on each status read and stop only the transition they declare. V1 and
 v2 retain their existing Security merge-gate compatibility behavior. V3 start
 prerequisites must close before source work begins, and close prerequisites
@@ -746,7 +746,7 @@ have no replayable record and run again normally after recovery.
 Do not hand-author machine test or validation results in the evidence file.
 Operator-authored exceptions remain explicit judgments and must carry valid
 authority and expiry data before reconciliation can continue. After source
-merge, architecture v5 makes `work continue` acquire the exact Landing Unit's
+merge, architecture v5 or v6 makes `work continue` acquire the exact Landing Unit's
 owned `operating-ready` cases as a first-class transition before finalization.
 The phase-scoped evidence projection preserves merge-ready rows unchanged and
 appends separately identified operating evidence. V1 through v4 retain their
@@ -758,8 +758,8 @@ rewritten.
 already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
-closeout. Under architecture v5, deterministic post-merge operating-evidence
-acquisition runs before the finalization draft. A v3 through v5 human gate
+closeout. Under architecture v5 or v6, deterministic post-merge operating-evidence
+acquisition runs before the finalization draft. A v3 through v6 human gate
 blocks implementation, source merge, runtime activation, or operating readiness
 only when the packet assigns that exact transition to the current Landing Unit.
 Runtime-activation and
@@ -1112,6 +1112,24 @@ but it cannot satisfy a work-start architecture dependency until WGCF returns
 durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
+
+The normal Console authoring path begins with
+`POST /v1/delivery-art/architecture-packets/draft`. The Console sends only the
+editable schema-v6 design, conformance plan, covered work-item ids, pinned
+repository revisions, and either a draft or explicit operator decision. Its
+server supplies its caller-specific OOS credential plus `x-oos-operator-id`.
+OOS accepts that pair only when it matches the configured caller-to-operator
+binding. OOS—not browser code—then captures the fresh ART digest, resolves the
+exact current supersession reference, and derives the artifact id, decision
+authority and time, local custody, scope fingerprint, and content digest.
+
+The draft route performs no WGCF or OpenProject write. A `draft` decision keeps
+`decided_by` and `decided_at` null. An explicit `architecture-ready` decision
+binds those fields to the configured operator and server time. Validate the
+returned candidate without editing server-authored fields, then submit that
+exact approved candidate to the persistence route. Stale ART, wrong owner or
+dependency topology, unbound caller/operator identity, client-supplied
+authority fields, and invalid conformance all fail closed.
 
 Architecture Packet v6 is the active authoring and new-work shape. Workspace
 Governance activation records the completed OOS, WGCF, Security, and session

@@ -16,6 +16,7 @@ import {
 } from "./contracts.js";
 import { canonicalStringify } from "./canonical-json.js";
 import {
+  createDeliveryArtArchitecturePacketDraft,
   createDeliveryArtReviewPacketFinalizationDraft,
   createDeliveryArtReviewPacketV2Draft,
   createDeliveryArtWorkStartDraft,
@@ -496,6 +497,7 @@ function authoringFailure(error) {
 export function createDeliveryArtArtifactService({
   architectureCutoverGuard = null,
   audit = null,
+  callerOperatorBindings = {},
   clock = () => new Date(),
   mutationAdmission = {
     admitted: false,
@@ -532,6 +534,81 @@ export function createDeliveryArtArtifactService({
       ? ({ reference }) => readinessClient.read({ reference })
       : null;
   const activeTransitions = new Map();
+
+  function assertArchitectureCallerOperatorBinding(callerId, operatorId) {
+    if (typeof callerId !== "string" || !callerId.trim()) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_caller_missing",
+        "Architecture Packet authoring requires an authenticated broker caller.",
+        401,
+      );
+    }
+    if (typeof operatorId !== "string" || !operatorId.trim()) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_operator_missing",
+        "Architecture Packet authoring requires an accountable operator.",
+        403,
+      );
+    }
+    if (
+      callerId !== operatorId &&
+      callerOperatorBindings?.[callerId] !== operatorId
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_caller_operator_binding_invalid",
+        "The authenticated caller is not bound to the declared Architecture Packet operator.",
+        403,
+        {
+          authenticated_caller: callerId,
+          declared_operator: operatorId,
+        },
+      );
+    }
+  }
+
+  function assertArchitectureDraftInput(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_authoring_input_invalid",
+        "Architecture Packet authoring input must be an object.",
+      );
+    }
+    const allowedKeys = new Set([
+      "architecture",
+      "conformance_plan",
+      "covered_work_item_ids",
+      "decision",
+      "delivery_id",
+      "repo_revisions",
+      "schema_version",
+    ]);
+    const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
+    if (unknownKeys.length > 0) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_authority_fields_forbidden",
+        "Architecture Packet identity, authority, snapshot, integrity, and custody fields are server-authored.",
+        422,
+        { forbidden_fields: unknownKeys.sort() },
+      );
+    }
+    if (input.schema_version !== 1) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_authoring_version_invalid",
+        "Architecture Packet authoring requires input.schema_version=1.",
+      );
+    }
+    if (
+      !input.decision ||
+      typeof input.decision !== "object" ||
+      Array.isArray(input.decision) ||
+      Object.keys(input.decision).some((key) => !["rationale", "status"].includes(key))
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_decision_input_invalid",
+        "Architecture Packet decisions accept only status and rationale; OOS binds decision authority and time.",
+      );
+    }
+  }
 
   async function currentArchitectureForCutover(deliveryId) {
     try {
@@ -936,7 +1013,12 @@ export function createDeliveryArtArtifactService({
     return { artifact, receipt };
   }
 
-  async function persistDurableArtifact({ artifact, callerId, dependencies = null }) {
+  async function persistDurableArtifact({
+    artifact,
+    callerId,
+    dependencies = null,
+    operatorId = callerId,
+  }) {
     const candidate = clone(artifact);
     candidate.integrity.content_digest = artifactContentDigest(candidate);
     const content = deliveryArtContentProjection(candidate);
@@ -998,12 +1080,13 @@ export function createDeliveryArtArtifactService({
       owner_receipt: {
         artifact_id: artifactIdentifier(registered.artifact),
         artifact_type: registered.artifact.artifact_type,
+        caller_id: callerId,
         content_digest: digest,
         covered_work_item_ids: registered.artifact.covered_work_item_ids,
         custody_uri: registered.artifact.custody.uri,
         delivery_id: registered.artifact.delivery_id,
         fresh_art_digest: finalSnapshot.artDigest ?? firstSnapshot.artDigest,
-        operator_id: callerId,
+        operator_id: operatorId,
         persisted_at: registered.artifact.custody.persisted_at,
         projected: projection.projected,
         projection_replayed: projection.replayed,
@@ -1013,7 +1096,132 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function persistArchitecturePacket({ artifact, callerId }) {
+  async function authorArchitecturePacketCandidate({ callerId, input, operatorId = callerId }) {
+    assertArchitectureCallerOperatorBinding(callerId, operatorId);
+    assertArchitectureDraftInput(input);
+    const deliveryId = deliveryRecordId(input.delivery_id);
+    const coveredRecordIds = workItemRecordIds(input.covered_work_item_ids);
+    if (
+      !deliveryId ||
+      coveredRecordIds.length === 0 ||
+      coveredRecordIds.some((recordId) => !recordId)
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_scope_invalid",
+        "Architecture Packet authoring requires one Delivery initiative and at least one covered work item.",
+      );
+    }
+
+    const capturedAt = clock().toISOString();
+    const snapshot = await openProjectClient.captureDeliveryArtScope({
+      deliveryRecordId: deliveryId,
+      workItemRecordIds: coveredRecordIds,
+    });
+    const projected = await currentArchitectureForCutover(input.delivery_id);
+    let currentArtifact = null;
+    if (projected) {
+      const resolved = await resolveArtifact({ reference: projected.reference });
+      currentArtifact = resolved.artifact;
+      if (
+        currentArtifact.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
+        currentArtifact.delivery_id !== input.delivery_id
+      ) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_architecture_current_mismatch",
+          "The projected current architecture does not match the requested Delivery initiative.",
+          502,
+        );
+      }
+    }
+
+    let architecturePacket;
+    try {
+      architecturePacket = createDeliveryArtArchitecturePacketDraft({
+        architecture: input.architecture,
+        artifactId: currentArtifact?.artifact_id ?? null,
+        artDigest: snapshot.artDigest,
+        conformancePlan: input.conformance_plan,
+        coveredWorkItemIds: input.covered_work_item_ids,
+        createdAt: capturedAt,
+        decision: input.decision,
+        deliveryId: input.delivery_id,
+        operator: {
+          decision_source: "operator",
+          id: operatorId,
+        },
+        repoRevisions: input.repo_revisions,
+        supersedes: currentArtifact ? sourceArtifactReference(currentArtifact) : null,
+      });
+    } catch (error) {
+      throw authoringFailure(error);
+    }
+    const materialErrors = architectureMaterialSnapshotErrors(
+      architecturePacket,
+      snapshot.projection,
+    );
+    if (materialErrors.length > 0) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_scope_mismatch",
+        "The authored Architecture Packet does not match the current ART scope.",
+        409,
+        { material_errors: materialErrors },
+      );
+    }
+    return {
+      architecture_packet: architecturePacket,
+      source_snapshot: {
+        art_digest: snapshot.artDigest,
+        covered_record_count: snapshot.coveredRecordCount,
+        dependency_record_count: snapshot.dependencyRecordCount,
+        relation_count: snapshot.relationCount,
+      },
+    };
+  }
+
+  async function draftArchitecturePacket(input = {}) {
+    const correlationId = typeof input.correlationId === "string" && input.correlationId.trim()
+      ? input.correlationId.trim()
+      : randomUUID();
+    try {
+      const result = await authorArchitecturePacketCandidate(input);
+      emitAudit({
+        artifact_id: artifactIdentifier(result.architecture_packet),
+        caller: { id: input.callerId ?? null },
+        correlation_id: correlationId,
+        event_type: "delivery.artifact.candidate-authored",
+        operation: "delivery.artifact.architecture_packet.draft",
+        operator: { id: input.operatorId ?? input.callerId ?? null },
+        outcome: "success",
+        source: {
+          record_ref: result.architecture_packet.source_snapshot.art_ref,
+          surface: input.callerId ?? "unknown",
+        },
+        status: result.architecture_packet.decision.status,
+      });
+      return result;
+    } catch (error) {
+      emitAudit({
+        artifact_id: null,
+        caller: { id: input.callerId ?? null },
+        correlation_id: correlationId,
+        error_class: safeFailureCode(error),
+        event_type: "delivery.artifact.candidate-authored",
+        operation: "delivery.artifact.architecture_packet.draft",
+        operator: { id: input.operatorId ?? input.callerId ?? null },
+        outcome: error?.statusCode < 500 ? "blocked" : "failure",
+        source: {
+          record_ref: deliveryRecordId(input.input?.delivery_id)
+            ? `openproject://work_packages/${deliveryRecordId(input.input.delivery_id)}`
+            : null,
+          surface: input.callerId ?? "unknown",
+        },
+        status: "rejected",
+      });
+      throw error;
+    }
+  }
+
+  async function persistArchitecturePacket({ artifact, callerId, operatorId = callerId }) {
     assertArtifactType(artifact, ARCHITECTURE_PACKET_TYPE);
     assertCurrentArchitectureSchema(artifact, "Architecture persistence");
     assertLocalCandidate(
@@ -1021,7 +1229,19 @@ export function createDeliveryArtArtifactService({
       "delivery_art_architecture_input_not_local",
       "Architecture persistence requires a local candidate.",
     );
-    assertCallerBinding(artifact, callerId);
+    assertArchitectureCallerOperatorBinding(callerId, operatorId);
+    if (artifact?.operator?.id !== operatorId) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_operator_mismatch",
+        "The Architecture Packet operator must match the bound accountable operator.",
+        403,
+        {
+          artifact_operator: artifact?.operator?.id ?? null,
+          authenticated_caller: callerId,
+          bound_operator: operatorId,
+        },
+      );
+    }
     if (artifact.decision?.status === "draft") {
       throw new DeliveryArtServiceError(
         "delivery_art_architecture_undecided",
@@ -1029,7 +1249,7 @@ export function createDeliveryArtArtifactService({
         409,
       );
     }
-    if (artifact.decision?.decided_by !== callerId) {
+    if (artifact.decision?.decided_by !== operatorId) {
       throw new DeliveryArtServiceError(
         "delivery_art_decision_authority_mismatch",
         "Architecture decision authority must match the authenticated broker caller.",
@@ -1039,7 +1259,11 @@ export function createDeliveryArtArtifactService({
     const candidate = clone(artifact);
     candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
     await assertArchitectureCutoverAllowed(candidate);
-    return persistDurableArtifact({ artifact: candidate, callerId });
+    return persistDurableArtifact({
+      artifact: candidate,
+      callerId,
+      operatorId,
+    });
   }
 
   async function evaluateWorkStart({ artifact, callerId }) {
@@ -1556,6 +1780,7 @@ export function createDeliveryArtArtifactService({
 
   return {
     currentArchitecturePacket,
+    draftArchitecturePacket,
     draftReviewPacket,
     draftReviewPacketFinalization,
     draftWorkStart,

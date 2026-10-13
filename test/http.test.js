@@ -997,6 +997,116 @@ test("Delivery ART v2 mutation routes require caller-specific identity binding",
   assert.equal(called, true);
 });
 
+test("Delivery ART architecture authoring binds the Console caller to the accountable operator", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["governance-operations-console"];
+  config.callerAuth.callerSecrets = {
+    "governance-operations-console": "console-specific-secret",
+  };
+  config.deliveryArt.workSession.callerOperatorBindings = {
+    "governance-operations-console": "operator:workspace-owner",
+  };
+  const calls = [];
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async draftArchitecturePacket(input) {
+        calls.push(input);
+        return { architecture_packet: { artifact_id: "architecture-packet:delivery-1275-v1" } };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const input = {
+    schema_version: 1,
+    delivery_id: "delivery-1275",
+    covered_work_item_ids: ["work-item-1300"],
+    repo_revisions: [],
+    architecture: {},
+    conformance_plan: {},
+    decision: { status: "draft", rationale: "Review the proposed design." },
+  };
+
+  const denied = await executeRequest(app, {
+    body: { input },
+    headers: {
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "console-specific-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/draft",
+  });
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.body.error, "delivery_art_caller_operator_binding_invalid");
+  assert.equal(calls.length, 0);
+
+  const response = await executeRequest(app, {
+    body: { input },
+    headers: {
+      "x-correlation-id": "architecture-authoring-1275",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "console-specific-secret",
+      "x-oos-operator-id": "operator:workspace-owner",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/draft",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-art-architecture-packet-draft");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].callerId, "governance-operations-console");
+  assert.equal(calls[0].operatorId, "operator:workspace-owner");
+  assert.equal(calls[0].correlationId, "architecture-authoring-1275");
+  assert.deepEqual(calls[0].input, input);
+});
+
+test("Delivery ART architecture persistence accepts only the configured Console operator binding", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["governance-operations-console"];
+  config.callerAuth.callerSecrets = {
+    "governance-operations-console": "console-specific-secret",
+  };
+  config.deliveryArt.workSession.callerOperatorBindings = {
+    "governance-operations-console": "operator:workspace-owner",
+  };
+  const calls = [];
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async persistArchitecturePacket(input) {
+        calls.push(input);
+        return {};
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const artifact = {
+    artifact_id: "architecture-packet:delivery-1275-v1",
+    artifact_type: "delivery_art_architecture_packet",
+    delivery_id: "delivery-1275",
+    operator: { id: "operator:workspace-owner" },
+  };
+
+  const response = await executeRequest(app, {
+    body: { artifact },
+    headers: {
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "console-specific-secret",
+      "x-oos-operator-id": "operator:workspace-owner",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/persist",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].callerId, "governance-operations-console");
+  assert.equal(calls[0].operatorId, "operator:workspace-owner");
+});
+
 test("Delivery ART current architecture route resolves the accepted immutable packet", async () => {
   const calls = [];
   const packet = {

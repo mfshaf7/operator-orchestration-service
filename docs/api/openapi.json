@@ -4839,10 +4839,10 @@
     "/v1/delivery-art/architecture-packets/persist": {
       "post": {
         "tags": [
-          "Delivery ART Artifacts"
+          "Delivery ART"
         ],
-        "summary": "Persist an architecture packet",
-        "description": "Persists a current schema-v6 operator-decided architecture packet through the WGCF registry, verifies the returned custody closure, then projects only its safe refs and digests into OpenProject. Replacing a historical current pointer requires an exact supersedes reference and an empty active-session inventory. Registry failure prevents projection; projection failure never deletes durable evidence.",
+        "summary": "Persist an approved Architecture Packet",
+        "description": "Persists one current schema-v6 Architecture Packet through WGCF after verifying its server-bound Console caller and accountable operator, exact fresh ART scope, current supersession, canonical validation, and cutover safety. WGCF failure prevents OpenProject projection; projection failure never deletes durable evidence.",
         "operationId": "persistDeliveryArtArchitecturePacket",
         "security": [
           {
@@ -4850,30 +4850,39 @@
             "CallerSecretHeader": []
           }
         ],
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
-          "description": "A canonical local architecture packet whose operator and decision authority match the caller-specific credential.",
+          "description": "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. OOS recomputes fingerprints and digest.",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeliveryArtArtifactRequest"
+                "$ref": "#/components/schemas/DeliveryArtArchitecturePacketPersistRequestV1"
               },
               "example": {
                 "artifact": {
-                  "artifact_id": "architecture-packet:delivery-698-v1",
+                  "artifact_id": "architecture-packet:delivery-1275-v1",
                   "artifact_type": "delivery_art_architecture_packet",
                   "custody": {
                     "state": "local-draft",
-                    "uri": "local://delivery-art/architecture.json"
+                    "uri": "local://delivery-art/architecture-packet:delivery-1275-v1.json"
                   },
-                  "delivery_id": "delivery-698",
+                  "delivery_id": "delivery-1275",
                   "integrity": {
-                    "algorithm": "sha256",
-                    "canonicalization": "RFC8785",
-                    "content_digest": null
+                    "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                   },
                   "operator": {
-                    "decision_source": "operator",
                     "id": "operator:workspace-owner"
                   },
                   "schema_version": 6
@@ -4888,27 +4897,100 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeliveryArtArtifactMutationResponse"
+                  "$ref": "#/components/schemas/DeliveryArtArchitecturePacketPersistResponseV1"
+                },
+                "example": {
+                  "artifact": {
+                    "artifact_id": "architecture-packet:delivery-1275-v1",
+                    "artifact_type": "delivery_art_architecture_packet",
+                    "custody": {
+                      "state": "durable",
+                      "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    "delivery_id": "delivery-1275",
+                    "integrity": {
+                      "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    "operator": {
+                      "id": "operator:workspace-owner"
+                    },
+                    "schema_version": 6
+                  },
+                  "custody_receipt": {},
+                  "owner_receipt": {
+                    "caller_id": "governance-operations-console",
+                    "operator_id": "operator:workspace-owner",
+                    "projected": true,
+                    "replayed": false
+                  },
+                  "workflow_id": "delivery-art-architecture-packet-persist"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "409": {
-            "description": "The packet is historical, lacks the exact historical supersession reference, or cutover is blocked by active bound sessions.",
+            "description": "The canonical request envelope is invalid.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to the packet's accountable operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The packet is undecided, stale, semantically unchanged, missing exact supersession, or blocked by active sessions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The candidate fails canonical schema or semantic validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Delivery ART mutation admission or a required custody dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
                 }
               }
             }
           }
         },
         "x-oos-owner": "operator-orchestration-service",
-        "x-oos-primary-caller": "codex-local",
+        "x-oos-primary-caller": "governance-operations-console",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-art-custody"
       }
@@ -14072,9 +14154,9 @@
           }
         },
         "x-oos-owner": "operator-orchestration-service",
-        "x-oos-primary-caller": "operator-orchestration-service",
-        "x-oos-surface": "internal",
-        "x-oos-workflow-family": "delivery-work-session"
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
       }
     },
     "/v1/delivery-work-items/{work_item_id}/work-session/reconstruct": {
@@ -20915,6 +20997,601 @@
             "description": "Bounded validation, authorization, conflict, upstream-integrity, or availability failure."
           }
         }
+      }
+    },
+    "/v1/delivery-art/architecture-packets/draft": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Author a current Architecture Packet candidate",
+        "description": "Authors a non-durable schema-v6 candidate from explicit operator design while OOS binds the authenticated Console caller to its configured operator, captures fresh scoped ART truth, derives current supersession, and computes canonical identity, fingerprints, custody, timestamps, and digest. The route performs no WGCF or OpenProject mutation.",
+        "operationId": "draftDeliveryArtArchitecturePacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide only editable design, conformance, repository-revision, scope, and decision intent. Authority-bearing fields are rejected. The architecture and conformance objects must be complete schema-v6 sections validated by the canonical runtime contract.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtArchitecturePacketDraftRequestV1"
+              },
+              "example": {
+                "input": {
+                  "schema_version": 1,
+                  "delivery_id": "delivery-698",
+                  "covered_work_item_ids": [
+                    "work-item-801",
+                    "work-item-802",
+                    "work-item-803"
+                  ],
+                  "repo_revisions": [
+                    {
+                      "repo": "workspace-governance",
+                      "base_ref": "origin/main",
+                      "commit": "1111111111111111111111111111111111111111"
+                    },
+                    {
+                      "repo": "operator-orchestration-service",
+                      "base_ref": "origin/main",
+                      "commit": "2222222222222222222222222222222222222222"
+                    },
+                    {
+                      "repo": "platform-engineering",
+                      "base_ref": "origin/main",
+                      "commit": "cccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  ],
+                  "architecture": {
+                    "descendant_owner_map": [
+                      {
+                        "work_item_id": "work-item-801",
+                        "work_item_type": "Enabler",
+                        "owner_repo": "workspace-governance",
+                        "parent_work_item_id": null
+                      },
+                      {
+                        "work_item_id": "work-item-802",
+                        "work_item_type": "Defect",
+                        "owner_repo": "operator-orchestration-service",
+                        "parent_work_item_id": "work-item-801"
+                      },
+                      {
+                        "work_item_id": "work-item-803",
+                        "work_item_type": "Enabler",
+                        "owner_repo": "platform-engineering",
+                        "parent_work_item_id": "work-item-801"
+                      }
+                    ],
+                    "lifecycle_state_model": {
+                      "states": [
+                        "architecture-ready",
+                        "implementation-ready",
+                        "merge-ready",
+                        "operating-ready"
+                      ],
+                      "transitions": [
+                        {
+                          "from": "architecture-ready",
+                          "to": "implementation-ready",
+                          "authority": "operator-orchestration-service",
+                          "evidence": "durable work-start record"
+                        }
+                      ]
+                    },
+                    "authorization_session_execution_model": {
+                      "summary": "The operator approves architecture; OOS binds implementation to a fresh scoped snapshot.",
+                      "authority_refs": [
+                        {
+                          "uri": "contract://workspace-governance/delivery-art-operator-path",
+                          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                        }
+                      ],
+                      "session_binding": "One work-start record binds the Landing Unit and source snapshot.",
+                      "execution_binding": "Review evidence binds exact base and head commits."
+                    },
+                    "evidence_receipt_handoffs": [
+                      {
+                        "handoff_id": "handoff:architecture-admission",
+                        "producer": "workspace-governance",
+                        "consumer": "operator-orchestration-service",
+                        "producer_landing_unit_id": "delivery-698-contract",
+                        "consumer_landing_unit_id": "delivery-698-implementation",
+                        "producer_work_item_id": "work-item-801",
+                        "consumer_work_item_id": "work-item-802",
+                        "integration_point": "delivery architecture admission",
+                        "artifact": "delivery architecture contract",
+                        "acceptance": "schema-valid, scope-bound, and dependency-ordered"
+                      }
+                    ],
+                    "runtime_boundaries": [
+                      {
+                        "owner_repo": "operator-orchestration-service",
+                        "allowed_capability_ids": [
+                          "delivery-art.read-scoped-art-state",
+                          "delivery-art.author-canonical-artifacts",
+                          "delivery-art.submit-canonical-artifacts-to-wgcf",
+                          "delivery-art.project-safe-references-to-openproject"
+                        ],
+                        "prohibited_capability_ids": [
+                          "delivery-art.persist-canonical-artifacts",
+                          "delivery-art.project-canonical-content-to-openproject",
+                          "security.claim-acceptance",
+                          "platform.mutate-runtime"
+                        ]
+                      },
+                      {
+                        "owner_repo": "workspace-governance-control-fabric",
+                        "allowed_capability_ids": [
+                          "delivery-art.persist-canonical-artifacts",
+                          "delivery-art.issue-custody-references-and-receipts"
+                        ],
+                        "prohibited_capability_ids": [
+                          "delivery-art.author-workflow-decisions",
+                          "openproject.mutate-work-state"
+                        ]
+                      }
+                    ],
+                    "rollback_cleanup_terminal_conditions": {
+                      "rollback_units": [
+                        "one owner-repo Landing Unit"
+                      ],
+                      "cleanup_obligations": [
+                        "supersede invalidated work-start records"
+                      ],
+                      "terminal_conditions": [
+                        "every covered child has durable evidence"
+                      ]
+                    },
+                    "contradictions_open_decisions": [
+                      {
+                        "id": "decision:rollback-terminal-state",
+                        "status": "resolved",
+                        "summary": "Rollback must preserve an auditable terminal state.",
+                        "resolution": "Cleanup receipts remain required after rollback or cancellation."
+                      }
+                    ],
+                    "landing_units": [
+                      {
+                        "id": "delivery-698-contract",
+                        "owner_repo": "workspace-governance",
+                        "source_backed": true,
+                        "covered_work_item_ids": [
+                          "work-item-801"
+                        ]
+                      },
+                      {
+                        "id": "delivery-698-implementation",
+                        "owner_repo": "operator-orchestration-service",
+                        "source_backed": true,
+                        "covered_work_item_ids": [
+                          "work-item-802"
+                        ]
+                      },
+                      {
+                        "id": "delivery-698-platform",
+                        "owner_repo": "platform-engineering",
+                        "source_backed": true,
+                        "covered_work_item_ids": [
+                          "work-item-803"
+                        ]
+                      }
+                    ],
+                    "source_landing_graph": {
+                      "nodes": [
+                        "delivery-698-contract",
+                        "delivery-698-implementation",
+                        "delivery-698-platform"
+                      ],
+                      "edges": [
+                        {
+                          "prerequisite_landing_unit_id": "delivery-698-contract",
+                          "dependent_landing_unit_id": "delivery-698-implementation"
+                        },
+                        {
+                          "prerequisite_landing_unit_id": "delivery-698-implementation",
+                          "dependent_landing_unit_id": "delivery-698-platform"
+                        }
+                      ]
+                    },
+                    "required_human_gates": [
+                      {
+                        "gate_id": "gate:security-source-merge",
+                        "authority_work_item_id": "work-item-801",
+                        "authority_owner_repo": "workspace-governance",
+                        "affected_landing_unit_ids": [
+                          "delivery-698-platform"
+                        ],
+                        "blocked_transition": "before_runtime_activation",
+                        "evidence_requirement": "Bind the exact implementation review head.",
+                        "evidence_prerequisite_work_item_ids": []
+                      }
+                    ],
+                    "work_item_execution_plan": [
+                      {
+                        "work_item_id": "work-item-801",
+                        "start_after_work_item_ids": [],
+                        "close_after_work_item_ids": [],
+                        "emits_human_gate_ids": [
+                          "gate:security-source-merge"
+                        ]
+                      },
+                      {
+                        "work_item_id": "work-item-802",
+                        "start_after_work_item_ids": [
+                          "work-item-801"
+                        ],
+                        "close_after_work_item_ids": [],
+                        "emits_human_gate_ids": []
+                      },
+                      {
+                        "work_item_id": "work-item-803",
+                        "start_after_work_item_ids": [
+                          "work-item-802"
+                        ],
+                        "close_after_work_item_ids": [],
+                        "emits_human_gate_ids": []
+                      }
+                    ],
+                    "runtime_activation_chains": [
+                      {
+                        "chain_id": "activation:delivery-698",
+                        "gate_id": "gate:security-source-merge",
+                        "source_owner_repo": "operator-orchestration-service",
+                        "source_activation_posture": "owner-source-change-required",
+                        "source_activation_evidence": {
+                          "repo": "operator-orchestration-service",
+                          "revision": "2222222222222222222222222222222222222222",
+                          "path": "contracts/example/manifest.json",
+                          "field": "runtime_activation",
+                          "observed_value": false,
+                          "observed_posture": "owner-source-change-required"
+                        },
+                        "source_activation_landing_unit_id": "delivery-698-implementation",
+                        "commissioning_landing_unit_ids": [
+                          "delivery-698-platform"
+                        ]
+                      }
+                    ]
+                  },
+                  "conformance_plan": {
+                    "required": true,
+                    "protocol_applicability": {
+                      "applies": true,
+                      "rationale": "The Landing Unit changes a cross-repo Delivery ART artifact and custody protocol."
+                    },
+                    "dimensions": [
+                      "command-and-acknowledgement-semantics",
+                      "deterministic-identities-and-idempotency",
+                      "state-mutation-ordering",
+                      "retry-cancel-replay-and-recovery-semantics",
+                      "bounded-failure-mapping",
+                      "authorization-integrity-and-replay-resistance",
+                      "session-scenario-and-execution-binding",
+                      "result-and-owner-receipt-completeness",
+                      "immutable-baseline-and-restore-evidence",
+                      "lifecycle-state-matrix",
+                      "cross-artifact-timeline-ordering",
+                      "shared-validator-compatibility"
+                    ],
+                    "work_item_dimension_applicability": [
+                      {
+                        "work_item_id": "work-item-801",
+                        "dimension_ids": [
+                          "lifecycle-state-matrix",
+                          "cross-artifact-timeline-ordering",
+                          "shared-validator-compatibility"
+                        ]
+                      },
+                      {
+                        "work_item_id": "work-item-802",
+                        "dimension_ids": [
+                          "command-and-acknowledgement-semantics",
+                          "deterministic-identities-and-idempotency",
+                          "state-mutation-ordering",
+                          "retry-cancel-replay-and-recovery-semantics",
+                          "bounded-failure-mapping",
+                          "authorization-integrity-and-replay-resistance",
+                          "session-scenario-and-execution-binding",
+                          "result-and-owner-receipt-completeness",
+                          "immutable-baseline-and-restore-evidence"
+                        ]
+                      },
+                      {
+                        "work_item_id": "work-item-803",
+                        "dimension_ids": [
+                          "command-and-acknowledgement-semantics",
+                          "deterministic-identities-and-idempotency",
+                          "state-mutation-ordering",
+                          "retry-cancel-replay-and-recovery-semantics",
+                          "bounded-failure-mapping",
+                          "authorization-integrity-and-replay-resistance",
+                          "session-scenario-and-execution-binding",
+                          "result-and-owner-receipt-completeness",
+                          "immutable-baseline-and-restore-evidence"
+                        ]
+                      }
+                    ],
+                    "git_causality": {
+                      "applies": true,
+                      "rationale": "OOS must prove commit ancestry and immutable source provenance using a real Git repository.",
+                      "claims": [
+                        {
+                          "id": "git-causality:oos-artifact-provenance",
+                          "applies_to_work_item_ids": [
+                            "work-item-802"
+                          ],
+                          "dimension_ids": [
+                            "deterministic-identities-and-idempotency",
+                            "immutable-baseline-and-restore-evidence"
+                          ]
+                        }
+                      ]
+                    },
+                    "cases": [
+                      {
+                        "id": "case:contract-positive",
+                        "applies_to_work_item_ids": [
+                          "work-item-801"
+                        ],
+                        "dimension_ids": [
+                          "lifecycle-state-matrix",
+                          "cross-artifact-timeline-ordering",
+                          "shared-validator-compatibility"
+                        ],
+                        "polarity": "positive",
+                        "fidelity": "filesystem",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "Canonical Delivery ART artifacts and their resolved reference chain pass.",
+                        "evidence_owner_landing_unit_id": "delivery-698-contract"
+                      },
+                      {
+                        "id": "case:contract-negative",
+                        "applies_to_work_item_ids": [
+                          "work-item-801"
+                        ],
+                        "dimension_ids": [
+                          "lifecycle-state-matrix",
+                          "cross-artifact-timeline-ordering",
+                          "shared-validator-compatibility"
+                        ],
+                        "polarity": "negative",
+                        "fidelity": "filesystem",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "Malformed artifacts and broken cross-artifact bindings are rejected.",
+                        "evidence_owner_landing_unit_id": "delivery-698-contract"
+                      },
+                      {
+                        "id": "case:real-git-positive",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "deterministic-identities-and-idempotency",
+                          "immutable-baseline-and-restore-evidence"
+                        ],
+                        "polarity": "positive",
+                        "fidelity": "real-git",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "A real commit sequence with valid provenance passes.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      },
+                      {
+                        "id": "case:real-git-cycle-negative",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "deterministic-identities-and-idempotency",
+                          "immutable-baseline-and-restore-evidence"
+                        ],
+                        "polarity": "negative",
+                        "fidelity": "real-git",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "A claims digest that requires its own containing commit is rejected.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      },
+                      {
+                        "id": "case:recovery-positive",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "command-and-acknowledgement-semantics",
+                          "state-mutation-ordering",
+                          "retry-cancel-replay-and-recovery-semantics",
+                          "bounded-failure-mapping"
+                        ],
+                        "polarity": "positive",
+                        "fidelity": "process-crash",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "Acknowledged artifact writes recover idempotently after an interrupted process.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      },
+                      {
+                        "id": "case:recovery-negative",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "command-and-acknowledgement-semantics",
+                          "state-mutation-ordering",
+                          "retry-cancel-replay-and-recovery-semantics",
+                          "bounded-failure-mapping"
+                        ],
+                        "polarity": "negative",
+                        "fidelity": "process-crash",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "Interrupted or replayed writes cannot advance readiness without one complete durable artifact.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      },
+                      {
+                        "id": "case:authority-positive",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "authorization-integrity-and-replay-resistance",
+                          "session-scenario-and-execution-binding",
+                          "result-and-owner-receipt-completeness"
+                        ],
+                        "polarity": "positive",
+                        "fidelity": "sandbox-runtime",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "An authorized session receives a complete owner receipt for its bound artifact write.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      },
+                      {
+                        "id": "case:authority-negative",
+                        "applies_to_work_item_ids": [
+                          "work-item-802",
+                          "work-item-803"
+                        ],
+                        "dimension_ids": [
+                          "authorization-integrity-and-replay-resistance",
+                          "session-scenario-and-execution-binding",
+                          "result-and-owner-receipt-completeness"
+                        ],
+                        "polarity": "negative",
+                        "fidelity": "sandbox-runtime",
+                        "target_readiness": "merge-ready",
+                        "expected_outcome": "Unbound, unauthorized, or replayed artifact writes fail without a success receipt.",
+                        "evidence_owner_landing_unit_id": "delivery-698-implementation"
+                      }
+                    ]
+                  },
+                  "decision": {
+                    "status": "draft",
+                    "rationale": "Review the complete schema-v6 design before approval."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Canonical local Architecture Packet candidate and bounded fresh-snapshot summary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArchitecturePacketDraftResponseV1"
+                },
+                "example": {
+                  "architecture_packet": {
+                    "artifact_id": "architecture-packet:delivery-1275-v1",
+                    "artifact_type": "delivery_art_architecture_packet",
+                    "custody": {
+                      "state": "local-draft",
+                      "uri": "local://delivery-art/architecture-packet:delivery-1275-v1.json"
+                    },
+                    "delivery_id": "delivery-1275",
+                    "integrity": {
+                      "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    },
+                    "operator": {
+                      "id": "operator:workspace-owner"
+                    },
+                    "schema_version": 6
+                  },
+                  "source_snapshot": {
+                    "art_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "covered_record_count": 1,
+                    "dependency_record_count": 0,
+                    "relation_count": 0
+                  },
+                  "workflow_id": "delivery-art-architecture-packet-draft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The authoring envelope or request version is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller-specific credential or caller-to-operator binding is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The proposed design contradicts current scoped ART truth.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The generated candidate fails the canonical schema-v6 contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Current ART or projected architecture authority is inconsistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
       }
     }
   },
@@ -63771,6 +64448,193 @@
           }
         },
         "additionalProperties": false
+      },
+      "DeliveryArtArchitecturePacketDraftDecisionV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "rationale"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "draft",
+              "architecture-ready",
+              "blocked-pending-architecture-decision"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "DeliveryArtArchitecturePacketDraftInputV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "delivery_id",
+          "covered_work_item_ids",
+          "repo_revisions",
+          "architecture",
+          "conformance_plan",
+          "decision"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "covered_work_item_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^work-item-[1-9][0-9]*$"
+            }
+          },
+          "repo_revisions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "repo",
+                "base_ref",
+                "commit"
+              ],
+              "properties": {
+                "repo": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]*$"
+                },
+                "base_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                }
+              }
+            }
+          },
+          "architecture": {
+            "type": "object",
+            "description": "Complete operator-authored schema-v6 architecture design. This OpenAPI component describes the transport envelope only; OOS validates the full workspace-governance Architecture Packet schema, semantic contract, and live ART topology at runtime.",
+            "additionalProperties": true
+          },
+          "conformance_plan": {
+            "type": "object",
+            "description": "Complete operator-authored schema-v6 conformance plan. OOS validates it against the canonical workspace-governance Delivery ART contract at runtime.",
+            "additionalProperties": true
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DeliveryArtArchitecturePacketDraftDecisionV1"
+          }
+        }
+      },
+      "DeliveryArtArchitecturePacketDraftRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/DeliveryArtArchitecturePacketDraftInputV1"
+          }
+        }
+      },
+      "DeliveryArtArchitecturePacketDraftResponseV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "architecture_packet",
+          "source_snapshot",
+          "workflow_id"
+        ],
+        "properties": {
+          "architecture_packet": {
+            "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          },
+          "source_snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "art_digest",
+              "covered_record_count",
+              "dependency_record_count",
+              "relation_count"
+            ],
+            "properties": {
+              "art_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "covered_record_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "dependency_record_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "relation_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "workflow_id": {
+            "const": "delivery-art-architecture-packet-draft"
+          }
+        }
+      },
+      "DeliveryArtArchitecturePacketPersistRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact"
+        ],
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          }
+        }
+      },
+      "DeliveryArtArchitecturePacketPersistResponseV1": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "artifact",
+          "custody_receipt",
+          "owner_receipt",
+          "workflow_id"
+        ],
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          },
+          "custody_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "owner_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "const": "delivery-art-architecture-packet-persist"
+          }
+        }
       }
     }
   }
