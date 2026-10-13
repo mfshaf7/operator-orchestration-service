@@ -199,6 +199,11 @@ The supported artifact transitions are:
    `operating-ready` cases through the base-owned evidence profile and project
    them with `target_readiness=operating-ready`. Preserve merge-ready evidence
    unchanged and append phase-scoped operating evidence.
+   A failed pre-merge or operating acquisition remains current failure evidence
+   and projects the same bounded acquisition as an explicit retry. One
+   reconciliation command performs at most one failed acquisition attempt; a
+   later command retries after the reported cause is repaired. Passing evidence
+   is never rerun or replaced by this retry path.
 8. Resolve the durable merge-ready predecessor and author a post-merge local
    candidate from exact merged source evidence plus any newly applicable
    operating-readiness evidence through

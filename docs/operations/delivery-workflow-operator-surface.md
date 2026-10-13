@@ -500,6 +500,13 @@ The same contract remains visible at top-level in active `work status` results,
 so the Console and CLI do not need to reconstruct terminal obligations from
 separate records.
 
+When owner evidence reports `review-evidence-retry-required` or
+`operating-evidence-retry-required`, repair the command's reported cause and
+run `work continue` again. Each invocation performs at most one failed bounded
+acquisition attempt and returns the retry action; it does not loop internally.
+The next invocation reacquires the same source/profile identity. A passing
+receipt remains replay-safe and immutable.
+
 #### Merged-Session Recovery
 
 Use `work recover` only after confirming that an open ART child has an active
