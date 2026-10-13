@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
+import { validateDeliveryArtWorkSessionArchitectureSupersessionReceipt } from "../src/delivery-art/work-session.js";
 
 function git(cwd, args) {
   return String(execFileSync("git", args, {
@@ -131,6 +132,50 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   const pristineWithoutWorktree = await adapter.inspectPristineSession(session);
   assert.equal(pristineWithoutWorktree.pristine, true);
   assert.equal(pristineWithoutWorktree.base_commit_available, true);
+  assert.deepEqual(
+    validateDeliveryArtWorkSessionArchitectureSupersessionReceipt({
+      schema_version: 1,
+      artifact_type:
+        "delivery_art_work_session_architecture_supersession_receipt",
+      receipt_id:
+        `architecture-supersession:${session.session_id}:sha256:${"1".repeat(64)}`,
+      delivery_id: session.delivery_id,
+      landing_unit_id: session.landing_unit_id,
+      covered_work_item_ids: ["work-item-963"],
+      operator: { id: "operator:workspace-owner", decision_source: "operator" },
+      superseded_session: {
+        architecture: {
+          digest: `sha256:${"2".repeat(64)}`,
+          uri: `wgcf://artifacts/delivery-art/sha256/${"2".repeat(64)}`,
+        },
+        session_id: session.session_id,
+        session_revision: "2026-10-14T00:00:00.000Z",
+      },
+      replacement_session: {
+        architecture: {
+          digest: `sha256:${"3".repeat(64)}`,
+          uri: `wgcf://artifacts/delivery-art/sha256/${"3".repeat(64)}`,
+        },
+        session_id: `${session.session_id}:r2`,
+        session_revision: "2026-10-14T00:01:00.000Z",
+      },
+      pristine_proof: {
+        current_landing_unit_id: session.landing_unit_id,
+        evidence_pristine: true,
+        readiness_receipt_absent: true,
+        review_packet_absent: true,
+        source: pristineWithoutWorktree,
+      },
+      resource_outcomes: [
+        { resource_type: "git-worktree", outcome: "absent" },
+        { resource_type: "git-local-branch", outcome: "absent" },
+        { resource_type: "git-remote-branch", outcome: "absent" },
+      ],
+      recorded_at: "2026-10-14T00:01:00.000Z",
+      integrity: { content_digest: `sha256:${"4".repeat(64)}` },
+    }),
+    { errors: [], valid: true },
+  );
   const invalidBase = await adapter.inspectPristineSession({
     ...session,
     landing_unit: {

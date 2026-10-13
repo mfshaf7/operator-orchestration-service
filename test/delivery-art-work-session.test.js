@@ -264,6 +264,7 @@ function createHarness(
     ? structuredClone(architectureArtifact)
     : null;
   let pristineSource = {
+    base_commit_available: true,
     changed_files: [],
     local_branch_head: "a".repeat(40),
     pristine: true,
@@ -1764,6 +1765,11 @@ test("superseded pristine sessions fail closed and reconstruct with a receipt", 
     reconstructed.architecture_supersession_receipt.replacement_session
       .architecture.digest,
     replacement.integrity.content_digest,
+  );
+  assert.equal(
+    reconstructed.architecture_supersession_receipt.pristine_proof.source
+      .base_commit_available,
+    true,
   );
   assert.equal(
     harness.store.readArtifact(
