@@ -711,6 +711,11 @@ may read the evidence profile from that accepted source revision so a newly
 landed verifier can prove its own operating cases without a preparatory
 maintenance landing or replacement ART child.
 
+Owner profiles must also provide unconditional `tests` and `validations`
+commands for source-backed work that does not require an Architecture Packet.
+Matching-fidelity commands cannot satisfy that baseline when no conformance
+case applies.
+
 `runtime_and_live` commands are verification-only. The source executor marks
 only those commands with `OOS_DELIVERY_ART_EVIDENCE_EXECUTION=true`, binds the
 acquisition and command identifiers, sets
