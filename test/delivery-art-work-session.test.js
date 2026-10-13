@@ -1783,6 +1783,47 @@ test("superseded pristine sessions fail closed and reconstruct with a receipt", 
   ));
 });
 
+test("invalid supersession receipts do not replace the persisted session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-invalid-receipt-"));
+  const original = architecturePacket("a");
+  const replacement = architecturePacket("b");
+  const harness = createHarness(root, { architectureArtifact: original });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  const originalSession = harness.store.readByAlias("work-item-963");
+  harness.setCurrentArchitecture(replacement);
+  harness.setPristineSource({ unexpected_receipt_field: true });
+
+  await assert.rejects(
+    harness.controller.reconstruct("963"),
+    { code: "delivery_art_work_session_supersession_receipt_invalid" },
+  );
+
+  const retainedSession = harness.store.readByAlias("work-item-963");
+  assert.equal(retainedSession.updated_at, originalSession.updated_at);
+  assert.equal(
+    harness.store.readArtifact(
+      retainedSession,
+      retainedSession.architecture.artifact_file,
+    ).integrity.content_digest,
+    original.integrity.content_digest,
+  );
+  await assert.rejects(
+    stat(harness.store.architectureSupersessionReceiptPath(
+      `architecture-supersession:${originalSession.session_id}:${replacement.integrity.content_digest}`,
+    )),
+    { code: "ENOENT" },
+  );
+});
+
 test("architecture reconstruction resolves the base from the replacement owner repo", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-owner-"));
   const original = architecturePacket("a");

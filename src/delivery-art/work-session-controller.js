@@ -778,6 +778,7 @@ export function createDeliveryArtWorkSessionController({
 
   async function replacePristineSession({
     architecture,
+    beforePersist = null,
     current,
     landingUnitId,
     session,
@@ -831,6 +832,9 @@ export function createDeliveryArtWorkSessionController({
       resources: resourceManifest?.resources ?? [],
       session,
     });
+    if (beforePersist) {
+      await beforePersist({ replacement, replacementOwnerRepo, retired });
+    }
 
     store.removeSession(session);
     store.writeArtifact(
@@ -2129,45 +2133,46 @@ export function createDeliveryArtWorkSessionController({
             "The current architecture does not define this work-session scope as one Landing Unit.",
           );
         }
-        const { replacement, retired } = await replacePristineSession({
+        let receipt = null;
+        const { replacement } = await replacePristineSession({
           architecture: supersession.current_artifact,
+          beforePersist: ({ replacement: candidate, retired }) => {
+            const receiptBody = {
+              schema_version: 1,
+              artifact_type:
+                "delivery_art_work_session_architecture_supersession_receipt",
+              receipt_id:
+                `architecture-supersession:${session.session_id}:${supersession.current_architecture.digest}`,
+              delivery_id: session.delivery_id,
+              landing_unit_id: landingUnitId,
+              covered_work_item_ids: session.covered_work_item_ids,
+              operator: session.operator,
+              superseded_session: {
+                architecture: supersession.bound_architecture,
+                session_id: session.session_id,
+                session_revision: session.updated_at,
+              },
+              replacement_session: {
+                architecture: supersession.current_architecture,
+                session_id: candidate.session_id,
+                session_revision: candidate.updated_at,
+              },
+              pristine_proof: supersession.pristine_proof,
+              resource_outcomes: retired.outcomes,
+              recorded_at: clock().toISOString(),
+              integrity: { content_digest: null },
+            };
+            receipt = {
+              ...receiptBody,
+              integrity: { content_digest: canonicalDigest(receiptBody) },
+            };
+            store.writeArchitectureSupersessionReceipt(receipt);
+          },
           current,
           landingUnitId,
           session,
           workItemId,
         });
-
-        const receiptBody = {
-          schema_version: 1,
-          artifact_type:
-            "delivery_art_work_session_architecture_supersession_receipt",
-          receipt_id:
-            `architecture-supersession:${session.session_id}:${supersession.current_architecture.digest}`,
-          delivery_id: session.delivery_id,
-          landing_unit_id: landingUnitId,
-          covered_work_item_ids: session.covered_work_item_ids,
-          operator: session.operator,
-          superseded_session: {
-            architecture: supersession.bound_architecture,
-            session_id: session.session_id,
-            session_revision: session.updated_at,
-          },
-          replacement_session: {
-            architecture: supersession.current_architecture,
-            session_id: replacement.session_id,
-            session_revision: replacement.updated_at,
-          },
-          pristine_proof: supersession.pristine_proof,
-          resource_outcomes: retired.outcomes,
-          recorded_at: clock().toISOString(),
-          integrity: { content_digest: null },
-        };
-        const receipt = {
-          ...receiptBody,
-          integrity: { content_digest: canonicalDigest(receiptBody) },
-        };
-
-        store.writeArchitectureSupersessionReceipt(receipt);
         return {
           ...await statusForSession(replacement, workItemId, current),
           architecture_supersession_receipt: receipt,
