@@ -1,3 +1,19 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - contracts/delivery-art-work-session/evidence-profile.json
+    - test/delivery-art-review-evidence-acquisition.test.js
+    - docs/operations/delivery-workflow-operator-surface.md
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "The profile repair adds test execution only. It does not widen source-executor commands, credentials, caller authority, mutation authority, or merge authority."
+---
+
 # 2026-10-14 Non-architecture owner evidence tests
 
 ## Summary
