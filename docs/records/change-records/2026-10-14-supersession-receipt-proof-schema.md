@@ -21,7 +21,7 @@ security_evidence:
 
 ## Summary
 
-Align the architecture-supersession receipt schema with the real pristine-source proof and add a cross-layer regression test that validates adapter output through the receipt contract.
+Align the architecture-supersession receipt schema with the real pristine-source proof, validate adapter output through the receipt contract, and persist the receipt before replacing session state.
 
 ## Classification
 
@@ -38,13 +38,13 @@ Align the architecture-supersession receipt schema with the real pristine-source
 ## Root Cause
 
 - immediate failure: `work reconstruct 1284` returned `delivery_art_work_session_supersession_receipt_invalid`.
-- actual root cause: the source adapter added `base_commit_available` to its pristine proof while the closed receipt schema still rejected that property.
-- why it escaped earlier controls: the controller reconstruction fixture did not initially contain the field emitted by the real source adapter, and the adapter test did not validate its output through the receipt schema.
+- actual root cause: the source adapter added `base_commit_available` to its pristine proof while the closed receipt schema still rejected that property; reconstruction also replaced session state before the receipt gate ran.
+- why it escaped earlier controls: the controller reconstruction fixture did not initially contain the field emitted by the real source adapter, the adapter test did not validate its output through the receipt schema, and no negative test asserted that a rejected receipt leaves the prior session bound.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: require the real boolean `base_commit_available` field in the supersession receipt's pristine source proof.
-- tests or validator added: make the controller reconstruction fixture match the real adapter and validate actual adapter proof output against the receipt schema.
+- changed workflow, adapter, or contract: require the real boolean `base_commit_available` field in the supersession receipt's pristine source proof and write the validated receipt before replacing persisted session state.
+- tests or validator added: make the controller reconstruction fixture match the real adapter, validate actual adapter proof output against the receipt schema, and prove a rejected receipt retains the prior architecture binding.
 - related change records: `docs/records/change-records/2026-10-14-work-session-replacement-owner-base.md`
 
 ## Artifact And Deployment Evidence
