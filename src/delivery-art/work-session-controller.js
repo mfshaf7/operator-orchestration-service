@@ -1986,9 +1986,10 @@ export function createDeliveryArtWorkSessionController({
             "The current architecture does not define this work-session scope as one Landing Unit.",
           );
         }
+        const replacementOwnerRepo = targetItem(current).owner_repo;
         const base = await sourceAdapter.resolveBase({
           baseRef: session.landing_unit.base_ref,
-          ownerRepo: session.owner_repo,
+          ownerRepo: replacementOwnerRepo,
         });
         const decision = decisionWithArchitectureBindings({
           schema_version: 1,

@@ -243,6 +243,7 @@ function createHarness(
   let continuationReads = 0;
   let configuredPathReads = 0;
   let configuredPathRequirements = null;
+  const resolveBaseCalls = [];
   let ownedWorktreeCreates = 0;
   let currentRepositoryAdmission = structuredClone(repositoryAdmission);
   let resourceRetired = false;
@@ -509,8 +510,13 @@ function createHarness(
       }
       retirementExecutionPrepared = true;
     },
-    async resolveBase() {
-      return { commit: "a".repeat(40) };
+    async resolveBase(input) {
+      resolveBaseCalls.push(structuredClone(input));
+      return {
+        commit: input.ownerRepo === "workspace-governance"
+          ? "b".repeat(40)
+          : "a".repeat(40),
+      };
     },
     async resolveWorktree() {
       return repoRoot;
@@ -611,6 +617,9 @@ function createHarness(
     },
     ownedWorktreeCreates() {
       return ownedWorktreeCreates;
+    },
+    resolveBaseCalls() {
+      return structuredClone(resolveBaseCalls);
     },
     relocate(value) {
       repoRoot = value;
@@ -1765,6 +1774,48 @@ test("superseded pristine sessions fail closed and reconstruct with a receipt", 
   await stat(harness.store.architectureSupersessionReceiptPath(
     reconstructed.architecture_supersession_receipt.receipt_id,
   ));
+});
+
+test("architecture reconstruction resolves the base from the replacement owner repo", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-owner-"));
+  const original = architecturePacket("a");
+  const replacement = architecturePacket("b");
+  replacement.architecture.descendant_owner_map[0].owner_repo =
+    "workspace-governance";
+  const currentContinuation = continuation();
+  const harness = createHarness(root, {
+    architectureArtifact: original,
+    continuationByWorkItemId: {
+      "work-item-963": currentContinuation,
+    },
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+
+  currentContinuation.continuation_context.target_item.owner_repo =
+    "workspace-governance";
+  harness.setCurrentArchitecture(replacement);
+
+  const reconstructed = await harness.controller.reconstruct("963");
+  const replacementSession = harness.store.readByAlias("work-item-963");
+
+  assert.equal(reconstructed.state, "implementation-ready");
+  assert.deepEqual(harness.resolveBaseCalls(), [
+    {
+      baseRef: "origin/main",
+      ownerRepo: "workspace-governance",
+    },
+  ]);
+  assert.equal(replacementSession.owner_repo, "workspace-governance");
+  assert.equal(replacementSession.landing_unit.base_commit, "b".repeat(40));
 });
 
 test("work start rejects a superseded architecture before creating a session", async () => {
