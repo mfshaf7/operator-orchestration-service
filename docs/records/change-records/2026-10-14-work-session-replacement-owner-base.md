@@ -11,7 +11,7 @@ security_evidence:
   risks: []
   workstreams:
     - WS-007
-  notes: The repair narrows reconstruction to one internally consistent current owner/base binding. It introduces no identity, credential, repository permission, review, merge, or runtime authority and preserves fail-closed provider and human-review controls.
+  notes: The repair narrows reconstruction to one internally consistent current owner/base binding and adds a pristine-only repair for sessions persisted before that correction. It introduces no identity, credential, repository permission, review, merge, or runtime authority and preserves fail-closed provider and human-review controls.
 ---
 
 # Work-session replacement-owner base resolution
@@ -22,6 +22,12 @@ Architecture reconstruction now resolves the replacement Git base from the
 current ART owner repo before it authors the replacement work-start and source
 session. A superseded session can therefore move to a different owner repo
 without combining the old repo's commit with the new repo's worktree.
+
+The same existing `work reconstruct` command now repairs a session that was
+persisted before that correction only when its base commit is unavailable in
+the current owner repo and source plus evidence remain pristine. The durable
+command result records the previous and replacement binding before source work
+can begin.
 
 ## Classification
 
@@ -43,13 +49,13 @@ without combining the old repo's commit with the new repo's worktree.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: resolve the replacement base with the current continuation target's owner repo after current architecture and ART topology have been validated.
-- tests or validator added: prove that an OOS-owned superseded session reconstructed to Workspace Governance resolves the Workspace Governance base and persists a matching owner/base pair.
+- changed workflow, adapter, or contract: resolve the replacement base with the current continuation target's owner repo after current architecture and ART topology have been validated; detect an unavailable persisted base before worktree creation and permit the existing reconstruct action to repair only a pristine current-architecture session.
+- tests or validator added: prove that an OOS-owned superseded session reconstructed to Workspace Governance resolves the Workspace Governance base and persists a matching owner/base pair; prove that a current-architecture session with an unavailable cross-repo base stops before worktree creation and records its pristine repair.
 - related change records: none
 
 ## Artifact And Deployment Evidence
 
-- source-only change, or build/deployment evidence: corrective owner-repo maintenance branch `fix/work-session-reconstruct-owner-base` in PR #324; exact reviewed head and merge evidence are verified through the provider before deployment
+- source-only change, or build/deployment evidence: corrective owner-repo maintenance branch `fix/work-session-reconstruct-owner-base` in PR #324 plus pristine persisted-state repair branch `fix/pristine-invalid-base-repair` in PR #325; exact reviewed heads and merge evidence are verified through the provider before deployment
 - image tag or digest: recorded by the accepted-idea-delivery rebuild after merge
 - runtime revision: recorded by the accepted-idea-delivery activation after merge
 
