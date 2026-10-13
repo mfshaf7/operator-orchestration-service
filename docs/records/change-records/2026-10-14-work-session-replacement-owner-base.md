@@ -55,7 +55,7 @@ can begin.
 
 ## Artifact And Deployment Evidence
 
-- source-only change, or build/deployment evidence: corrective owner-repo maintenance branch `fix/work-session-reconstruct-owner-base` in PR #324; exact reviewed head and merge evidence are verified through the provider before deployment
+- source-only change, or build/deployment evidence: corrective owner-repo maintenance branch `fix/work-session-reconstruct-owner-base` in PR #324 plus pristine persisted-state repair branch `fix/pristine-invalid-base-repair` in PR #325; exact reviewed heads and merge evidence are verified through the provider before deployment
 - image tag or digest: recorded by the accepted-idea-delivery rebuild after merge
 - runtime revision: recorded by the accepted-idea-delivery activation after merge
 
