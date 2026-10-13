@@ -128,6 +128,19 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   );
   assert.equal(identityPreflights, 0);
   assert.equal(await adapter.resolveWorktree(session), null);
+  const pristineWithoutWorktree = await adapter.inspectPristineSession(session);
+  assert.equal(pristineWithoutWorktree.pristine, true);
+  assert.equal(pristineWithoutWorktree.base_commit_available, true);
+  const invalidBase = await adapter.inspectPristineSession({
+    ...session,
+    landing_unit: {
+      ...session.landing_unit,
+      base_commit: "f".repeat(40),
+      branch: "feature/963-invalid-base",
+    },
+  });
+  assert.equal(invalidBase.pristine, true);
+  assert.equal(invalidBase.base_commit_available, false);
   await assert.rejects(
     () => adapter.inspectConfiguredPath({ ...session, owner_repo: "../outside" }),
     /name is invalid/,

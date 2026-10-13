@@ -458,6 +458,11 @@ lifecycle plan and rediscovering commands and paths:
 5. If status reports `architecture-reconstruction-required`, run the exact
    `work reconstruct` command. OOS proceeds only when source and evidence are
    pristine and retains a supersession receipt. If it reports
+   `source-binding-reconstruction-required`, use the same command. OOS permits
+   that repair only when the persisted base is unavailable in the current
+   owner repo and no worktree, branch, pull request, or evidence activity
+   exists; the durable command result records the previous and replacement
+   owner/base binding. If it reports
    `architecture-recovery-required`, stop and reconcile the existing activity;
    the session cannot be rebound. Use the bounded recovery paths below only
    after proving the exact source state; recovery never claims completion.

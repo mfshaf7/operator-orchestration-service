@@ -743,22 +743,7 @@ export function createDeliveryArtWorkSessionController({
       return null;
     }
 
-    const evidence = store.readArtifact(session, session.artifacts.evidence_file);
-    const source = await sourceAdapter.inspectPristineSession(session);
-    const currentLandingUnitId = architectureLandingUnitId({
-      architecture: current,
-      coveredWorkItemIds: session.covered_work_item_ids,
-    });
-    const proof = {
-      current_landing_unit_id: currentLandingUnitId,
-      evidence_pristine:
-        canonicalStringify(evidence) === canonicalStringify(evidenceTemplate(session)),
-      readiness_receipt_absent:
-        store.readArtifact(session, session.artifacts.readiness_receipt_file) === null,
-      review_packet_absent:
-        store.readArtifact(session, session.artifacts.review_packet_file) === null,
-      source,
-    };
+    const proof = await pristineSessionProof(session, current);
     return {
       bound_architecture: boundReference,
       current_architecture: currentReference,
@@ -769,8 +754,102 @@ export function createDeliveryArtWorkSessionController({
         Boolean(proof.current_landing_unit_id) &&
         proof.readiness_receipt_absent &&
         proof.review_packet_absent &&
-        source.pristine === true,
+        proof.source.pristine === true,
     };
+  }
+
+  async function pristineSessionProof(session, architecture) {
+    const evidence = store.readArtifact(session, session.artifacts.evidence_file);
+    const source = await sourceAdapter.inspectPristineSession(session);
+    return {
+      current_landing_unit_id: architectureLandingUnitId({
+        architecture,
+        coveredWorkItemIds: session.covered_work_item_ids,
+      }),
+      evidence_pristine:
+        canonicalStringify(evidence) === canonicalStringify(evidenceTemplate(session)),
+      readiness_receipt_absent:
+        store.readArtifact(session, session.artifacts.readiness_receipt_file) === null,
+      review_packet_absent:
+        store.readArtifact(session, session.artifacts.review_packet_file) === null,
+      source,
+    };
+  }
+
+  async function replacePristineSession({
+    architecture,
+    current,
+    landingUnitId,
+    session,
+    workItemId,
+  }) {
+    const replacementOwnerRepo = targetItem(current).owner_repo;
+    const base = await sourceAdapter.resolveBase({
+      baseRef: session.landing_unit.base_ref,
+      ownerRepo: replacementOwnerRepo,
+    });
+    const decision = decisionWithArchitectureBindings({
+      schema_version: 1,
+      artifact_type: "delivery_art_work_session_decision",
+      work_item_id: workItemId,
+      covered_work_item_ids: session.covered_work_item_ids,
+      caller_id: session.caller_id,
+      operator: session.operator,
+      landing_unit: {
+        id: landingUnitId,
+        decision: session.landing_unit.decision,
+        split_reason: session.landing_unit.split_reason,
+        base_ref: session.landing_unit.base_ref,
+        branch: session.landing_unit.branch,
+        rollback_boundary: session.landing_unit.rollback_boundary,
+      },
+      architecture: { required: true, artifact_location: null },
+      human_gate_work_item_ids: { security_acceptance: [] },
+    }, architecture);
+    const replacement = createDeliveryArtWorkSession({
+      architectureFile: "artifacts/architecture.json",
+      baseCommit: base.commit,
+      clock,
+      continuation: current,
+      decision,
+    });
+    const workStart = await authorWorkStart(replacement, architecture);
+    const confirmedCurrent = await artifactAdapter.currentArchitecture(
+      session.delivery_id,
+    );
+    if (!sameArtifactReference(
+      artifactReference(architecture),
+      artifactReference(confirmedCurrent),
+    )) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_architecture_changed",
+        "The accepted architecture changed during reconstruction; retry against the new current packet.",
+      );
+    }
+    const resourceManifest = store.readResourceManifest(session);
+    const retired = await sourceAdapter.retirePristineSession({
+      resources: resourceManifest?.resources ?? [],
+      session,
+    });
+
+    store.removeSession(session);
+    store.writeArtifact(
+      replacement,
+      replacement.architecture.artifact_file,
+      architecture,
+    );
+    store.writeArtifact(
+      replacement,
+      replacement.artifacts.evidence_file,
+      evidenceTemplate(replacement),
+    );
+    store.writeArtifact(
+      replacement,
+      replacement.artifacts.work_start_file,
+      workStart,
+    );
+    store.writeSession(replacement);
+    return { replacement, replacementOwnerRepo, retired };
   }
 
   function supersessionProjection(supersession) {
@@ -1606,6 +1685,23 @@ export function createDeliveryArtWorkSessionController({
 
     const repoRoot = await sourceAdapter.resolveWorktree(session);
     if (!repoRoot) {
+      const source = await sourceAdapter.inspectPristineSession(session);
+      if (source.pristine === true && source.base_commit_available === false) {
+        return resultEnvelope({
+          context: current,
+          nextAction: {
+            code: "source-binding-reconstruction-required",
+            command: `npm run art -- work reconstruct ${workItemId}`,
+            reason:
+              "The pristine session base does not exist in its current owner repo and must be rebound before source work starts.",
+            authority: "operator-orchestration-service",
+          },
+          session,
+          state: "blocked",
+          workContract,
+          workItemId,
+        });
+      }
       return resultEnvelope({
         context: current,
         nextAction: {
@@ -1957,10 +2053,57 @@ export function createDeliveryArtWorkSessionController({
       return store.withLock(session.session_id, async () => {
         const supersession = await architectureSupersession(session);
         if (!supersession) {
-          throw new DeliveryArtWorkSessionError(
-            "delivery_art_work_session_reconstruction_not_required",
-            "The work session is already bound to the current architecture packet.",
+          const current = await continuation(workItemId);
+          const architecture = store.readArtifact(
+            session,
+            session.architecture.artifact_file,
           );
+          await contextsFor(session, [current], architecture);
+          const proof = await pristineSessionProof(session, architecture);
+          if (proof.source.base_commit_available !== false) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_reconstruction_not_required",
+              "The work session is already bound to the current architecture packet and its source base is available.",
+            );
+          }
+          if (
+            !proof.evidence_pristine ||
+            !proof.current_landing_unit_id ||
+            !proof.readiness_receipt_absent ||
+            !proof.review_packet_absent ||
+            proof.source.pristine !== true
+          ) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_reconstruction_not_pristine",
+              "Only a pristine work session can repair an invalid source base.",
+              proof,
+            );
+          }
+
+          const {
+            replacement,
+            replacementOwnerRepo,
+            retired,
+          } = await replacePristineSession({
+            architecture,
+            current,
+            landingUnitId: session.landing_unit_id,
+            session,
+            workItemId,
+          });
+          return {
+            ...await statusForSession(replacement, workItemId, current),
+            source_binding_repair: {
+              owner_repo: replacementOwnerRepo,
+              previous_base_commit: session.landing_unit.base_commit,
+              replacement_base_commit: replacement.landing_unit.base_commit,
+              previous_session_revision: session.updated_at,
+              replacement_session_revision: replacement.updated_at,
+              pristine_proof: proof,
+              resource_outcomes: retired.outcomes,
+              recorded_at: clock().toISOString(),
+            },
+          };
         }
         if (!supersession.reconstructable) {
           throw new DeliveryArtWorkSessionError(
@@ -1986,56 +2129,12 @@ export function createDeliveryArtWorkSessionController({
             "The current architecture does not define this work-session scope as one Landing Unit.",
           );
         }
-        const replacementOwnerRepo = targetItem(current).owner_repo;
-        const base = await sourceAdapter.resolveBase({
-          baseRef: session.landing_unit.base_ref,
-          ownerRepo: replacementOwnerRepo,
-        });
-        const decision = decisionWithArchitectureBindings({
-          schema_version: 1,
-          artifact_type: "delivery_art_work_session_decision",
-          work_item_id: workItemId,
-          covered_work_item_ids: session.covered_work_item_ids,
-          caller_id: session.caller_id,
-          operator: session.operator,
-          landing_unit: {
-            id: landingUnitId,
-            decision: session.landing_unit.decision,
-            split_reason: session.landing_unit.split_reason,
-            base_ref: session.landing_unit.base_ref,
-            branch: session.landing_unit.branch,
-            rollback_boundary: session.landing_unit.rollback_boundary,
-          },
-          architecture: { required: true, artifact_location: null },
-          human_gate_work_item_ids: { security_acceptance: [] },
-        }, supersession.current_artifact);
-        const replacement = createDeliveryArtWorkSession({
-          architectureFile: "artifacts/architecture.json",
-          baseCommit: base.commit,
-          clock,
-          continuation: current,
-          decision,
-        });
-        const workStart = await authorWorkStart(
-          replacement,
-          supersession.current_artifact,
-        );
-        const resourceManifest = store.readResourceManifest(session);
-        const confirmedCurrent = await artifactAdapter.currentArchitecture(
-          session.delivery_id,
-        );
-        if (!sameArtifactReference(
-          artifactReference(supersession.current_artifact),
-          artifactReference(confirmedCurrent),
-        )) {
-          throw new DeliveryArtWorkSessionError(
-            "delivery_art_work_session_architecture_changed",
-            "The accepted architecture changed during reconstruction; retry against the new current packet.",
-          );
-        }
-        const retired = await sourceAdapter.retirePristineSession({
-          resources: resourceManifest?.resources ?? [],
+        const { replacement, retired } = await replacePristineSession({
+          architecture: supersession.current_artifact,
+          current,
+          landingUnitId,
           session,
+          workItemId,
         });
 
         const receiptBody = {
@@ -2068,23 +2167,6 @@ export function createDeliveryArtWorkSessionController({
           integrity: { content_digest: canonicalDigest(receiptBody) },
         };
 
-        store.removeSession(session);
-        store.writeArtifact(
-          replacement,
-          replacement.architecture.artifact_file,
-          supersession.current_artifact,
-        );
-        store.writeArtifact(
-          replacement,
-          replacement.artifacts.evidence_file,
-          evidenceTemplate(replacement),
-        );
-        store.writeArtifact(
-          replacement,
-          replacement.artifacts.work_start_file,
-          workStart,
-        );
-        store.writeSession(replacement);
         store.writeArchitectureSupersessionReceipt(receipt);
         return {
           ...await statusForSession(replacement, workItemId, current),

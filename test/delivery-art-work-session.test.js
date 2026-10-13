@@ -512,6 +512,7 @@ function createHarness(
     },
     async resolveBase(input) {
       resolveBaseCalls.push(structuredClone(input));
+      pristineSource = { ...pristineSource, base_commit_available: true };
       return {
         commit: input.ownerRepo === "workspace-governance"
           ? "b".repeat(40)
@@ -1816,6 +1817,68 @@ test("architecture reconstruction resolves the base from the replacement owner r
   ]);
   assert.equal(replacementSession.owner_repo, "workspace-governance");
   assert.equal(replacementSession.landing_unit.base_commit, "b".repeat(40));
+});
+
+test("current architecture reconstructs a pristine invalid owner base", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-invalid-owner-base-"));
+  const architecture = architecturePacket("b");
+  architecture.architecture.descendant_owner_map[0].owner_repo =
+    "workspace-governance";
+  const currentContinuation = continuation();
+  currentContinuation.continuation_context.target_item.owner_repo =
+    "workspace-governance";
+  const harness = createHarness(root, {
+    architectureArtifact: architecture,
+    continuationByWorkItemId: {
+      "work-item-963": currentContinuation,
+    },
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  harness.setPristineSource({
+    base_commit_available: false,
+    changed_files: [],
+    local_branch_head: null,
+    pristine: true,
+    reasons: [],
+    remote_branch_head: null,
+    worktree_head: null,
+    worktree_present: false,
+  });
+
+  const blocked = await harness.controller.status("963");
+  assert.equal(blocked.state, "blocked");
+  assert.equal(
+    blocked.next_action.code,
+    "source-binding-reconstruction-required",
+  );
+
+  const reconstructed = await harness.controller.reconstruct("963");
+  const replacementSession = harness.store.readByAlias("work-item-963");
+
+  assert.equal(reconstructed.state, "implementation-ready");
+  assert.equal(reconstructed.source_binding_repair.owner_repo, "workspace-governance");
+  assert.equal(
+    reconstructed.source_binding_repair.previous_base_commit,
+    "a".repeat(40),
+  );
+  assert.equal(
+    reconstructed.source_binding_repair.replacement_base_commit,
+    "b".repeat(40),
+  );
+  assert.equal(replacementSession.owner_repo, "workspace-governance");
+  assert.equal(replacementSession.landing_unit.base_commit, "b".repeat(40));
+  assert.deepEqual(harness.resolveBaseCalls(), [
+    { baseRef: "origin/main", ownerRepo: "workspace-governance" },
+  ]);
 });
 
 test("work start rejects a superseded architecture before creating a session", async () => {

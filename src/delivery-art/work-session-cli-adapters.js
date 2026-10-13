@@ -446,6 +446,11 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   async function inspectPristineSession(session) {
     const repoRoot = canonicalRepo(session.owner_repo);
+    const baseCommitAvailable = optionalCommand(
+      execFileSyncImpl,
+      ["cat-file", "-e", `${session.landing_unit.base_commit}^{commit}`],
+      repoRoot,
+    ).ok;
     const worktree = parseWorktrees(
       command(execFileSyncImpl, ["worktree", "list", "--porcelain"], repoRoot),
     ).find((entry) => entry.branch === session.landing_unit.branch) ?? null;
@@ -473,6 +478,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     if (remoteHead) reasons.push("remote-branch-exists");
     if (pullRequest.state !== "missing") reasons.push("pull-request-exists");
     return {
+      base_commit_available: baseCommitAvailable,
       changed_files: changedFiles,
       local_branch_head: localHead,
       pristine: reasons.length === 0,
