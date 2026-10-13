@@ -1,5 +1,7 @@
 import {
+  architectureScopeFingerprint,
   artifactContentDigest,
+  DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
   reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
   workStartScopeFingerprint,
@@ -80,6 +82,53 @@ function sameValues(left, right) {
   const normalizedLeft = [...new Set(left ?? [])].sort();
   const normalizedRight = [...new Set(right ?? [])].sort();
   return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
+}
+
+export function createDeliveryArtArchitecturePacketDraft({
+  architecture,
+  artDigest,
+  conformancePlan,
+  coveredWorkItemIds,
+  createdAt,
+  decision,
+  deliveryId,
+  operator,
+  repoRevisions,
+  supersedes = null,
+  artifactId = null,
+}) {
+  const timestamp = assertTimestamp(createdAt, "createdAt");
+  const orderedWorkItems = [...new Set(coveredWorkItemIds ?? [])].sort();
+  const resolvedArtifactId = artifactId ?? `architecture-packet:${deliveryId}-v1`;
+  const status = decision?.status;
+  const candidate = {
+    schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+    artifact_type: "delivery_art_architecture_packet",
+    artifact_id: resolvedArtifactId,
+    delivery_id: deliveryId,
+    covered_work_item_ids: orderedWorkItems,
+    created_at: timestamp,
+    operator: clone(operator),
+    source_snapshot: {
+      captured_at: timestamp,
+      art_ref: `openproject://work_packages/${String(deliveryId ?? "").replace(/^delivery-/, "")}`,
+      art_digest: artDigest,
+      repo_revisions: clone(repoRevisions),
+    },
+    scope_fingerprint: `sha256:${"0".repeat(64)}`,
+    architecture: clone(architecture),
+    conformance_plan: clone(conformancePlan),
+    decision: {
+      status,
+      rationale: decision?.rationale,
+      decided_by: status === "draft" ? null : operator?.id ?? null,
+      decided_at: status === "draft" ? null : timestamp,
+    },
+    integrity: integrity(),
+    custody: localCustody(resolvedArtifactId, supersedes),
+  };
+  candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
+  return assertArtifactValid(candidate);
 }
 
 function assertDurableWorkStart(workStart) {

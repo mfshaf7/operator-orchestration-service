@@ -240,6 +240,22 @@ function architectureV6Candidate() {
   return packet;
 }
 
+function architectureV6DraftInput() {
+  const packet = architectureV6Candidate();
+  return {
+    schema_version: 1,
+    delivery_id: packet.delivery_id,
+    covered_work_item_ids: packet.covered_work_item_ids,
+    repo_revisions: packet.source_snapshot.repo_revisions,
+    architecture: packet.architecture,
+    conformance_plan: packet.conformance_plan,
+    decision: {
+      status: packet.decision.status,
+      rationale: packet.decision.rationale,
+    },
+  };
+}
+
 function historicalProseArchitecture() {
   const packet = fixture("architecture-packet.valid.json");
   packet.architecture.runtime_boundaries =
@@ -433,6 +449,9 @@ function deliveryArtScopeProjection(deliveryRecordId, workItemRecordIds, overrid
 
 function createHarness({
   architectureCutoverGuard = async () => ({ allowed: true, bound_sessions: [] }),
+  audit = null,
+  callerOperatorBindings = {},
+  clock = () => new Date("2026-08-08T11:20:00+08:00"),
   mutateRegistryResponse = null,
   projectionFailures = 0,
   readinessArtifact = null,
@@ -531,7 +550,9 @@ function createHarness({
     : null;
   const service = createDeliveryArtArtifactService({
     architectureCutoverGuard,
-    clock: () => new Date("2026-08-08T11:20:00+08:00"),
+    audit,
+    callerOperatorBindings,
+    clock,
     mutationAdmission: {
       admitted: true,
       reason: "test",
@@ -576,6 +597,190 @@ function createHarness({
     snapshotCalls,
   };
 }
+
+test("architecture authoring binds Console caller, operator authority, and fresh ART truth", async () => {
+  const consoleCaller = "governance-operations-console";
+  const auditEvents = [];
+  const harness = createHarness({
+    audit: { emit: (event) => auditEvents.push(structuredClone(event)) },
+    callerOperatorBindings: { [consoleCaller]: CALLER_ID },
+    clock: () => new Date("2026-08-08T10:00:00+08:00"),
+  });
+
+  const drafted = await harness.service.draftArchitecturePacket({
+    callerId: consoleCaller,
+    input: architectureV6DraftInput(),
+    operatorId: CALLER_ID,
+  });
+  const packet = drafted.architecture_packet;
+
+  assert.equal(packet.schema_version, 6);
+  assert.equal(packet.artifact_id, "architecture-packet:delivery-698-v1");
+  assert.equal(packet.operator.id, CALLER_ID);
+  assert.equal(packet.decision.decided_by, CALLER_ID);
+  assert.equal(packet.decision.decided_at, "2026-08-08T02:00:00.000Z");
+  assert.equal(packet.source_snapshot.art_digest, `sha256:${"a".repeat(64)}`);
+  assert.equal(packet.source_snapshot.art_ref, "openproject://work_packages/698");
+  assert.equal(packet.custody.state, "local-draft");
+  assert.equal(packet.custody.supersedes, null);
+  assert.equal(
+    packet.scope_fingerprint,
+    architectureScopeFingerprint(packet),
+  );
+  assert.equal(packet.integrity.content_digest, artifactContentDigest(packet));
+  assert.equal(harness.registry.registrations.length, 0);
+  assert.deepEqual(
+    auditEvents.map((event) => ({
+      caller_id: event.caller.id,
+      event_type: event.event_type,
+      operator_id: event.operator.id,
+      outcome: event.outcome,
+      source: event.source,
+      status: event.status,
+    })),
+    [{
+      caller_id: consoleCaller,
+      event_type: "delivery.artifact.candidate-authored",
+      operator_id: CALLER_ID,
+      outcome: "success",
+      source: {
+        record_ref: "openproject://work_packages/698",
+        surface: consoleCaller,
+      },
+      status: "architecture-ready",
+    }],
+  );
+
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: packet,
+    callerId: consoleCaller,
+    operatorId: CALLER_ID,
+  });
+  assert.equal(persisted.owner_receipt.caller_id, consoleCaller);
+  assert.equal(persisted.owner_receipt.operator_id, CALLER_ID);
+});
+
+test("architecture authoring derives exact current supersession and draft authority state", async () => {
+  const harness = createHarness({
+    clock: () => new Date("2026-08-08T11:00:00+08:00"),
+  });
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: architectureV6Candidate(),
+    callerId: CALLER_ID,
+  });
+  const projection = harness.projections.at(-1);
+  harness.setCurrentReference({
+    artifact_id: persisted.artifact.artifact_id,
+    artifact_status: "architecture-ready",
+    artifact_type: "delivery_art_architecture_packet",
+    custody_receipt: projection.custodyReceipt,
+    reference: projection.artifact,
+  });
+  const input = architectureV6DraftInput();
+  input.decision.status = "draft";
+
+  const drafted = await harness.service.draftArchitecturePacket({
+    callerId: CALLER_ID,
+    input,
+    operatorId: CALLER_ID,
+  });
+
+  assert.equal(
+    drafted.architecture_packet.artifact_id,
+    persisted.artifact.artifact_id,
+  );
+  assert.deepEqual(
+    drafted.architecture_packet.custody.supersedes,
+    sourceArtifactReference(persisted.artifact),
+  );
+  assert.equal(drafted.architecture_packet.decision.status, "draft");
+  assert.equal(drafted.architecture_packet.decision.decided_by, null);
+  assert.equal(drafted.architecture_packet.decision.decided_at, null);
+});
+
+test("architecture authoring rejects unbound callers and client authority fields", async () => {
+  const input = architectureV6DraftInput();
+  const auditEvents = [];
+  const harness = createHarness({
+    audit: { emit: (event) => auditEvents.push(structuredClone(event)) },
+  });
+
+  await assert.rejects(
+    () => harness.service.draftArchitecturePacket({
+      callerId: "governance-operations-console",
+      input,
+      operatorId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_caller_operator_binding_invalid",
+  );
+
+  await assert.rejects(
+    () => harness.service.draftArchitecturePacket({
+      callerId: CALLER_ID,
+      input: { ...input, operator: { id: CALLER_ID } },
+      operatorId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_authority_fields_forbidden" &&
+      error.details.forbidden_fields.includes("operator"),
+  );
+  assert.equal(harness.snapshotCalls.length, 0);
+  assert.deepEqual(
+    auditEvents.map((event) => ({
+      caller_id: event.caller.id,
+      error_class: event.error_class,
+      operator_id: event.operator.id,
+      outcome: event.outcome,
+      source: event.source,
+      status: event.status,
+    })),
+    [
+      {
+        caller_id: "governance-operations-console",
+        error_class: "delivery_art_caller_operator_binding_invalid",
+        operator_id: CALLER_ID,
+        outcome: "blocked",
+        source: {
+          record_ref: "openproject://work_packages/698",
+          surface: "governance-operations-console",
+        },
+        status: "rejected",
+      },
+      {
+        caller_id: CALLER_ID,
+        error_class: "delivery_art_architecture_authority_fields_forbidden",
+        operator_id: CALLER_ID,
+        outcome: "blocked",
+        source: {
+          record_ref: "openproject://work_packages/698",
+          surface: CALLER_ID,
+        },
+        status: "rejected",
+      },
+    ],
+  );
+});
+
+test("architecture authoring rejects design topology that contradicts current ART", async () => {
+  const input = architectureV6DraftInput();
+  input.architecture.descendant_owner_map.find(
+    (entry) => entry.work_item_id === "work-item-802",
+  ).work_item_type = "User story";
+  const harness = createHarness();
+
+  await assert.rejects(
+    () => harness.service.draftArchitecturePacket({
+      callerId: CALLER_ID,
+      input,
+      operatorId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_scope_mismatch" &&
+      error.details.material_errors.includes("work-item-802 type changed"),
+  );
+  assert.equal(harness.registry.registrations.length, 0);
+});
 
 test("current architecture resolves the latest ART pointer through immutable custody", async () => {
   const harness = createHarness();

@@ -457,6 +457,40 @@ function deliveryWorkSessionOperatorId(request, config, caller) {
   return operatorId.trim();
 }
 
+function deliveryArtifactOperatorId(
+  request,
+  config,
+  caller,
+  { artifactOperatorId = null } = {},
+) {
+  const value = request.headers["x-oos-operator-id"];
+  const claimedOperatorId = typeof value === "string" && value.trim()
+    ? value.trim()
+    : null;
+  const expectedOperatorId =
+    config.deliveryArt.workSession.callerOperatorBindings[caller.id] ?? null;
+
+  if (artifactOperatorId === caller.id && !claimedOperatorId) {
+    return caller.id;
+  }
+  if (caller.id.startsWith("operator:") && !claimedOperatorId) {
+    return caller.id;
+  }
+  const operatorId = artifactOperatorId ?? claimedOperatorId;
+  if (
+    !operatorId ||
+    claimedOperatorId !== operatorId ||
+    expectedOperatorId !== operatorId
+  ) {
+    throw new HttpError(
+      403,
+      "delivery_art_caller_operator_binding_invalid",
+      "Delivery ART architecture authority is not bound to this caller and operator.",
+    );
+  }
+  return operatorId;
+}
+
 function agentConsoleOperatorId(request) {
   const value = request.headers["x-oos-operator-id"];
   if (typeof value !== "string" || !value.trim()) {
@@ -2129,6 +2163,9 @@ async function handlePersistDeliveryArchitecturePacket({
   const caller = authenticateCaller(request, config);
   const body = await readDeliveryArtJsonBody(request);
   assertObject(body.artifact, "artifact");
+  const operatorId = deliveryArtifactOperatorId(request, config, caller, {
+    artifactOperatorId: body.artifact.operator?.id ?? null,
+  });
   const correlationId = createCorrelationId(request);
   assertDeliveryArtifactMutationAuthority({
     artifact: body.artifact,
@@ -2141,10 +2178,35 @@ async function handlePersistDeliveryArchitecturePacket({
     artifact: body.artifact,
     callerId: caller.id,
     correlationId,
+    operatorId,
   });
   sendJson(response, 200, {
     ...result,
     workflow_id: "delivery-art-architecture-packet-persist",
+  });
+}
+
+async function handleDraftDeliveryArchitecturePacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  assertCallerIdentityBound(caller, "Delivery ART architecture authoring");
+  const operatorId = deliveryArtifactOperatorId(request, config, caller);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.input, "input");
+  const result = await deliveryArtArtifactService.draftArchitecturePacket({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    input: body.input,
+    operatorId,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-architecture-packet-draft",
   });
 }
 
@@ -6620,6 +6682,19 @@ export function createApp({
         url.pathname === "/v1/delivery-art/artifacts/resolve"
       ) {
         await handleResolveDeliveryArtArtifact({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/architecture-packets/draft"
+      ) {
+        await handleDraftDeliveryArchitecturePacket({
           config,
           deliveryArtArtifactService,
           request,

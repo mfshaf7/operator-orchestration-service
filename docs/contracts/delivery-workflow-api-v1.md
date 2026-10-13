@@ -135,13 +135,13 @@ evidence. A session already bound to one of those packets may continue while
 that exact packet remains current and fresh ART truth preserves its material
 semantics; historical packets cannot authorize another session.
 
-A v5 packet replacing a historical current pointer must explicitly supersede
+A v6 packet replacing a historical current pointer must explicitly supersede
 that exact immutable reference. OOS inventories its active work-session store
 before projection and blocks cutover while any session remains bound to the
 historical packet. This prevents a format-only replacement from silently
 stranding work already in progress.
 
-For v5-to-v5 replacement, the architecture decision is the covered scope,
+For v6-to-v6 replacement, the architecture decision is the covered scope,
 architecture and Landing Unit model, conformance plan, and approved decision.
 Changing only source commits, custody metadata, timestamps, evidence-profile
 maintenance, or retry state is not an architecture change. Exact artifact
@@ -176,35 +176,42 @@ evidence state machine.
 
 The supported artifact transitions are:
 
-1. Persist an operator-decided local architecture packet through
+1. Author a canonical local schema-v6 Architecture Packet candidate through
+   `POST /v1/delivery-art/architecture-packets/draft`. The request carries only
+   editable scope, repository revisions, design, conformance, and decision
+   intent. OOS binds the configured Console caller to the accountable operator,
+   captures fresh scoped ART truth, resolves current supersession, and derives
+   artifact identity, timestamps, custody, fingerprints, and digest. This
+   transition does not mutate WGCF or OpenProject.
+2. Persist the exact operator-approved local architecture packet through
    `POST /v1/delivery-art/architecture-packets/persist`.
-2. Capture a current scoped ART snapshot and author a canonical local
+3. Capture a current scoped ART snapshot and author a canonical local
    work-start candidate through `POST /v1/delivery-art/work-start/draft`.
-3. Evaluate that local work-start record against the current scoped ART snapshot
+4. Evaluate that local work-start record against the current scoped ART snapshot
    and any required durable architecture packet through
    `POST /v1/delivery-art/work-start/evaluate`.
-4. Resolve the durable implementation-ready work-start and author a local
+5. Resolve the durable implementation-ready work-start and author a local
    schema-v2 Review Packet through `POST /v1/delivery-art/review-packets` with
    explicit `input.schema_version=2`.
-5. Convert the local schema-v2 Review Packet draft into a durable `merge-ready`
+6. Convert the local schema-v2 Review Packet draft into a durable `merge-ready`
    packet through `POST /v1/delivery-art/review-packets/readiness`.
-6. For architecture v5, acquire the merged Landing Unit's exact owned
+7. For architecture v5 or v6, acquire the merged Landing Unit's exact owned
    `operating-ready` cases through the base-owned evidence profile and project
    them with `target_readiness=operating-ready`. Preserve merge-ready evidence
    unchanged and append phase-scoped operating evidence.
-7. Resolve the durable merge-ready predecessor and author a post-merge local
+8. Resolve the durable merge-ready predecessor and author a post-merge local
    candidate from exact merged source evidence plus any newly applicable
    operating-readiness evidence through
    `POST /v1/delivery-art/review-packets/finalization-drafts`.
    Added evidence may extend the packet but cannot replace or rewrite evidence
    that was already durable at merge readiness.
-8. Prepare that candidate and its exact readiness subject through
+9. Prepare that candidate and its exact readiness subject through
    `POST /v1/delivery-art/review-packets/prepare-finalization`. Preparation is
    read/validation only and does not claim durable finalization.
-9. Issue an immutable WGCF operating-readiness receipt for that exact subject
+10. Issue an immutable WGCF operating-readiness receipt for that exact subject
    through `POST /v1/delivery-art/review-packets/operating-readiness`. WGCF
    records the decision but does not finalize the packet or mutate ART.
-10. Finalize only with one trusted `operating-ready` receipt reference through
+11. Finalize only with one trusted `operating-ready` receipt reference through
    `POST /v1/delivery-art/review-packets/finalize`.
 
 All local candidates and HTTP request bodies use canonical JSON constraints.
@@ -231,8 +238,10 @@ delete, overwrite, or hide durable evidence as compensation.
 
 Schema-v2 writes require all of the following:
 
-- an authenticated caller-specific credential whose caller id matches
-  `artifact.operator.id`
+- an authenticated caller-specific credential; direct operator callers match
+  `artifact.operator.id`, while the Console caller must supply the exact
+  configured `x-oos-operator-id` binding and the artifact must match that
+  accountable operator
 - `OOS_DELIVERY_ART_MUTATION_ENABLED=true`
 - `OOS_DELIVERY_ART_WRITER_TOPOLOGY=single-writer`
 - a method-scoped OOS WGCF registry credential
@@ -376,7 +385,7 @@ npm run art -- work close <work-item-id>
 
 `work preflight`, `work start`, and active `work status` project one
 `work_contract` from authoritative ART and architecture inputs. V1 through v4
-use work-contract schema v1. Current architecture v5 uses schema v2, separating
+use work-contract schema v1. Architecture v5 and current v6 use schema v2, separating
 `outcome_cases` from exact `evidence_owner_cases` while preflighting every
 eventual owned fidelity before source creation. It carries the
 completion-narrative posture for every covered work item and the exact
@@ -391,7 +400,7 @@ The source-owned capability declaration lives under
 `contracts/delivery-art-lifecycle/`; work-session schemas live under
 `contracts/delivery-art-work-session/`. One external atomic session binds ART
 scope, Landing Unit source truth, operator decision source, architecture
-posture, human gates, and stable artifact names. Version 3 through 5 gate
+posture, human gates, and stable artifact names. Version 3 through 6 gate
 bindings are derived from the durable architecture packet rather than copied
 into session state: `before_implementation`, `before_source_merge`,
 `before_runtime_activation`, and `before_operating_ready` stop only at their

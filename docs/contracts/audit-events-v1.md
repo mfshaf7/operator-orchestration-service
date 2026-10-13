@@ -23,6 +23,7 @@ Phase 1 should emit at least these event families:
 - `backend.openproject.write`
 - `delivery.initiative.governance_updated`
 - `delivery.plan.applied`
+- `delivery.artifact.candidate-authored`
 
 ## Required Shared Fields
 

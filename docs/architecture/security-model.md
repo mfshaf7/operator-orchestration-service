@@ -42,17 +42,24 @@ That means:
 This is an acceptable first step for a local controlled cluster, but it should
 be treated as a bounded phase-1 control rather than the final identity model.
 
-Delivery ART custody mutations use a stronger boundary inside the same API:
+Delivery ART custody and authority-bearing authoring use a stronger boundary
+inside the same API:
 
 - each admitted operator caller has a distinct secret in
   `CALLER_AUTH_SECRETS_JSON`
-- the authenticated caller id must exactly match `artifact.operator.id`
+- a direct operator caller must exactly match `artifact.operator.id`
+- the Governance Operations Console may act as the machine caller only when
+  its caller-specific credential, `x-oos-operator-id`, and the configured
+  caller-to-operator binding all match; the packet records the bound operator,
+  while audit and owner receipts retain both identities
 - the legacy shared caller secret cannot authorize schema-v2 artifact writes
 - OOS uses a separate method-scoped service identity for WGCF registry calls
 
 Caller-specific secrets must be distinct from one another and from the shared
 compatibility secret. This prevents one broad compatibility credential from
-claiming another operator's architecture or evidence decision.
+claiming another operator's architecture or evidence decision. Browser code
+cannot submit operator, decision-time, source-snapshot, fingerprint, digest, or
+custody authority through the Architecture Packet authoring request.
 
 Target direction later:
 

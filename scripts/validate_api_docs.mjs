@@ -39,6 +39,9 @@ import {
   catalogExternalRefMap,
   projectCatalogSchemaForOpenApi,
 } from "./catalog_openapi_schema_tools.mjs";
+import {
+  createDeliveryArtArchitecturePacketDraft,
+} from "../src/delivery-art/lifecycle-authoring.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,6 +106,36 @@ function requireSchema(spec, schemaName) {
     fail(`components.schemas.${schemaName} is missing`);
   }
   return schema;
+}
+
+function requireArchitectureDraftExampleSemantics(spec) {
+  const example = spec.paths?.[
+    "/v1/delivery-art/architecture-packets/draft"
+  ]?.post?.requestBody?.content?.["application/json"]?.example;
+  if (!example?.input) {
+    fail("POST /v1/delivery-art/architecture-packets/draft must publish a complete request example");
+  }
+  try {
+    createDeliveryArtArchitecturePacketDraft({
+      architecture: example.input.architecture,
+      artDigest: `sha256:${"a".repeat(64)}`,
+      conformancePlan: example.input.conformance_plan,
+      coveredWorkItemIds: example.input.covered_work_item_ids,
+      createdAt: "2026-08-08T10:05:00+08:00",
+      decision: example.input.decision,
+      deliveryId: example.input.delivery_id,
+      operator: {
+        decision_source: "operator",
+        id: "operator:workspace-owner",
+      },
+      repoRevisions: example.input.repo_revisions,
+    });
+  } catch (error) {
+    fail(
+      "POST /v1/delivery-art/architecture-packets/draft example must satisfy " +
+      `the canonical runtime contract: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function schemaRefName(schema) {
@@ -760,6 +793,7 @@ requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
 requireProposalCanonicalSchemas(spec);
 requireDeliveryIngressCanonicalSchemas(spec);
+requireArchitectureDraftExampleSemantics(spec);
 requireWorkDesignCanonicalSchemas(spec);
 requireRefinementCanonicalSchemas(spec);
 requireCatalogCanonicalSchemas(spec);

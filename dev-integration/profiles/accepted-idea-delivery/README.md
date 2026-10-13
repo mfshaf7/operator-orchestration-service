@@ -168,8 +168,10 @@ overlays cannot shadow the current caller bindings.
 
 The profile generates distinct caller-specific credentials for the Governance
 Operations Console and the host Delivery ART operator. The host operator uses
-`operator:workspace-owner` because schema-v2 artifact mutation requires the
-authenticated caller to match the artifact operator. Neither caller-specific
+`operator:workspace-owner` for direct schema-v2 artifact operations. The
+Console may author and persist Architecture Packets only through its existing
+exact caller-to-operator binding and `x-oos-operator-id`; OOS records the
+machine caller and accountable operator separately. Neither caller-specific
 credential may reuse the compatibility shared broker secret.
 
 The host Delivery source executor also activates the OOS Agent Gary consumer.

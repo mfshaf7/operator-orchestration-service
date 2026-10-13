@@ -158,6 +158,8 @@ export function createRuntime({
       store: deliveryArtWorkSessionStore,
     }),
     audit,
+    callerOperatorBindings:
+      config.deliveryArt.workSession.callerOperatorBindings,
     mutationAdmission: {
       admitted: config.deliveryArt.mutationEnabled,
       reason: config.deliveryArt.mutationEnabled

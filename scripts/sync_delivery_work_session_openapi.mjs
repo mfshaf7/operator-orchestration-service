@@ -6,6 +6,9 @@ import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
 import {
   upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath,
 } from "./console_source_authority_openapi_tools.mjs";
+import {
+  deliveryArtArchitectureDraftRequestExample,
+} from "./delivery_art_architecture_openapi_example.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
@@ -47,6 +50,123 @@ const workItemId = {
 };
 
 const components = {
+  DeliveryArtArchitecturePacketDraftDecisionV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["status", "rationale"],
+    properties: {
+      status: {
+        enum: ["draft", "architecture-ready", "blocked-pending-architecture-decision"],
+      },
+      rationale: { type: "string", minLength: 1 },
+    },
+  },
+  DeliveryArtArchitecturePacketDraftInputV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "schema_version",
+      "delivery_id",
+      "covered_work_item_ids",
+      "repo_revisions",
+      "architecture",
+      "conformance_plan",
+      "decision",
+    ],
+    properties: {
+      schema_version: { const: 1 },
+      delivery_id: { type: "string", pattern: "^delivery-[1-9][0-9]*$" },
+      covered_work_item_ids: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+      },
+      repo_revisions: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["repo", "base_ref", "commit"],
+          properties: {
+            repo: { type: "string", pattern: "^[a-z0-9][a-z0-9-]*$" },
+            base_ref: { type: "string", minLength: 1 },
+            commit: { type: "string", pattern: "^[0-9a-f]{40}$" },
+          },
+        },
+      },
+      architecture: {
+        type: "object",
+        description: "Complete operator-authored schema-v6 architecture design. This OpenAPI component describes the transport envelope only; OOS validates the full workspace-governance Architecture Packet schema, semantic contract, and live ART topology at runtime.",
+        additionalProperties: true,
+      },
+      conformance_plan: {
+        type: "object",
+        description: "Complete operator-authored schema-v6 conformance plan. OOS validates it against the canonical workspace-governance Delivery ART contract at runtime.",
+        additionalProperties: true,
+      },
+      decision: {
+        $ref: "#/components/schemas/DeliveryArtArchitecturePacketDraftDecisionV1",
+      },
+    },
+  },
+  DeliveryArtArchitecturePacketDraftRequestV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["input"],
+    properties: {
+      input: {
+        $ref: "#/components/schemas/DeliveryArtArchitecturePacketDraftInputV1",
+      },
+    },
+  },
+  DeliveryArtArchitecturePacketDraftResponseV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["architecture_packet", "source_snapshot", "workflow_id"],
+    properties: {
+      architecture_packet: {
+        $ref: "#/components/schemas/DeliveryArtCustodyArtifact",
+      },
+      source_snapshot: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "art_digest",
+          "covered_record_count",
+          "dependency_record_count",
+          "relation_count",
+        ],
+        properties: {
+          art_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+          covered_record_count: { type: "integer", minimum: 1 },
+          dependency_record_count: { type: "integer", minimum: 0 },
+          relation_count: { type: "integer", minimum: 0 },
+        },
+      },
+      workflow_id: { const: "delivery-art-architecture-packet-draft" },
+    },
+  },
+  DeliveryArtArchitecturePacketPersistRequestV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["artifact"],
+    properties: {
+      artifact: { $ref: "#/components/schemas/DeliveryArtCustodyArtifact" },
+    },
+  },
+  DeliveryArtArchitecturePacketPersistResponseV1: {
+    type: "object",
+    additionalProperties: true,
+    required: ["artifact", "custody_receipt", "owner_receipt", "workflow_id"],
+    properties: {
+      artifact: { $ref: "#/components/schemas/DeliveryArtCustodyArtifact" },
+      custody_receipt: { type: "object", additionalProperties: true },
+      owner_receipt: { type: "object", additionalProperties: true },
+      workflow_id: { const: "delivery-art-architecture-packet-persist" },
+    },
+  },
   DeliveryArtCurrentArchitectureRequestV1: {
     type: "object",
     additionalProperties: false,
@@ -884,6 +1004,150 @@ const commandOperation = ({ action, description, schemaName }) => ({
 });
 
 const paths = {
+  "/v1/delivery-art/architecture-packets/draft": {
+    post: {
+      tags: ["Delivery ART"],
+      summary: "Author a current Architecture Packet candidate",
+      description: "Authors a non-durable schema-v6 candidate from explicit operator design while OOS binds the authenticated Console caller to its configured operator, captures fresh scoped ART truth, derives current supersession, and computes canonical identity, fingerprints, custody, timestamps, and digest. The route performs no WGCF or OpenProject mutation.",
+      operationId: "draftDeliveryArtArchitecturePacket",
+      security,
+      parameters: [operatorParameter],
+      requestBody: {
+        required: true,
+        description: "Provide only editable design, conformance, repository-revision, scope, and decision intent. Authority-bearing fields are rejected. The architecture and conformance objects must be complete schema-v6 sections validated by the canonical runtime contract.",
+        content: {
+          "application/json": {
+            schema: {
+              $ref: "#/components/schemas/DeliveryArtArchitecturePacketDraftRequestV1",
+            },
+            example: deliveryArtArchitectureDraftRequestExample(),
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Canonical local Architecture Packet candidate and bounded fresh-snapshot summary.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/DeliveryArtArchitecturePacketDraftResponseV1",
+              },
+              example: {
+                architecture_packet: {
+                  artifact_id: "architecture-packet:delivery-1275-v1",
+                  artifact_type: "delivery_art_architecture_packet",
+                  custody: {
+                    state: "local-draft",
+                    uri: "local://delivery-art/architecture-packet:delivery-1275-v1.json",
+                  },
+                  delivery_id: "delivery-1275",
+                  integrity: { content_digest: `sha256:${"b".repeat(64)}` },
+                  operator: { id: "operator:workspace-owner" },
+                  schema_version: 6,
+                },
+                source_snapshot: {
+                  art_digest: `sha256:${"a".repeat(64)}`,
+                  covered_record_count: 1,
+                  dependency_record_count: 0,
+                  relation_count: 0,
+                },
+                workflow_id: "delivery-art-architecture-packet-draft",
+              },
+            },
+          },
+        },
+        400: errorResponse("The authoring envelope or request version is invalid."),
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("The caller-specific credential or caller-to-operator binding is invalid."),
+        409: errorResponse("The proposed design contradicts current scoped ART truth."),
+        422: errorResponse("The generated candidate fails the canonical schema-v6 contract."),
+        502: errorResponse("Current ART or projected architecture authority is inconsistent."),
+      },
+      "x-oos-owner": "operator-orchestration-service",
+      "x-oos-primary-caller": "governance-operations-console",
+      "x-oos-surface": "operator-facing",
+      "x-oos-workflow-family": "delivery-art-custody",
+    },
+  },
+  "/v1/delivery-art/architecture-packets/persist": {
+    post: {
+      tags: ["Delivery ART"],
+      summary: "Persist an approved Architecture Packet",
+      description: "Persists one current schema-v6 Architecture Packet through WGCF after verifying its server-bound Console caller and accountable operator, exact fresh ART scope, current supersession, canonical validation, and cutover safety. WGCF failure prevents OpenProject projection; projection failure never deletes durable evidence.",
+      operationId: "persistDeliveryArtArchitecturePacket",
+      security,
+      parameters: [operatorParameter],
+      requestBody: {
+        required: true,
+        description: "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. OOS recomputes fingerprints and digest.",
+        content: {
+          "application/json": {
+            schema: {
+              $ref: "#/components/schemas/DeliveryArtArchitecturePacketPersistRequestV1",
+            },
+            example: {
+              artifact: {
+                artifact_id: "architecture-packet:delivery-1275-v1",
+                artifact_type: "delivery_art_architecture_packet",
+                custody: {
+                  state: "local-draft",
+                  uri: "local://delivery-art/architecture-packet:delivery-1275-v1.json",
+                },
+                delivery_id: "delivery-1275",
+                integrity: { content_digest: `sha256:${"b".repeat(64)}` },
+                operator: { id: "operator:workspace-owner" },
+                schema_version: 6,
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Durable architecture artifact, custody receipt, and bounded owner receipt.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/DeliveryArtArchitecturePacketPersistResponseV1",
+              },
+              example: {
+                artifact: {
+                  artifact_id: "architecture-packet:delivery-1275-v1",
+                  artifact_type: "delivery_art_architecture_packet",
+                  custody: {
+                    state: "durable",
+                    uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+                  },
+                  delivery_id: "delivery-1275",
+                  integrity: { content_digest: `sha256:${"a".repeat(64)}` },
+                  operator: { id: "operator:workspace-owner" },
+                  schema_version: 6,
+                },
+                custody_receipt: {},
+                owner_receipt: {
+                  caller_id: "governance-operations-console",
+                  operator_id: "operator:workspace-owner",
+                  projected: true,
+                  replayed: false,
+                },
+                workflow_id: "delivery-art-architecture-packet-persist",
+              },
+            },
+          },
+        },
+        400: errorResponse("The canonical request envelope is invalid."),
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("Caller identity is not bound to the packet's accountable operator."),
+        409: errorResponse("The packet is undecided, stale, semantically unchanged, missing exact supersession, or blocked by active sessions."),
+        422: errorResponse("The candidate fails canonical schema or semantic validation."),
+        503: errorResponse("Delivery ART mutation admission or a required custody dependency is unavailable."),
+      },
+      "x-oos-owner": "operator-orchestration-service",
+      "x-oos-primary-caller": "governance-operations-console",
+      "x-oos-surface": "operator-facing",
+      "x-oos-workflow-family": "delivery-art-custody",
+    },
+  },
   "/v1/delivery-art/architecture-packets/current": {
     post: {
       tags: ["Delivery ART"],
@@ -943,9 +1207,9 @@ const paths = {
         502: errorResponse("The projected reference and immutable artifact disagree."),
       },
       "x-oos-owner": "operator-orchestration-service",
-      "x-oos-primary-caller": "operator-orchestration-service",
-      "x-oos-surface": "internal",
-      "x-oos-workflow-family": "delivery-work-session",
+      "x-oos-primary-caller": "governance-operations-console",
+      "x-oos-surface": "operator-facing",
+      "x-oos-workflow-family": "delivery-art-custody",
     },
   },
   "/v1/delivery-work-items/{work_item_id}/work-session/context": {
