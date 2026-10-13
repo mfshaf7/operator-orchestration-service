@@ -6,6 +6,7 @@ security_evidence:
     - runtime
   reviewed_artifacts:
     - src/delivery-art/lifecycle-authoring.js
+    - src/delivery-art/lifecycle-controller.js
     - src/delivery-art/service.js
     - src/app.js
     - src/runtime.js
@@ -54,7 +55,7 @@ digest before the existing validation and persistence transitions run.
 ## Source Changes
 
 - changed workflow, adapter, or contract: add `POST /v1/delivery-art/architecture-packets/draft`; derive server-owned packet fields; extend architecture persistence to accept only the existing configured Console caller/operator binding while preserving direct operator compatibility; record both caller and operator in owner evidence.
-- tests or validator added: service and HTTP positive coverage plus unbound caller, client-supplied authority, and ART topology contradiction failures; generated OpenAPI owns the draft and corrected persistence routes.
+- tests or validator added: service and HTTP positive coverage plus unbound caller, client-supplied authority, and ART topology contradiction failures; generated OpenAPI owns the draft and corrected persistence routes; exact-head evidence installs locked dependencies and a failed current acquisition stops at the evidence gate instead of re-entering projection.
 - related change records: none
 
 ## Artifact And Deployment Evidence

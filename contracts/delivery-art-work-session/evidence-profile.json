@@ -4,6 +4,19 @@
   "owner_repo": "operator-orchestration-service",
   "commands": [
     {
+      "id": "locked-dependency-install",
+      "kind": "validations",
+      "name": "Locked dependency installation",
+      "executable": "npm",
+      "args": [
+        "ci",
+        "--ignore-scripts"
+      ],
+      "fidelity": "sandbox-runtime",
+      "conformance_binding": "none",
+      "timeout_seconds": 300
+    },
+    {
       "id": "owner-repository-tests",
       "kind": "tests",
       "name": "Owner repository test suite",

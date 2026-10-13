@@ -741,6 +741,58 @@ test("merge-ready reconciliation rejects pull-request evidence that changed iden
   assert.equal(setup.requests.length, 0);
 });
 
+test("current failed owner evidence stops at the evidence gate instead of re-projecting", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const evidence = structuredClone(
+    fixture("review-packet-merge-ready.valid.json").evidence,
+  );
+  evidence.tests[0].result = "fail";
+  evidence.tests[0].summary = "The exact-head owner test failed.";
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]: architecture,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  setup.source.base_commit = workStart.landing_unit.branch_plan[0].base_commit;
+  setup.source.branch = finalizationPlan.landing_unit.branch;
+  setup.source.changed_files = ["contracts/delivery-art-operator-path.yaml"];
+  setup.source.head_commit = "3".repeat(40);
+  setup.source.state = "pushed";
+  setup.pullRequest.head_commit = setup.source.head_commit;
+  setup.pullRequest.state = "open";
+
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture,
+    currentDocument: {
+      acquisition: { state: "blocked" },
+      change_record_refs: [],
+      evidence,
+      exceptions: [],
+    },
+    source: {
+      ...setup.source,
+      base_ref: finalizationPlan.landing_unit.base_ref,
+      repo_name: finalizationPlan.landing_unit.owner_repo,
+    },
+    workStart,
+  }).evidence_document;
+  setup.files.set(
+    `${repoRoot}/.art/review-packets/evidence.json`,
+    projected,
+  );
+
+  const controller = createDeliveryArtLifecycleController(setup);
+  const result = await controller.reconcile(finalizationPlan);
+
+  assert.equal(result.facts.evidence_projection, "current");
+  assert.equal(result.facts.evidence, "invalid");
+  assert.equal(result.projection.gate, "evidence");
+  assert.equal(result.projection.state, "review-evidence-required");
+  assert.deepEqual(result.executed_actions, []);
+  assert.equal(setup.requests.length, 0);
+});
+
 test("merge-ready reconciliation replaces a stale open PR head with a new immutable packet", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const workStart = fixture("work-start-record.valid.json");

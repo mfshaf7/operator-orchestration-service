@@ -508,7 +508,7 @@ function evidenceProjectionState({
   if (!document || !workStart || !source?.head_commit) {
     return "required";
   }
-  if (document.acquisition?.state !== "ready") {
+  if (!["ready", "blocked"].includes(document.acquisition?.state)) {
     return "required";
   }
   try {
