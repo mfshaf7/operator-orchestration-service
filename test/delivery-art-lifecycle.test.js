@@ -225,6 +225,25 @@ test("merged v5 work acquires owned operating evidence before finalization", () 
   );
 });
 
+test("failed pre-merge owner evidence remains an executable bounded retry", () => {
+  const failed = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "pushed",
+    evidence: "invalid",
+    evidence_projection: "current",
+    review_packet: "missing",
+    pull_request: "open",
+  });
+
+  assert.equal(failed.gate, null);
+  assert.equal(failed.state, "review-evidence-retry-required");
+  assert.equal(
+    failed.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+  );
+});
+
 test("lifecycle state projection is retry-safe for every durable checkpoint", () => {
   const cases = [
     [

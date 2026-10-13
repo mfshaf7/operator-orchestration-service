@@ -552,6 +552,16 @@ function artState(statuses) {
     : "open";
 }
 
+function failedEvidenceRetryPending(context) {
+  return (
+    context.projection.state === "review-evidence-retry-required" &&
+    context.facts.evidence === "invalid"
+  ) || (
+    context.projection.state === "operating-evidence-retry-required" &&
+    context.facts.operating_evidence === "invalid"
+  );
+}
+
 function assertAdapter(adapter, methods, name) {
   for (const method of methods) {
     if (typeof adapter?.[method] !== "function") {
@@ -1192,6 +1202,15 @@ export function createDeliveryArtLifecycleController({
       const executedAction = await executeAction(before);
       executed.push(executedAction);
       const after = await inspect(plan);
+      if (
+        failedEvidenceRetryPending(after) &&
+        [
+          DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+          DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE,
+        ].includes(executedAction)
+      ) {
+        return { ...after, executed_actions: executed };
+      }
       if (
         !after.projection.complete &&
         !after.projection.gate &&

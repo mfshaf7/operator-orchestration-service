@@ -18,6 +18,7 @@ import {
   deliveryArtPreMergeReviewPacketId,
 } from "../src/delivery-art/lifecycle-authoring.js";
 import { projectDeliveryArtReviewEvidence } from "../src/delivery-art/review-evidence.js";
+import { projectDeliveryArtOwnerEvidence } from "../src/delivery-art/review-evidence-acquisition.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 
 const plan = {
@@ -188,6 +189,7 @@ function adapters(initial = {}) {
       async write(filePath, value) { files.set(filePath, structuredClone(value)); },
     },
     files,
+    evidenceReceipt,
     pullRequest,
     requests,
     source,
@@ -201,6 +203,34 @@ function adapters(initial = {}) {
       async pullRequest() { return structuredClone(pullRequest); },
     },
   };
+}
+
+function ownerEvidenceReceiptWithResult(receipt, result) {
+  const next = structuredClone(receipt);
+  next.results[0].result = result;
+  const {
+    output_digest: _outputDigest,
+    result_digest: _resultDigest,
+    ...resultInput
+  } = next.results[0];
+  next.results[0].result_digest = canonicalDigest({
+    ...resultInput,
+    owner_repo: next.owner_repo,
+    source_revision: next.source_revision,
+  });
+  next.evidence_digest = canonicalDigest({
+    acquisition_id: next.acquisition_id,
+    owner_repo: next.owner_repo,
+    profile_digest: next.profile_digest,
+    profile_id: next.profile_id,
+    profile_revision: next.profile_revision,
+    provider_id: next.provider.id,
+    results: next.results.map(({ output_digest: _output, ...entry }) => entry),
+    source_revision: next.source_revision,
+  });
+  const { receipt_digest: _receiptDigest, ...receiptInput } = next;
+  next.receipt_digest = canonicalDigest(receiptInput);
+  return next;
 }
 
 function fixture(name) {
@@ -741,7 +771,7 @@ test("merge-ready reconciliation rejects pull-request evidence that changed iden
   assert.equal(setup.requests.length, 0);
 });
 
-test("current failed owner evidence stops at the evidence gate instead of re-projecting", async () => {
+test("failed pre-merge evidence retries once per reconciliation and advances after repair", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
@@ -760,7 +790,7 @@ test("current failed owner evidence stops at the evidence gate instead of re-pro
   setup.source.head_commit = "3".repeat(40);
   setup.source.state = "pushed";
   setup.pullRequest.head_commit = setup.source.head_commit;
-  setup.pullRequest.state = "open";
+  setup.pullRequest.state = "missing";
 
   const projected = projectDeliveryArtReviewEvidence({
     architecture,
@@ -783,13 +813,106 @@ test("current failed owner evidence stops at the evidence gate instead of re-pro
   );
 
   const controller = createDeliveryArtLifecycleController(setup);
-  const result = await controller.reconcile(finalizationPlan);
+  let attempts = 0;
+  setup.sourceAdapter.acquireEvidence = async (input) => {
+    attempts += 1;
+    return ownerEvidenceReceiptWithResult(
+      setup.evidenceReceipt(input),
+      attempts === 1 ? "fail" : "pass",
+    );
+  };
+  setup.brokerAdapter.request = async (request) => {
+    setup.requests.push(request);
+    assert.equal(request.path, "/v1/delivery-art/review-evidence/project");
+    return {
+      body: projectDeliveryArtReviewEvidence({
+        architecture,
+        currentDocument: request.body.input.current_document,
+        source: request.body.input.source,
+        workStart,
+      }),
+      ok: true,
+    };
+  };
 
-  assert.equal(result.facts.evidence_projection, "current");
-  assert.equal(result.facts.evidence, "invalid");
-  assert.equal(result.projection.gate, "evidence");
-  assert.equal(result.projection.state, "review-evidence-required");
-  assert.deepEqual(result.executed_actions, []);
+  const status = await controller.inspect(finalizationPlan);
+  assert.equal(status.facts.evidence_projection, "current");
+  assert.equal(status.facts.evidence, "invalid");
+  assert.equal(status.projection.gate, null);
+  assert.equal(status.projection.state, "review-evidence-retry-required");
+  assert.equal(status.projection.next_action, "project-review-evidence");
+
+  const stillFailed = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(stillFailed.executed_actions, ["project-review-evidence"]);
+  assert.equal(attempts, 1);
+  assert.equal(stillFailed.facts.evidence, "invalid");
+  assert.equal(stillFailed.projection.state, "review-evidence-retry-required");
+  assert.equal(stillFailed.artifacts.evidence.acquisition.state, "blocked");
+
+  const repaired = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(repaired.executed_actions, ["project-review-evidence"]);
+  assert.equal(attempts, 2);
+  assert.equal(repaired.facts.evidence, "ready");
+  assert.equal(repaired.projection.gate, "pull-request");
+  assert.equal(repaired.artifacts.evidence.acquisition.state, "ready");
+});
+
+test("passing pre-merge acquisition identity remains immutable during projection refresh", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const evidence = structuredClone(
+    fixture("review-packet-merge-ready.valid.json").evidence,
+  );
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]: architecture,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  setup.source.base_commit = workStart.landing_unit.branch_plan[0].base_commit;
+  setup.source.branch = finalizationPlan.landing_unit.branch;
+  setup.source.changed_files = ["contracts/delivery-art-operator-path.yaml"];
+  setup.source.head_commit = "3".repeat(40);
+  setup.source.state = "pushed";
+  setup.pullRequest.head_commit = setup.source.head_commit;
+  setup.pullRequest.state = "missing";
+
+  const passingReceipt = setup.evidenceReceipt({
+    conformance_cases: [],
+    landing_unit: {
+      ...finalizationPlan.landing_unit,
+      base_commit: setup.source.base_commit,
+    },
+    source: setup.source,
+  });
+  const passing = projectDeliveryArtOwnerEvidence(passingReceipt, {
+    ownerRepo: finalizationPlan.landing_unit.owner_repo,
+    sourceRevision: setup.source.head_commit,
+  });
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture,
+    currentDocument: {
+      acquisition: passing.acquisition,
+      change_record_refs: [],
+      evidence,
+      exceptions: [],
+    },
+    source: {
+      ...setup.source,
+      base_ref: finalizationPlan.landing_unit.base_ref,
+      repo_name: finalizationPlan.landing_unit.owner_repo,
+    },
+    workStart,
+  }).evidence_document;
+  projected.projection.projection_digest = `sha256:${"f".repeat(64)}`;
+  setup.files.set(`${repoRoot}/.art/review-packets/evidence.json`, projected);
+  setup.sourceAdapter.acquireEvidence = async () =>
+    ownerEvidenceReceiptWithResult(passingReceipt, "fail");
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  await assert.rejects(
+    controller.reconcile(finalizationPlan),
+    (error) => error.code === "delivery_art_owner_evidence_conflicting_replay",
+  );
   assert.equal(setup.requests.length, 0);
 });
 

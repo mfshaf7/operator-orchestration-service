@@ -202,6 +202,13 @@ function preMergeEvidenceTransition(facts) {
       "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
     );
   }
+  if (facts?.evidence === "invalid") {
+    return action(
+      "review-evidence-retry-required",
+      DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+      "Pre-merge owner evidence failed; retry the exact bounded acquisition after its reported cause is repaired.",
+    );
+  }
   if (facts?.evidence === "stale") {
     return gate(
       "review-evidence-source-stale",
@@ -454,26 +461,9 @@ export function deriveDeliveryArtLifecycleState(facts) {
       "Pre-merge Review Packet work requires one exact pull request to remain open before source merge.",
     );
   }
-  if (facts?.evidence_projection !== "current") {
-    return action(
-      "review-evidence-projection-required",
-      DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
-      "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
-    );
-  }
-  if (facts?.evidence === "stale") {
-    return gate(
-      "review-evidence-source-stale",
-      DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
-      "At least one evidence result belongs to an earlier source revision and must be rerun or re-authored.",
-    );
-  }
-  if (facts?.evidence !== "ready") {
-    return gate(
-      "review-evidence-required",
-      DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
-      "Structured acceptance, test, validation, runtime, and security evidence must be ready before packet authoring.",
-    );
+  const evidenceTransition = preMergeEvidenceTransition(facts);
+  if (evidenceTransition) {
+    return evidenceTransition;
   }
 
   if (facts?.pull_request === "wrong-base") {
