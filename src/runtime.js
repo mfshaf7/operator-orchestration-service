@@ -50,6 +50,7 @@ import { createPrototypeMaturityRuntime } from "./prototype-maturity/runtime.js"
 import { createPrototypeClosureRuntime } from "./prototype-closure/runtime.js";
 import { createModelProfileRequestRuntime } from "./model-profile-request/runtime.js";
 import { createProductPublicationRuntime } from "./product-publication/runtime.js";
+import { createPlatformOperationRuntime } from "./platform-operation/runtime.js";
 import { createWorkflowActivityService } from "./workflow-activity/service.js";
 import {
   createLifecycleTransitionActivitySource,
@@ -287,6 +288,11 @@ export function createRuntime({
     config: config.productPublication,
     fetchImpl,
   });
+  const platformOperationService = createPlatformOperationRuntime({
+    audit,
+    config: config.platformOperation,
+    fetchImpl,
+  });
   const prototypeMaturityService = createPrototypeMaturityRuntime({
     audit,
     config: config.prototypeMaturity,
@@ -347,6 +353,7 @@ export function createRuntime({
     proposalWorkflowService,
     proposalTargetApplicationService,
     productPublicationService,
+    platformOperationService,
     prototypeLandingService,
     prototypeMaturityService,
     prototypeClosureService,
@@ -377,6 +384,7 @@ export function createRuntime({
     modelProfileRequestService,
     openProjectClient,
     orchestrationService,
+    platformOperationService,
     productPublicationService,
     prototypeLandingService,
     prototypeMaturityService,

@@ -214,6 +214,42 @@ test("Catalog runtime accepts an independently composed readiness caller", () =>
   });
 });
 
+test("Platform operation adapter is disabled by default and keeps every trust binding explicit", () => {
+  assert.equal(loadConfig({}).platformOperation.enabled, false);
+  const config = loadConfig({
+    OOS_PLATFORM_OPERATION_ENABLED: "true",
+    OOS_RUNTIME_PROFILE: "dev-integration",
+    OOS_PLATFORM_OPERATION_STATE_ROOT: "/var/lib/oos/platform-operation",
+    OOS_PLATFORM_OPERATION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({
+      "governance-operations-console": "operator:workspace-owner",
+    }),
+    OOS_PLATFORM_OPERATION_PROVIDER_BASE_URL:
+      "http://platform-operations.platform.svc.cluster.local:8080",
+    OOS_PLATFORM_OPERATION_PROVIDER_CALLER_ID: "operator-orchestration-service",
+    OOS_PLATFORM_OPERATION_PROVIDER_CALLER_SECRET: "s".repeat(32),
+    OOS_PLATFORM_OPERATION_PROVIDER_ALLOW_HTTP: "true",
+    OOS_PLATFORM_OPERATION_SECURITY_DECISION_URI:
+      "github://mfshaf7/security-architecture/commit/a/review.md",
+    OOS_PLATFORM_OPERATION_SECURITY_DECISION_DIGEST: `sha256:${"a".repeat(64)}`,
+    OOS_PLATFORM_OPERATION_SECURITY_DECISION_REVISION: "b".repeat(40),
+  });
+  assert.deepEqual(config.platformOperation, {
+    enabled: true,
+    profile: "dev-integration",
+    stateRoot: "/var/lib/oos/platform-operation",
+    operatorBindings: {
+      "governance-operations-console": "operator:workspace-owner",
+    },
+    providerBaseUrl: "http://platform-operations.platform.svc.cluster.local:8080",
+    providerCallerId: "operator-orchestration-service",
+    providerCallerSecret: "s".repeat(32),
+    providerAllowHttp: true,
+    securityDecisionUri: "github://mfshaf7/security-architecture/commit/a/review.md",
+    securityDecisionDigest: `sha256:${"a".repeat(64)}`,
+    securityDecisionRevision: "b".repeat(40),
+  });
+});
+
 test("repository custody keeps read and provisioning identities separate", () => {
   const config = loadConfig({
     OOS_REPOSITORY_CUSTODY_ENABLED: "true",

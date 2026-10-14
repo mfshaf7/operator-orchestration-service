@@ -511,6 +511,30 @@ export function loadConfig(
       wgcfImplementationRef: env.WGCF_PRODUCT_PUBLICATION_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_PRODUCT_PUBLICATION_SERVICE_IDENTITY_REF,
     },
+    platformOperation: {
+      enabled: parseBoolean(env.OOS_PLATFORM_OPERATION_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PLATFORM_OPERATION_STATE_ROOT?.trim() || undefined,
+      operatorBindings: parseCallerOperatorBindings(
+        env.OOS_PLATFORM_OPERATION_CALLER_OPERATOR_BINDINGS_JSON,
+        "OOS_PLATFORM_OPERATION_CALLER_OPERATOR_BINDINGS_JSON",
+      ),
+      providerBaseUrl: env.OOS_PLATFORM_OPERATION_PROVIDER_BASE_URL?.trim() || "",
+      providerCallerId:
+        env.OOS_PLATFORM_OPERATION_PROVIDER_CALLER_ID?.trim() ||
+        "operator-orchestration-service",
+      providerCallerSecret:
+        env.OOS_PLATFORM_OPERATION_PROVIDER_CALLER_SECRET ?? "",
+      providerAllowHttp: parseBoolean(
+        env.OOS_PLATFORM_OPERATION_PROVIDER_ALLOW_HTTP,
+      ),
+      securityDecisionUri:
+        env.OOS_PLATFORM_OPERATION_SECURITY_DECISION_URI?.trim() || "",
+      securityDecisionDigest:
+        env.OOS_PLATFORM_OPERATION_SECURITY_DECISION_DIGEST?.trim() || "",
+      securityDecisionRevision:
+        env.OOS_PLATFORM_OPERATION_SECURITY_DECISION_REVISION?.trim() || "",
+    },
     prototypeMaturity: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_MATURITY_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,

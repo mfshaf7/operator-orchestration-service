@@ -5272,6 +5272,59 @@ async function handleControlControlledProofExecution({
   sendJson(response, 200, result);
 }
 
+async function handlePlatformOperation({
+  action,
+  config,
+  operationId = null,
+  platformOperationService,
+  request,
+  response,
+  url = null,
+}) {
+  if (!platformOperationService) {
+    throw new HttpError(
+      503,
+      "platform_operation_not_configured",
+      "The bounded Platform operation adapter is not configured.",
+    );
+  }
+  const caller = authenticateCaller(request, config);
+  if (action === "catalog") {
+    sendJson(response, 200, await platformOperationService.catalog({ callerId: caller.id }));
+    return;
+  }
+  if (action === "list") {
+    const requestedLimit = Number.parseInt(url?.searchParams.get("limit") ?? "100", 10);
+    sendJson(response, 200, await platformOperationService.list({
+      callerId: caller.id,
+      limit: requestedLimit,
+    }));
+    return;
+  }
+  if (action === "read") {
+    sendJson(response, 200, await platformOperationService.get({
+      callerId: caller.id,
+      operationId,
+    }));
+    return;
+  }
+  const body = await readJsonBody(request);
+  if (action === "submit") {
+    assertObject(body.command, "command");
+    sendJson(response, 202, await platformOperationService.submit({
+      callerId: caller.id,
+      input: body.command,
+    }));
+    return;
+  }
+  assertObject(body.control, "control");
+  sendJson(response, 200, await platformOperationService.control({
+    callerId: caller.id,
+    input: body.control,
+    operationId,
+  }));
+}
+
 export function createApp({
   agentConsoleService = null,
   audit = null,
@@ -5287,6 +5340,7 @@ export function createApp({
   modelProfileRequestService = null,
   openProjectClient,
   orchestrationService,
+  platformOperationService = null,
   proposalWorkflowService,
   proposalTargetApplicationService = null,
   productPublicationService = null,
@@ -6256,6 +6310,79 @@ export function createApp({
           request,
           response,
           workDesignService,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/platform-operations/catalog"
+      ) {
+        await handlePlatformOperation({
+          action: "catalog",
+          config,
+          platformOperationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/platform-operations/commands"
+      ) {
+        await handlePlatformOperation({
+          action: "submit",
+          config,
+          platformOperationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/platform-operations"
+      ) {
+        await handlePlatformOperation({
+          action: "list",
+          config,
+          platformOperationService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/platform-operations\/[^/]+$/.test(url.pathname)
+      ) {
+        await handlePlatformOperation({
+          action: "read",
+          config,
+          operationId: decodeURIComponent(url.pathname.split("/")[3]),
+          platformOperationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/platform-operations\/[^/]+\/controls$/.test(url.pathname)
+      ) {
+        await handlePlatformOperation({
+          action: "control",
+          config,
+          operationId: decodeURIComponent(url.pathname.split("/")[3]),
+          platformOperationService,
+          request,
+          response,
         });
         return;
       }
