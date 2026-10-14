@@ -117,10 +117,10 @@ function ownerProjection(input, overrides = {}) {
   };
 }
 
-function fixture({ providerClient } = {}) {
+function fixture({ audit = { emit() {} }, providerClient } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-platform-operation-"));
   const service = createPlatformOperationService({
-    audit: { emit() {} },
+    audit,
     clock: () => new Date(NOW),
     operatorBindings: {
       "governance-operations-console": "operator:workspace-owner",
@@ -195,6 +195,25 @@ test("platform provider client admits only bounded authenticated owner targets",
   assert.equal(observed.request.headers["x-platform-caller-id"], "operator-orchestration-service");
   assert.equal(observed.request.headers["x-platform-caller-secret"], "s".repeat(32));
   assert.equal(observed.request.redirect, "error");
+
+  const denied = createPlatformOperationProviderClient({
+    allowHttp: true,
+    baseUrl: "http://platform-operations.platform.svc.cluster.local",
+    callerId: "operator-orchestration-service",
+    callerSecret: "s".repeat(32),
+    async fetchImpl() {
+      return new Response(JSON.stringify({ message: "secret backend detail" }), {
+        headers: { "content-type": "application/json" },
+        status: 403,
+      });
+    },
+  });
+  await assert.rejects(
+    () => denied.getCatalog(),
+    (error) =>
+      error.code === "platform_operation_provider_forbidden" &&
+      !error.message.includes("secret backend detail"),
+  );
 });
 
 test("platform operation runtime remains disabled until profile, provider, operator, and Security bindings exist", () => {
@@ -472,4 +491,51 @@ test("platform operation persists an unknown control outcome and retries only wi
   assert.equal(recovered.state, "cancelled");
   assert.equal(recovered.controls[0].status, "confirmed");
   assert.equal(controls, 2);
+});
+
+test("platform operation audit covers denial, replay, and owner reconciliation without command input", async (t) => {
+  const events = [];
+  let state = "running";
+  const { root, service } = fixture({
+    audit: { emit(event) { events.push(event); } },
+    providerClient: {
+      async getCatalog() { return catalog(); },
+      async submit(commandValue) {
+        return ownerProjection(commandValue, { state, receipt: null });
+      },
+      async readByCommand(commandValue) {
+        state = "succeeded";
+        return ownerProjection(commandValue, { state });
+      },
+    },
+  });
+  t.after(() => rmSync(root, { force: true, recursive: true }));
+  const input = command();
+  const running = await service.submit({
+    callerId: "governance-operations-console",
+    input,
+  });
+  await service.submit({ callerId: "governance-operations-console", input });
+  await assert.rejects(
+    () => service.submit({
+      callerId: "untrusted-console",
+      input: command({
+        command_id: "command:audit:denied:1",
+        idempotency_key: "idempotency:audit:denied:1",
+      }),
+    }),
+    (error) => error.code === "platform_operation_caller_forbidden",
+  );
+  await service.get({
+    callerId: "governance-operations-console",
+    operationId: running.operation_id,
+  });
+  assert.deepEqual(events.map((event) => event.event_type), [
+    "platform.operation.submitted",
+    "platform.operation.submit-replayed",
+    "platform.operation.submit.denied",
+    "platform.operation.reconciled",
+  ]);
+  assert.equal(events[2].command_input, undefined);
+  assert.equal(events[2].error_code, "platform_operation_caller_forbidden");
 });

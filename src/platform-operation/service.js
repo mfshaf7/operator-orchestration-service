@@ -24,12 +24,16 @@ export function createPlatformOperationService({
   }
 
   async function submit({ callerId, input }) {
-    const command = normalizePlatformOperationCommand(input);
-    assertOperator(operatorBindings, callerId, command.actor_ref);
-    const operationId = operationIdFor(command);
+    let command = null;
     try {
+      command = normalizePlatformOperationCommand(input);
+      assertOperator(operatorBindings, callerId, command.actor_ref);
+      const operationId = operationIdFor(command);
       return await store.transactCommand(command, operationId, async ({ current, put }) => {
-        if (current) return publicProjection(current, { replayed: true });
+        if (current) {
+          emitAudit(audit, current, callerId, "submit-replayed");
+          return publicProjection(current, { replayed: true });
+        }
         const ownerCatalog = await providerClient.getCatalog();
         assertCommandAdmission(command, ownerCatalog);
         const now = clock().toISOString();
@@ -57,6 +61,13 @@ export function createPlatformOperationService({
         return publicProjection(record);
       });
     } catch (error) {
+      emitAuditDenial(audit, {
+        action: "submit",
+        callerId,
+        command,
+        error,
+        input,
+      });
       throwStoreFailure(error);
     }
   }
@@ -73,10 +84,12 @@ export function createPlatformOperationService({
           const providerOperation = await providerClient.readByCommand(current.command);
           const record = updateFromProvider(current, providerOperation, clock);
           put(record);
+          emitAudit(audit, record, callerId, "reconciled");
           return publicProjection(record, { reconciled: true });
         } catch (error) {
           const record = blockedForProvider(current, error, clock);
           put(record);
+          emitAudit(audit, record, callerId, "reconciliation-blocked");
           return publicProjection(record, { reconciled: false });
         }
       });
@@ -99,9 +112,10 @@ export function createPlatformOperationService({
   }
 
   async function control({ callerId, operationId, input }) {
-    const controlRequest = normalizePlatformOperationControl(input);
-    assertOperator(operatorBindings, callerId, controlRequest.operator_id);
+    let controlRequest = null;
     try {
+      controlRequest = normalizePlatformOperationControl(input);
+      assertOperator(operatorBindings, callerId, controlRequest.operator_id);
       return await store.transactOperation(operationId, async ({ current, put }) => {
         if (!current) notFound();
         const existing = current.controls.find(
@@ -116,6 +130,7 @@ export function createPlatformOperationService({
             );
           }
           if (existing.status === "confirmed") {
+            emitAudit(audit, current, callerId, `control-${controlRequest.action}-replayed`);
             return publicProjection(current, { replayed: true });
           }
         } else {
@@ -164,6 +179,14 @@ export function createPlatformOperationService({
         return publicProjection(record);
       });
     } catch (error) {
+      emitAuditDenial(audit, {
+        action: "control",
+        callerId,
+        control: controlRequest,
+        error,
+        input,
+        operationId,
+      });
       throwStoreFailure(error);
     }
   }
@@ -429,4 +452,32 @@ function emitAudit(audit, record, callerId, action) {
     correlation_id: record.command.correlation_id,
     receipt_ref: record.provider_operation?.receipt?.receipt_ref ?? null,
   });
+}
+
+function emitAuditDenial(audit, {
+  action,
+  callerId,
+  command = null,
+  control = null,
+  error,
+  input,
+  operationId = null,
+}) {
+  audit?.emit?.({
+    actor: command?.actor_ref ?? control?.operator_id ?? null,
+    caller_id: callerId ?? null,
+    event_type: `platform.operation.${action}.denied`,
+    outcome: "denied",
+    operation_id: operationId,
+    command_id: command?.command_id ?? safeIdentifier(input?.command_id),
+    control_id: control?.control_id ?? safeIdentifier(input?.control_id),
+    correlation_id: command?.correlation_id ?? safeIdentifier(input?.correlation_id),
+    error_code: safeIdentifier(error?.code) ?? "platform_operation_denied",
+  });
+}
+
+function safeIdentifier(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/.test(value)
+    ? value
+    : null;
 }

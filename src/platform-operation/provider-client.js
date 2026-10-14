@@ -53,22 +53,33 @@ export function createPlatformOperationProviderClient({
     }
     const payload = await boundedJson(response);
     if (!response.ok) {
+      const providerFailure = response.status === 401 || response.status === 403
+        ? {
+            code: "platform_operation_provider_forbidden",
+            message: "Platform operation provider denied the authenticated OOS caller.",
+            status: 403,
+          }
+        : response.status === 409
+          ? {
+              code: "platform_operation_provider_conflict",
+              message: "Platform operation provider reported a state conflict.",
+              status: 409,
+            }
+          : response.status >= 500
+            ? {
+                code: "platform_operation_provider_unavailable",
+                message: "Platform operation provider is unavailable.",
+                status: 503,
+              }
+            : {
+                code: "platform_operation_provider_rejected",
+                message: "Platform operation provider rejected the bounded request.",
+                status: 502,
+              };
       throw new HttpError(
-        response.status === 401 || response.status === 403
-          ? 403
-          : response.status === 409
-            ? 409
-            : response.status >= 500
-              ? 503
-              : 502,
-        response.status === 401 || response.status === 403
-          ? "platform_operation_provider_forbidden"
-          : response.status === 409
-            ? "platform_operation_provider_conflict"
-            : "platform_operation_provider_rejected",
-        typeof payload?.message === "string"
-          ? payload.message
-          : "Platform operation provider rejected the request.",
+        providerFailure.status,
+        providerFailure.code,
+        providerFailure.message,
       );
     }
     return payload;

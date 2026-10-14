@@ -76,7 +76,9 @@ default. Plain HTTP is admitted only when explicitly enabled for loopback or a
 Platform responses use an exact allowlisted projection. OOS rejects unknown
 fields, identity mismatches, malformed state events, incomplete blockers or
 failures, and terminal states without a matching receipt. Raw logs are never
-returned; `safe_log_ref` may reference separately governed context.
+returned; `safe_log_ref` may reference separately governed context. Provider
+error bodies are never copied into retained state or returned to the Console;
+OOS maps them to bounded error codes and operator-safe messages.
 
 ## State and recovery
 
@@ -92,6 +94,11 @@ Retry and cancel are the only controls. OOS persists a control and its own
 idempotency binding before dispatch. A lost response is retained as an unknown
 control outcome. Repeating the exact control may safely use the same downstream
 idempotency key; changing the request under that key is denied.
+
+Mutation denial, accepted dispatch, replay, owner reconciliation, blocked
+reconciliation, retry, and cancellation are emitted on the OOS audit boundary.
+Audit events contain identifiers, outcomes, receipt references, and bounded
+error codes, not command inputs, secrets, or downstream error bodies.
 
 ## Ownership and rollout
 

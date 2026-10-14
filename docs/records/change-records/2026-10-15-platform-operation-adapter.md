@@ -58,11 +58,13 @@ Platform ownership of capability truth and platform effects.
 - changed workflow, adapter, or contract: finite versioned commands, exact
   approvals, Platform capability admission, atomic retained state, restart
   reconciliation, retry/cancel control recovery, authenticated owner client,
+  safe downstream-error mapping, complete mutation/replay/reconciliation audit,
   five OOS API routes, OpenAPI generation, and one operator surface.
 - tests or validator added: exact contract denial, identity binding, catalog
   freshness, idempotent replay/conflict, lost-response restart recovery,
   retry/cancel behavior, owner target restrictions, HTTP routing, runtime
-  activation gates, and OpenAPI route parity.
+  activation gates, safe error projection, audit coverage without raw command
+  input, and OpenAPI route parity.
 - related change records: None.
 
 ## Artifact And Deployment Evidence
