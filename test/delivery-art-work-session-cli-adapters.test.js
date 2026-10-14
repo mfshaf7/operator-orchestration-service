@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { validateDeliveryArtWorkSessionArchitectureSupersessionReceipt } from "../src/delivery-art/work-session.js";
 
@@ -15,6 +17,102 @@ function git(cwd, args) {
     stdio: ["ignore", "pipe", "pipe"],
   })).trim();
 }
+
+function digest(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+test("source realization captures bounded context and commits an exact Agent Gary change set", async () => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-source-realization-"));
+  const remoteRoot = path.join(workspaceRoot, "remote.git");
+  const repoRoot = path.join(workspaceRoot, "owner-repo");
+  await mkdir(remoteRoot, { recursive: true });
+  git(remoteRoot, ["init", "--bare"]);
+  git(workspaceRoot, ["clone", remoteRoot, repoRoot]);
+  git(repoRoot, ["config", "user.email", "operator@example.invalid"]);
+  git(repoRoot, ["config", "user.name", "Operator"]);
+  await writeFile(path.join(repoRoot, "README.md"), "base\n", "utf8");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", "base"]);
+  git(repoRoot, ["branch", "-M", "main"]);
+  git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
+  const baseCommit = git(repoRoot, ["rev-parse", "HEAD"]);
+  const adapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    agentSourceIdentity: {
+      async prepare({ repoRoot: worktree }) {
+        git(worktree, ["config", "user.name", "Agent Gary"]);
+        git(worktree, ["config", "user.email", "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com"]);
+        return { state: "ready" };
+      },
+    },
+  });
+  const session = {
+    session_id: "work-session:delivery-1275:delivery-1275-source-realization",
+    delivery_id: "delivery-1275",
+    work_item_id: "work-item-1285",
+    landing_unit_id: "delivery-1275-source-realization",
+    owner_repo: "owner-repo",
+    landing_unit: {
+      base_commit: baseCommit,
+      base_ref: "origin/main",
+      branch: "feature/1285-source-realization",
+    },
+  };
+
+  const context = await adapter.captureRealizationContext(session);
+  assert.equal(context.clean, true);
+  assert.equal(context.head_commit, baseCommit);
+  assert.equal(context.files.some((file) => file.path === "README.md"), true);
+  assert.match(context.context_digest, /^sha256:[0-9a-f]{64}$/);
+
+  const changeSet = {
+    schema_version: 1,
+    change_set_id: "change-set-1285",
+    session_id: session.session_id,
+    base_commit: baseCommit,
+    objective_digest: digest("objective"),
+    commit_message: "feat: realize bounded source",
+    operations: [{
+      action: "replace",
+      path: "README.md",
+      content: "base\nrealized\n",
+      expected_digest: digest("base\n"),
+    }],
+  };
+
+  await assert.rejects(
+    () => adapter.applySourceRealization(session, {
+      ...changeSet,
+      change_set_id: "change-set-1285-invalid",
+      operations: [{
+        ...changeSet.operations[0],
+        content: "base \n",
+      }],
+    }),
+    /diff --check failed/,
+  );
+  const worktree = await adapter.resolveWorktree(session);
+  assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "base\n");
+  assert.equal(git(worktree, ["status", "--porcelain"]), "");
+
+  const receipt = await adapter.applySourceRealization(session, changeSet);
+
+  assert.equal(receipt.outcome, "committed");
+  assert.equal(receipt.change_set_digest, canonicalDigest(changeSet));
+  assert.deepEqual(receipt.changed_files, ["README.md"]);
+  assert.match(receipt.author, /^Agent Gary </);
+  assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "base\nrealized\n");
+  assert.equal(git(worktree, ["status", "--porcelain"]), "");
+  assert.match(
+    git(worktree, ["show", "-s", "--format=%B", "HEAD"]),
+    new RegExp(`OOS-Source-Realization-Digest: ${canonicalDigest(changeSet)}`),
+  );
+  const replay = await adapter.applySourceRealization(session, changeSet);
+  assert.equal(replay.head_commit, receipt.head_commit);
+  assert.equal(replay.receipt_digest, receipt.receipt_digest);
+  assert.equal(git(worktree, ["rev-list", "--count", `${baseCommit}..HEAD`]), "1");
+});
 
 test("source adapter reconstructs a planned branch after worktree cleanup", async () => {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-work-source-"));

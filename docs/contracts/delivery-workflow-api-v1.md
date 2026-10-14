@@ -375,6 +375,54 @@ The lifecycle-context endpoint remains uncommissioned when the dedicated CGG
 endpoint or caller credential is absent. Source support does not activate the
 runtime boundary.
 
+### Bounded Source Realization
+
+The source-realization API extends an implementation-ready work session without
+giving a model shell, repository, approval, review, merge, Security, or ART
+authority:
+
+- `GET /v1/delivery-work-items/{work_item_id}/work-session/realization`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/start`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/continue`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/cancel`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/recover`
+
+`start` requires the exact work-session revision, one bounded objective, a
+token budget, and an explicit retry binding. OOS captures a clean exact-base
+repository tree plus a bounded set of safe text files through the authenticated
+source executor. Credential-like paths, symlinks, binary files, oversized
+files, traversal, and `.git` are excluded. The resulting source is projected
+through CGG in packet mode; there is no raw-context fallback for realization.
+Only the commissioned `source-realization-v1` governed-model profile may return
+the versioned change-set schema, bound to the session, base commit, objective
+digest, CGG receipts, caller, and decision identifier.
+
+The model result is a draft. Public projections expose operation paths and
+digests but not generated file contents. `continue` requires the exact current
+record revision and accepted change-set digest. Only then may the isolated
+source executor validate path and content bounds, configure Agent Gary, apply
+the accepted create, replace, or delete operations, and create one real Git
+commit. The existing work-session lifecycle remains responsible for validation,
+publish, human review, Security gates, exact-head merge, evidence, closeout,
+and cleanup.
+
+Cancellation is allowed only before source mutation and retains a substantive
+reason. A later attempt must name the immediately preceding terminal request.
+If the caller loses the response during apply, `recover` replays the same
+digest-bound source action. A durable executor receipt prevents a second
+mutation; if failure occurs after Git commit but before receipt persistence,
+the executor recognizes only the exact first-parent commit carrying the bound
+change-set digest and exact resulting paths and contents. Failures before commit
+restore the pristine worktree. Drift, stale revisions, unsafe context, invalid
+model output, identity mismatch, missing commissioning, or an unavailable
+dependency fail closed.
+
+This source contract is implemented but not commissioned by source merge.
+Security acceptance owns the AI action-path decision, and Platform Engineering
+owns exact profile and runtime activation. The Console is the normal future
+operator surface; CLI and direct artifact manipulation remain recovery and
+engineering paths rather than prerequisites for normal operation.
+
 The current engineering commands remain:
 
 ```bash
@@ -434,15 +482,35 @@ recovery and contract-verification commands, not the normal operator path.
 
 Each active architecture-bound session is compared with the latest structured
 architecture reference on its Delivery Epic and the exact immutable WGCF
-artifact behind that reference. A mismatch projects
-`architecture-superseded` and blocks continuation, merge, and close. OOS never
-silently rewrites the binding. `work reconstruct` is permitted only when the
-source branch and worktree remain at the recorded base, no remote branch or
-pull request exists, the evidence file is unchanged, and no Review Packet or
-readiness receipt exists. Reconstruction records the old and replacement
-architecture identities, pristine proof, and resource outcomes in a durable
-supersession receipt outside the replaceable session directory. Any activity
-requires deliberate recovery instead.
+artifact behind that reference. A reference mismatch remains compatible only
+when the canonical active-Landing-Unit projection is unchanged. That projection
+binds the Landing Unit scope and owner, covered execution plan, incoming
+handoffs, owner runtime boundary, conformance cases, and effective human gate;
+it deliberately excludes prerequisites owned by the separate gate-authority
+item. An unchanged active projection returns
+`architecture-compatible-refresh-required`; the normal `work continue`
+transition then serially binds the exact current packet and a newly evaluated
+durable work-start, preserves source state, and clears stale Review Packet and
+readiness projections for regeneration. A restart after any partial write
+reprojects the same compatible refresh instead of accepting mixed bindings. A
+changed active projection projects `architecture-superseded` and blocks
+continuation, merge, and close.
+`work reconstruct` is permitted only when the source branch and worktree remain
+at the recorded base, no remote branch or pull request exists, the evidence
+file is unchanged, and no Review Packet or readiness receipt exists.
+Reconstruction records the old and replacement architecture identities,
+pristine proof, and resource outcomes in a durable supersession receipt outside
+the replaceable session directory. Any activity with a changed active
+projection requires deliberate recovery instead.
+
+Immutable superseded Architecture Packets are historical dependencies, not
+new transition candidates. OOS validates their schema, canonical content,
+digest, custody, reference binding, and common artifact semantics, but does not
+retroactively require them to satisfy architecture-only semantic rules landed
+after their custody decision. The current Architecture Packet still receives
+full validation. Work-start authoring and evaluation also compare the requested
+packet with the exact current ART-projected reference and reject any valid but
+superseded packet before new work is admitted.
 
 `recover` is a bounded exception for an open ART item whose active session is
 blocked by architecture supersession or invalid pre-merge source binding and

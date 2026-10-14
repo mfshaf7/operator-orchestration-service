@@ -10,6 +10,7 @@ import {
   deliveryArtArchitectureContractPosture,
   reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
+  validateDeliveryArtHistoricalArchitectureDependency,
   validateDeliveryArtReferences,
   validateDeliveryArtSemanticProjection,
   workStartScopeFingerprint,
@@ -294,8 +295,15 @@ function reviewEvidenceFailure(error) {
   return error;
 }
 
-function validateStandalone(artifact, code = "delivery_art_artifact_invalid") {
-  const result = validateDeliveryArtArtifact(artifact);
+function validateStandalone(
+  artifact,
+  code = "delivery_art_artifact_invalid",
+  { historicalArchitectureDependency = false } = {},
+) {
+  const result = historicalArchitectureDependency &&
+      artifact?.artifact_type === ARCHITECTURE_PACKET_TYPE
+    ? validateDeliveryArtHistoricalArchitectureDependency(artifact)
+    : validateDeliveryArtArtifact(artifact);
   if (!result.valid) {
     throw new DeliveryArtServiceError(
       code,
@@ -624,6 +632,25 @@ export function createDeliveryArtArtifactService({
     }
   }
 
+  async function assertCurrentArchitectureReference({ deliveryId, reference }) {
+    const projected = await currentArchitectureForCutover(deliveryId);
+    if (
+      !projected?.reference ||
+      projected.reference.uri !== reference?.uri ||
+      projected.reference.digest !== reference?.digest
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_superseded",
+        "New work start requires the exact current accepted Architecture Packet.",
+        409,
+        {
+          current_reference: projected?.reference ?? null,
+          requested_reference: reference ?? null,
+        },
+      );
+    }
+  }
+
   async function assertArchitectureCutoverAllowed(candidate) {
     const projected = await currentArchitectureForCutover(candidate.delivery_id);
     if (!projected) {
@@ -777,7 +804,11 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  function assertResolvedSource(reference, response) {
+  function assertResolvedSource(
+    reference,
+    response,
+    { historicalArchitectureDependency = false } = {},
+  ) {
     const expected = assertReference(reference);
     const artifact = response?.artifact;
     const receipt = response?.custody_receipt;
@@ -793,7 +824,9 @@ export function createDeliveryArtArtifactService({
         502,
       );
     }
-    validateStandalone(artifact, "delivery_art_dependency_invalid");
+    validateStandalone(artifact, "delivery_art_dependency_invalid", {
+      historicalArchitectureDependency,
+    });
     validateStandalone(receipt, "delivery_art_dependency_invalid");
     return { artifact, receipt };
   }
@@ -852,7 +885,11 @@ export function createDeliveryArtArtifactService({
         return byUri.get(expected.uri);
       }
       const response = await registryClient.read({ contentDigest: expected.digest });
-      const { artifact: resolved, receipt } = assertResolvedSource(expected, response);
+      const { artifact: resolved, receipt } = assertResolvedSource(
+        expected,
+        response,
+        { historicalArchitectureDependency: true },
+      );
       addDependency(resolved);
       addDependency(receipt);
       if (walkedSources.has(expected.uri)) {
@@ -1294,16 +1331,21 @@ export function createDeliveryArtArtifactService({
         );
       }
       if (hasRef) {
+        const reference = {
+          digest: candidate.architecture.packet_digest,
+          uri: candidate.architecture.packet_ref,
+        };
         const resolved = await resolveArtifactForTransition({
-          reference: {
-            digest: candidate.architecture.packet_digest,
-            uri: candidate.architecture.packet_ref,
-          },
+          reference,
         });
         assertCurrentArchitectureSchema(
           resolved.artifact,
           "Work-start evaluation",
         );
+        await assertCurrentArchitectureReference({
+          deliveryId: candidate.delivery_id,
+          reference,
+        });
         candidate.architecture.readiness = "architecture-ready";
       } else {
         candidate.architecture.packet_ref = null;
@@ -1360,6 +1402,10 @@ export function createDeliveryArtArtifactService({
       const resolved = await resolveArtifactForTransition({ reference });
       const packet = resolved.artifact;
       assertCurrentArchitectureSchema(packet, "Work-start authoring");
+      await assertCurrentArchitectureReference({
+        deliveryId: input.delivery_id,
+        reference,
+      });
       if (
         packet.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
         packet.delivery_id !== input.delivery_id ||

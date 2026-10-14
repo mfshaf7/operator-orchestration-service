@@ -238,6 +238,33 @@ test("OOS derives all lifecycle source classes without exposing action commands"
   assert.doesNotMatch(sources[0].content, /git status/);
 });
 
+test("source realization context is digest-bound into CGG lifecycle sources", () => {
+  const objective = "Implement the accepted bounded source plan.";
+  const repositoryContext = {
+    schema_version: 1,
+    session_id: session().session_id,
+    head_commit: "a".repeat(40),
+    clean: true,
+    tree: { paths: ["README.md"], total_path_count: 1, truncated: false },
+    files: [{ path: "README.md", content: "bounded\n" }],
+    context_digest: `sha256:${"e".repeat(64)}`,
+  };
+  const sources = buildDeliveryArtLifecycleSources(workSessionProjection(), NOW, {
+    sourceRealization: {
+      objective,
+      objective_digest: canonicalDigest(objective),
+      repository_context: repositoryContext,
+    },
+  });
+  const art = JSON.parse(sources.find((source) => source.source_class === "art").content);
+  const repository = JSON.parse(
+    sources.find((source) => source.source_class === "repository").content,
+  );
+  assert.equal(art.source_realization.objective, objective);
+  assert.equal(repository.source_realization_context.context_digest, repositoryContext.context_digest);
+  assert.equal(repository.source_realization_context.files[0].content, "bounded\n");
+});
+
 test("OOS projects CGG context by default and binds safe packet references to the session", async () => {
   const { requests, service, store } = await harness();
   const result = await service.project({

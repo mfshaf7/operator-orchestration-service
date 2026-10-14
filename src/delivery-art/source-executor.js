@@ -17,6 +17,12 @@ const ACTIONS = Object.freeze({
     workSource.ensureOwnedWorktree(input.session),
   "work.ensure-worktree": ({ workSource }, input) =>
     workSource.ensureWorktree(input.session),
+  "work.apply-source-realization": ({ workSource }, input) =>
+    workSource.applySourceRealization(input.session, input.change_set),
+  "work.capture-source-realization-context": ({ workSource }, input) =>
+    workSource.captureRealizationContext(input.session, {
+      requestedPaths: input.requested_paths ?? [],
+    }),
   "work.inspect-configured-path": ({ workSource }, input) =>
     workSource.inspectConfiguredPath(input.session, {
       conformanceCases: input.conformance_cases ?? [],
@@ -346,6 +352,16 @@ export function createDeliveryArtSourceExecutorClient({
       }),
   };
   const workSource = {
+    applySourceRealization: (session, changeSet) =>
+      invoke("work.apply-source-realization", {
+        change_set: changeSet,
+        session,
+      }),
+    captureRealizationContext: (session, { requestedPaths = [] } = {}) =>
+      invoke("work.capture-source-realization-context", {
+        requested_paths: requestedPaths,
+        session,
+      }),
     ensureOwnedWorktree: (session) => invoke("work.ensure-owned-worktree", { session }),
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
     inspectConfiguredPath: (

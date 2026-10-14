@@ -21593,6 +21593,834 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-art-custody"
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization": {
+      "get": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Read bounded source realization",
+        "description": "Returns the authoritative staged realization state without exposing generated source content. Exact paths and digests remain visible for operator review.",
+        "operationId": "getDeliveryArtSourceRealization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative bounded source-realization projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtSourceRealizationProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-art-source-realization",
+                  "session_id": "work-session:delivery-1275:delivery-1275-source-realization",
+                  "work_item_id": "work-item-1285",
+                  "revision": "2026-10-14T01:00:01Z",
+                  "state": "draft-ready",
+                  "attempt": {
+                    "request_id": "source-realization-request-1285-1",
+                    "execution_id": "console-execution-1285-1",
+                    "state": "draft-ready",
+                    "objective_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "change_set": {
+                      "change_set_id": "change-set-1285-1",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "commit_message": "feat: implement the accepted source plan",
+                      "operations": [
+                        {
+                          "action": "replace",
+                          "path": "src/example.js",
+                          "content_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "expected_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        }
+                      ]
+                    }
+                  },
+                  "next_action": {
+                    "code": "source-realization-acceptance-required",
+                    "authority": "operator",
+                    "reason": "Review and accept the exact change-set digest before Agent Gary commits it."
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Delivery work session is missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The bounded source-realization runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization/start": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Start bounded source realization",
+        "description": "Captures clean bounded repository context, admits it through CGG, invokes only the commissioned governed model profile, and stages the validated change set without mutating source.",
+        "operationId": "startDeliveryArtSourceRealization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the caller-bound source-realization request or command for the exact current realization revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "realization"
+                ],
+                "properties": {
+                  "realization": {
+                    "$ref": "#/components/schemas/DeliveryArtSourceRealizationStartV1"
+                  }
+                }
+              },
+              "example": {
+                "realization": {
+                  "schema_version": 1,
+                  "request_id": "source-realization-request-1285-1",
+                  "execution_id": "console-execution-1285-1",
+                  "expected_session_revision": "2026-10-14T00:59:00Z",
+                  "objective": "Implement the accepted bounded source plan with its required tests.",
+                  "requested_at": "2026-10-14T00:59:30Z",
+                  "budget_tokens": 3000,
+                  "retry_of": null
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative bounded source-realization projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtSourceRealizationProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-art-source-realization",
+                  "session_id": "work-session:delivery-1275:delivery-1275-source-realization",
+                  "work_item_id": "work-item-1285",
+                  "revision": "2026-10-14T01:00:01Z",
+                  "state": "draft-ready",
+                  "attempt": {
+                    "request_id": "source-realization-request-1285-1",
+                    "execution_id": "console-execution-1285-1",
+                    "state": "draft-ready",
+                    "objective_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "change_set": {
+                      "change_set_id": "change-set-1285-1",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "commit_message": "feat: implement the accepted source plan",
+                      "operations": [
+                        {
+                          "action": "replace",
+                          "path": "src/example.js",
+                          "content_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "expected_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        }
+                      ]
+                    }
+                  },
+                  "next_action": {
+                    "code": "source-realization-acceptance-required",
+                    "authority": "operator",
+                    "reason": "Review and accept the exact change-set digest before Agent Gary commits it."
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source-realization command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source-realization revision, binding, or lifecycle state conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The governed model or source executor returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The bounded source-realization runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization/continue": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Continue bounded source realization",
+        "description": "Applies and commits only the exact operator-accepted change-set digest through the isolated source executor as Agent Gary.",
+        "operationId": "continueDeliveryArtSourceRealization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the caller-bound source-realization request or command for the exact current realization revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "realization"
+                ],
+                "properties": {
+                  "realization": {
+                    "$ref": "#/components/schemas/DeliveryArtSourceRealizationContinueV1"
+                  }
+                }
+              },
+              "example": {
+                "realization": {
+                  "schema_version": 1,
+                  "command_id": "source-realization-accept-1285-1",
+                  "expected_revision": "2026-10-14T01:00:01Z",
+                  "accepted_change_set_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "requested_at": "2026-10-14T01:01:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative bounded source-realization projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtSourceRealizationProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-art-source-realization",
+                  "session_id": "work-session:delivery-1275:delivery-1275-source-realization",
+                  "work_item_id": "work-item-1285",
+                  "revision": "2026-10-14T01:00:01Z",
+                  "state": "draft-ready",
+                  "attempt": {
+                    "request_id": "source-realization-request-1285-1",
+                    "execution_id": "console-execution-1285-1",
+                    "state": "draft-ready",
+                    "objective_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "change_set": {
+                      "change_set_id": "change-set-1285-1",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "commit_message": "feat: implement the accepted source plan",
+                      "operations": [
+                        {
+                          "action": "replace",
+                          "path": "src/example.js",
+                          "content_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "expected_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        }
+                      ]
+                    }
+                  },
+                  "next_action": {
+                    "code": "source-realization-acceptance-required",
+                    "authority": "operator",
+                    "reason": "Review and accept the exact change-set digest before Agent Gary commits it."
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source-realization command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source-realization revision, binding, or lifecycle state conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The governed model or source executor returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The bounded source-realization runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization/cancel": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Cancel bounded source realization",
+        "description": "Cancels a draft-ready change set without mutating source and retains the reasoned terminal attempt for an explicitly linked retry.",
+        "operationId": "cancelDeliveryArtSourceRealization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the caller-bound source-realization request or command for the exact current realization revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "realization"
+                ],
+                "properties": {
+                  "realization": {
+                    "$ref": "#/components/schemas/DeliveryArtSourceRealizationCancelV1"
+                  }
+                }
+              },
+              "example": {
+                "realization": {
+                  "schema_version": 1,
+                  "command_id": "source-realization-cancel-1285-1",
+                  "expected_revision": "2026-10-14T01:00:01Z",
+                  "reason": "The operator rejected this exact draft after review.",
+                  "requested_at": "2026-10-14T01:01:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative bounded source-realization projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtSourceRealizationProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-art-source-realization",
+                  "session_id": "work-session:delivery-1275:delivery-1275-source-realization",
+                  "work_item_id": "work-item-1285",
+                  "revision": "2026-10-14T01:00:01Z",
+                  "state": "draft-ready",
+                  "attempt": {
+                    "request_id": "source-realization-request-1285-1",
+                    "execution_id": "console-execution-1285-1",
+                    "state": "draft-ready",
+                    "objective_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "change_set": {
+                      "change_set_id": "change-set-1285-1",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "commit_message": "feat: implement the accepted source plan",
+                      "operations": [
+                        {
+                          "action": "replace",
+                          "path": "src/example.js",
+                          "content_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "expected_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        }
+                      ]
+                    }
+                  },
+                  "next_action": {
+                    "code": "source-realization-acceptance-required",
+                    "authority": "operator",
+                    "reason": "Review and accept the exact change-set digest before Agent Gary commits it."
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source-realization command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source-realization revision, binding, or lifecycle state conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The governed model or source executor returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The bounded source-realization runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization/recover": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Recover bounded source realization",
+        "description": "Reconciles an unknown apply result through the exact replay-safe source action; it never generates a new change set or authorizes another mutation.",
+        "operationId": "recoverDeliveryArtSourceRealization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the caller-bound source-realization request or command for the exact current realization revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "realization"
+                ],
+                "properties": {
+                  "realization": {
+                    "$ref": "#/components/schemas/DeliveryArtSourceRealizationRecoverV1"
+                  }
+                }
+              },
+              "example": {
+                "realization": {
+                  "schema_version": 1,
+                  "command_id": "source-realization-recover-1285-1",
+                  "expected_revision": "2026-10-14T01:02:00Z",
+                  "requested_at": "2026-10-14T01:03:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative bounded source-realization projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtSourceRealizationProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-art-source-realization",
+                  "session_id": "work-session:delivery-1275:delivery-1275-source-realization",
+                  "work_item_id": "work-item-1285",
+                  "revision": "2026-10-14T01:00:01Z",
+                  "state": "draft-ready",
+                  "attempt": {
+                    "request_id": "source-realization-request-1285-1",
+                    "execution_id": "console-execution-1285-1",
+                    "state": "draft-ready",
+                    "objective_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "change_set": {
+                      "change_set_id": "change-set-1285-1",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "commit_message": "feat: implement the accepted source plan",
+                      "operations": [
+                        {
+                          "action": "replace",
+                          "path": "src/example.js",
+                          "content_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "expected_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        }
+                      ]
+                    }
+                  },
+                  "next_action": {
+                    "code": "source-realization-acceptance-required",
+                    "authority": "operator",
+                    "reason": "Review and accept the exact change-set digest before Agent Gary commits it."
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source-realization command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source-realization revision, binding, or lifecycle state conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The governed model or source executor returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The bounded source-realization runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization"
+      }
     }
   },
   "components": {
@@ -64633,6 +65461,266 @@
           },
           "workflow_id": {
             "const": "delivery-art-architecture-packet-persist"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationStableIdV1": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+      },
+      "DeliveryArtSourceRealizationDigestV1": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "DeliveryArtSourceRealizationStartV1": {
+        "title": "Delivery ART source realization start request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "execution_id",
+          "expected_session_revision",
+          "objective",
+          "requested_at",
+          "budget_tokens",
+          "retry_of"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+          },
+          "execution_id": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+          },
+          "expected_session_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 12000
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "budget_tokens": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 8000
+          },
+          "retry_of": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationStartEnvelopeV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realization"
+        ],
+        "properties": {
+          "realization": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStartV1"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationContinueV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "expected_revision",
+          "accepted_change_set_digest",
+          "requested_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+          },
+          "expected_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accepted_change_set_digest": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationDigestV1"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationCancelV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "expected_revision",
+          "reason",
+          "requested_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+          },
+          "expected_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 20
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationRecoverV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "expected_revision",
+          "requested_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/DeliveryArtSourceRealizationStableIdV1"
+          },
+          "expected_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationCommandEnvelopeV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realization"
+        ],
+        "properties": {
+          "realization": {
+            "type": "object"
+          }
+        }
+      },
+      "DeliveryArtSourceRealizationProjectionV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "session_id",
+          "work_item_id",
+          "revision",
+          "state",
+          "attempt",
+          "next_action",
+          "replayed"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "delivery-art-source-realization"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "work_item_id": {
+            "type": "string",
+            "pattern": "^work-item-[1-9][0-9]*$"
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "not-started",
+              "accepted",
+              "draft-ready",
+              "applying",
+              "apply-unknown",
+              "source-created",
+              "cancelled",
+              "failed"
+            ]
+          },
+          "attempt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "next_action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "authority",
+              "reason"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "authority": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "replayed": {
+            "type": "boolean"
           }
         }
       }

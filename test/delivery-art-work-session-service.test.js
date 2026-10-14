@@ -91,7 +91,10 @@ function result(current) {
   };
 }
 
-function createHarness(store, { available = true, lifecycleContext = null } = {}) {
+function createHarness(
+  store,
+  { available = true, lifecycleContext = null, sourceRealization = null } = {},
+) {
   const controller = {
     async preflight() {
       return {
@@ -151,9 +154,68 @@ function createHarness(store, { available = true, lifecycleContext = null } = {}
     controller,
     executor: { available, id: "source-executor:test" },
     lifecycleContext,
+    sourceRealization,
     store,
   });
 }
+
+test("work-session service binds source realization to the authenticated session identity", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-realization-"));
+  const store = createStore(root);
+  store.writeSession(session());
+  const calls = [];
+  const sourceRealization = {
+    async read(input) {
+      calls.push(["read", input]);
+      return { workflow_id: "delivery-art-source-realization", state: "not-started" };
+    },
+    async start(input) {
+      calls.push(["start", input]);
+      return { workflow_id: "delivery-art-source-realization", state: "draft-ready" };
+    },
+    async continue() {},
+    async cancel() {},
+    async recover() {},
+  };
+  const service = createHarness(store, { sourceRealization });
+  const status = await service.readRealization({
+    callerId: "operator:workspace-owner",
+    operatorId: "operator:workspace-owner",
+    workItemId: "1024",
+  });
+  assert.equal(status.state, "not-started");
+  const request = { request_id: "source-realization-request-1024-1" };
+  const started = await service.executeRealization({
+    action: "start",
+    callerId: "operator:workspace-owner",
+    operatorId: "operator:workspace-owner",
+    request,
+    workItemId: "1024",
+  });
+  assert.equal(started.state, "draft-ready");
+  assert.deepEqual(calls, [
+    ["read", {
+      callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      workItemId: "work-item-1024",
+    }],
+    ["start", {
+      callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      request,
+      signal: null,
+      workItemId: "work-item-1024",
+    }],
+  ]);
+  await assert.rejects(
+    service.readRealization({
+      callerId: "another-caller",
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }),
+    { code: "delivery_art_work_session_caller_mismatch", statusCode: 403 },
+  );
+});
 
 test("coordination records retain non-secret references and reject credential material", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-references-"));

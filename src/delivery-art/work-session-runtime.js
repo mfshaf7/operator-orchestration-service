@@ -11,6 +11,10 @@ import {
   submitLandingUnitCompletion,
 } from "./landing-unit-completion.js";
 import { createDeliveryArtSourceExecutorClient } from "./source-executor.js";
+import {
+  createDeliveryArtSourceRealizationGatewayClient,
+  createDeliveryArtSourceRealizationService,
+} from "./source-realization.js";
 import { createDeliveryArtWorkSessionController } from "./work-session-controller.js";
 import { createDeliveryArtWorkSessionService } from "./work-session-service.js";
 import {
@@ -400,10 +404,23 @@ export function createDeliveryArtWorkSessionRuntime({
     store,
     workSessionController: controller,
   });
+  const realizationConfig = executorConfig.sourceRealization ?? {};
+  const sourceRealization = createDeliveryArtSourceRealizationService({
+    enabled: realizationConfig.enabled,
+    gatewayClient: createDeliveryArtSourceRealizationGatewayClient({
+      baseUrl: realizationConfig.gatewayBaseUrl,
+    }),
+    lifecycleContext,
+    profileId: realizationConfig.profileId,
+    sourceAdapter: sourceExecutor.workSource,
+    store,
+    workSessionController: controller,
+  });
   return createDeliveryArtWorkSessionService({
     controller,
     executor: sourceExecutor.executor,
     lifecycleContext,
+    sourceRealization,
     store,
   });
 }

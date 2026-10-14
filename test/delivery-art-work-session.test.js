@@ -146,6 +146,8 @@ function architecturePacket(
         {
           id: "delivery-958-work-item-963",
           covered_work_item_ids: workItemIds,
+          owner_repo: "operator-orchestration-service",
+          source_backed: digestCharacter !== "b",
         },
       ],
       work_item_execution_plan: workItemIds.map((workItemId) => ({
@@ -312,14 +314,27 @@ function createHarness(
     async currentArchitecture() {
       return structuredClone(currentArchitectureArtifact);
     },
-    async draftWorkStart() {
+    async draftWorkStart({ input } = {}) {
       return {
         artifact_type: "delivery_art_work_start_record",
+        architecture: input?.architecture?.required
+          ? {
+              packet_digest: input.architecture.reference.digest,
+              packet_ref: input.architecture.reference.uri,
+              readiness: "architecture-ready",
+              required: true,
+            }
+          : {
+              packet_digest: null,
+              packet_ref: null,
+              readiness: "not-required",
+              required: false,
+            },
         custody: { state: "local-draft" },
         readiness: { level: "draft" },
       };
     },
-    async evaluateWorkStart(artifact) {
+    async evaluateWorkStart({ artifact }) {
       return {
         ...artifact,
         custody: { state: "durable" },
@@ -1986,6 +2001,119 @@ test("source-only architecture refresh neither invalidates nor duplicates a work
   const status = await harness.controller.status("963");
   assert.notEqual(status.state, "architecture-superseded");
   assert.equal(status.architecture_supersession, undefined);
+});
+
+test("unrelated architecture changes do not invalidate an unchanged active Landing Unit", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-local-architecture-"));
+  const original = architecturePacket("a");
+  original.architecture.required_human_gates = [{
+    affected_landing_unit_ids: ["delivery-958-work-item-963"],
+    authority_owner_repo: "security-architecture",
+    authority_work_item_id: "work-item-962",
+    blocked_transition: "before_source_merge",
+    evidence_prerequisite_work_item_ids: ["work-item-960"],
+    evidence_requirement: "Review the exact active source head.",
+    gate_id: "gate:active-source",
+  }];
+  const harness = createHarness(root, { architectureArtifact: original });
+  await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  const unrelatedChange = structuredClone(original);
+  unrelatedChange.integrity.content_digest = `sha256:${"e".repeat(64)}`;
+  unrelatedChange.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"e".repeat(64)}`;
+  unrelatedChange.decision.rationale = "Correct an unrelated Landing Unit.";
+  unrelatedChange.architecture.landing_units.push({
+    covered_work_item_ids: ["work-item-964"],
+    id: "delivery-958-work-item-964",
+    owner_repo: "security-architecture",
+    source_backed: true,
+  });
+  unrelatedChange.architecture.required_human_gates[0]
+    .evidence_prerequisite_work_item_ids.push("work-item-961");
+  harness.setCurrentArchitecture(unrelatedChange);
+
+  const compatible = await harness.controller.status("963");
+  assert.equal(compatible.state, "architecture-refresh-required");
+  assert.equal(
+    compatible.next_action.code,
+    "architecture-compatible-refresh-required",
+  );
+  assert.equal(compatible.architecture_supersession, undefined);
+
+  const interruptedSession = harness.store.readByAlias("work-item-963");
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.architecture.artifact_file,
+    unrelatedChange,
+  );
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.artifacts.review_packet_file,
+    {
+      work_start: {
+        artifact_digest: `sha256:${"c".repeat(64)}`,
+        artifact_ref: `wgcf://artifacts/delivery-art/sha256/${"c".repeat(64)}`,
+      },
+    },
+  );
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.artifacts.readiness_receipt_file,
+    { receipt_id: "stale-readiness" },
+  );
+  const resumable = await harness.controller.status("963");
+  assert.equal(resumable.state, "architecture-refresh-required");
+
+  await harness.controller.continue("963");
+  const refreshedSession = harness.store.readByAlias("work-item-963");
+  const refreshedArchitecture = harness.store.readArtifact(
+    refreshedSession,
+    refreshedSession.architecture.artifact_file,
+  );
+  const refreshedWorkStart = harness.store.readArtifact(
+    refreshedSession,
+    refreshedSession.artifacts.work_start_file,
+  );
+  assert.equal(
+    refreshedArchitecture.integrity.content_digest,
+    unrelatedChange.integrity.content_digest,
+  );
+  assert.equal(
+    refreshedWorkStart.architecture.packet_digest,
+    unrelatedChange.integrity.content_digest,
+  );
+  assert.equal(
+    harness.store.readArtifact(
+      refreshedSession,
+      refreshedSession.artifacts.review_packet_file,
+    ),
+    null,
+  );
+  assert.equal(
+    harness.store.readArtifact(
+      refreshedSession,
+      refreshedSession.artifacts.readiness_receipt_file,
+    ),
+    null,
+  );
+
+  const activeGateChange = structuredClone(unrelatedChange);
+  activeGateChange.integrity.content_digest = `sha256:${"f".repeat(64)}`;
+  activeGateChange.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"f".repeat(64)}`;
+  activeGateChange.architecture.required_human_gates[0]
+    .authority_work_item_id = "work-item-961";
+  harness.setCurrentArchitecture(activeGateChange);
+
+  const superseded = await harness.controller.status("963");
+  assert.equal(superseded.state, "architecture-superseded");
+  assert.equal(
+    superseded.next_action.code,
+    "architecture-reconstruction-required",
+  );
 });
 
 test("superseded sessions with source or evidence activity cannot reconstruct", async () => {

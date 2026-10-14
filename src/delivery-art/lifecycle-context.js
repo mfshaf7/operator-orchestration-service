@@ -106,7 +106,11 @@ function safeNextAction(nextAction) {
   };
 }
 
-export function buildDeliveryArtLifecycleSources(projection, capturedAt) {
+export function buildDeliveryArtLifecycleSources(
+  projection,
+  capturedAt,
+  { sourceRealization = null } = {},
+) {
   const sessionRef = `oos://delivery-art/work-sessions/${encodeURIComponent(projection.session_id)}`;
   const revision = projection.session_revision;
   const art = availableSource({
@@ -116,6 +120,14 @@ export function buildDeliveryArtLifecycleSources(projection, capturedAt) {
       facts: projection.facts ?? {},
       next_action: safeNextAction(projection.next_action),
       projection: projection.projection ?? null,
+      ...(sourceRealization
+        ? {
+            source_realization: {
+              objective: sourceRealization.objective,
+              objective_digest: sourceRealization.objective_digest,
+            },
+          }
+        : {}),
       state: projection.state,
       work_item_id: projection.work_item_id,
     },
@@ -130,6 +142,9 @@ export function buildDeliveryArtLifecycleSources(projection, capturedAt) {
           pull_request: projection.pull_request ?? null,
           repository: projection.agent_source?.repository ?? null,
           source: projection.source,
+          ...(sourceRealization
+            ? { source_realization_context: sourceRealization.repository_context }
+            : {}),
         },
         revision: projection.source.head_commit ?? revision,
         sourceClass: "repository",
@@ -365,7 +380,13 @@ export function createDeliveryArtLifecycleContextService({
     return { binding, ledger, replayed: false };
   }
 
-  async function project({ callerId, operatorId, request: input, workItemId }) {
+  async function project({
+    callerId,
+    operatorId,
+    request: input,
+    sourceRealization = null,
+    workItemId,
+  }) {
     const contextRequest = assertRequest(input);
     workItemId = normalizeWorkItemId(workItemId);
     const session = store.readByAlias(workItemId);
@@ -390,7 +411,24 @@ export function createDeliveryArtLifecycleContextService({
       );
       const capturedAt = prior?.captured_at ?? clock().toISOString();
       const rawProjection = await workSessionController.status(workItemId);
-      const sources = buildDeliveryArtLifecycleSources(rawProjection, capturedAt);
+      if (
+        sourceRealization !== null &&
+        (
+          typeof sourceRealization?.objective !== "string" ||
+          !sourceRealization.objective.trim() ||
+          !SHA256.test(sourceRealization?.objective_digest ?? "") ||
+          !sourceRealization?.repository_context ||
+          typeof sourceRealization.repository_context !== "object"
+        )
+      ) {
+        throw new DeliveryArtLifecycleContextError(
+          "delivery_art_lifecycle_context_source_realization_invalid",
+          "Internal source-realization context is incomplete or invalid.",
+        );
+      }
+      const sources = buildDeliveryArtLifecycleSources(rawProjection, capturedAt, {
+        sourceRealization,
+      });
       const sourcesDigest = canonicalDigest(sources);
       const lifecycle = {
         operation: contextRequest.operation,

@@ -300,6 +300,70 @@ export function deliveryArtWorkContractProjection({
   };
 }
 
+export function architectureLandingUnitDecisionFingerprint({
+  architecture,
+  coveredWorkItemIds,
+  landingUnitId,
+}) {
+  const covered = new Set(coveredWorkItemIds);
+  const landingUnit = (architecture?.architecture?.landing_units ?? [])
+    .find((entry) => entry?.id === landingUnitId);
+  if (!landingUnit) return null;
+
+  const byId = (field) => (left, right) =>
+    String(left?.[field] ?? "").localeCompare(String(right?.[field] ?? ""));
+  const gates = (architecture.architecture?.required_human_gates ?? [])
+    .filter((gate) => gate?.affected_landing_unit_ids?.includes(landingUnitId))
+    .map(({ evidence_prerequisite_work_item_ids: _prerequisites, ...gate }) =>
+      structuredClone(gate))
+    .sort(byId("gate_id"));
+  const cases = (architecture.conformance_plan?.cases ?? [])
+    .filter((entry) =>
+      entry?.evidence_owner_landing_unit_id === landingUnitId ||
+      (entry?.applies_to_work_item_ids ?? []).some((workItemId) =>
+        covered.has(workItemId)))
+    .map((entry) => structuredClone(entry))
+    .sort(byId("id"));
+
+  return canonicalDigest({
+    schema_version: architecture.schema_version,
+    artifact_type: architecture.artifact_type,
+    delivery_id: architecture.delivery_id,
+    landing_unit: structuredClone(landingUnit),
+    descendant_owner_map:
+      (architecture.architecture?.descendant_owner_map ?? [])
+        .filter((entry) => covered.has(entry?.work_item_id))
+        .map((entry) => structuredClone(entry))
+        .sort(byId("work_item_id")),
+    work_item_execution_plan:
+      (architecture.architecture?.work_item_execution_plan ?? [])
+        .filter((entry) => covered.has(entry?.work_item_id))
+        .map((entry) => structuredClone(entry))
+        .sort(byId("work_item_id")),
+    required_human_gates: gates,
+    evidence_receipt_handoffs:
+      (architecture.architecture?.evidence_receipt_handoffs ?? [])
+        .filter((entry) => entry?.consumer_landing_unit_id === landingUnitId)
+        .map((entry) => structuredClone(entry))
+        .sort(byId("handoff_id")),
+    runtime_boundaries:
+      (architecture.architecture?.runtime_boundaries ?? [])
+        .filter((entry) => entry?.owner_repo === landingUnit.owner_repo)
+        .map((entry) => structuredClone(entry))
+        .sort(byId("owner_repo")),
+    conformance_plan: {
+      required: architecture.conformance_plan?.required === true,
+      cases,
+      work_item_dimension_applicability:
+        (architecture.conformance_plan?.work_item_dimension_applicability ?? [])
+          .filter((entry) => covered.has(entry?.work_item_id))
+          .map((entry) => structuredClone(entry))
+          .sort(byId("work_item_id")),
+    },
+    decision_status: architecture.decision?.status ?? null,
+  });
+}
+
 function configuredPathAction({ authority, code, inputs = {}, reason }) {
   return {
     authority,
@@ -714,8 +778,44 @@ export function createDeliveryArtWorkSessionController({
     return evaluated;
   }
 
-  async function architectureSupersession(session) {
-    if (!session.architecture.required) return null;
+  function sessionArtifactsMatchArchitecture(session, architecture) {
+    const workStart = store.readArtifact(
+      session,
+      session.artifacts.work_start_file,
+    );
+    const architectureReference = artifactReference(architecture);
+    if (
+      workStart?.architecture?.required !== true ||
+      workStart.architecture.packet_digest !== architectureReference.digest ||
+      workStart.architecture.packet_ref !== architectureReference.uri
+    ) {
+      return false;
+    }
+    const reviewPacket = store.readArtifact(
+      session,
+      session.artifacts.review_packet_file,
+    );
+    if (
+      reviewPacket !== null &&
+      (
+        reviewPacket?.work_start?.artifact_digest !==
+          workStart?.integrity?.content_digest ||
+        reviewPacket?.work_start?.artifact_ref !== workStart?.custody?.uri
+      )
+    ) {
+      return false;
+    }
+    const readinessReceipt = store.readArtifact(
+      session,
+      session.artifacts.readiness_receipt_file,
+    );
+    return reviewPacket !== null || readinessReceipt === null;
+  }
+
+  async function architectureBinding(session) {
+    if (!session.architecture.required) {
+      return { artifact: null, mode: "not-required" };
+    }
     const bound = store.readArtifact(
       session,
       session.architecture.artifact_file,
@@ -734,20 +834,62 @@ export function createDeliveryArtWorkSessionController({
     const boundReference = artifactReference(bound);
     const currentReference = artifactReference(current);
     if (sameArtifactReference(boundReference, currentReference)) {
-      return null;
+      return sessionArtifactsMatchArchitecture(session, current)
+        ? { artifact: bound, mode: "current" }
+        : {
+            artifact: current,
+            bound_architecture: boundReference,
+            current_architecture: currentReference,
+            mode: "compatible-refresh",
+          };
     }
     if (
       architectureDecisionFingerprint(bound) ===
       architectureDecisionFingerprint(current)
     ) {
-      return null;
+      return {
+        artifact: current,
+        bound_architecture: boundReference,
+        current_architecture: currentReference,
+        mode: "compatible-refresh",
+      };
+    }
+    const boundLandingUnitId = architectureLandingUnitId({
+      architecture: bound,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
+    const currentLandingUnitId = architectureLandingUnitId({
+      architecture: current,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
+    if (
+      boundLandingUnitId === session.landing_unit_id &&
+      currentLandingUnitId === session.landing_unit_id &&
+      architectureLandingUnitDecisionFingerprint({
+        architecture: bound,
+        coveredWorkItemIds: session.covered_work_item_ids,
+        landingUnitId: session.landing_unit_id,
+      }) === architectureLandingUnitDecisionFingerprint({
+        architecture: current,
+        coveredWorkItemIds: session.covered_work_item_ids,
+        landingUnitId: session.landing_unit_id,
+      })
+    ) {
+      return {
+        artifact: current,
+        bound_architecture: boundReference,
+        current_architecture: currentReference,
+        mode: "compatible-refresh",
+      };
     }
 
     const proof = await pristineSessionProof(session, current);
     return {
+      artifact: bound,
       bound_architecture: boundReference,
       current_architecture: currentReference,
       current_artifact: current,
+      mode: "superseded",
       pristine_proof: proof,
       reconstructable:
         proof.evidence_pristine &&
@@ -756,6 +898,47 @@ export function createDeliveryArtWorkSessionController({
         proof.review_packet_absent &&
         proof.source.pristine === true,
     };
+  }
+
+  async function architectureSupersession(session) {
+    const binding = await architectureBinding(session);
+    return binding.mode === "superseded" ? binding : null;
+  }
+
+  async function refreshCompatibleArchitecture(session, binding) {
+    if (binding.mode !== "compatible-refresh") return session;
+    const workStart = await authorWorkStart(session, binding.artifact);
+    const confirmedCurrent = await artifactAdapter.currentArchitecture(
+      session.delivery_id,
+    );
+    if (!sameArtifactReference(
+      artifactReference(binding.artifact),
+      artifactReference(confirmedCurrent),
+    )) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_architecture_changed",
+        "The accepted architecture changed during compatible refresh; retry against the new current packet.",
+      );
+    }
+
+    store.writeArtifact(
+      session,
+      session.architecture.artifact_file,
+      binding.artifact,
+    );
+    store.writeArtifact(
+      session,
+      session.artifacts.work_start_file,
+      workStart,
+    );
+    store.writeArtifact(session, session.artifacts.review_packet_file, null);
+    store.writeArtifact(session, session.artifacts.readiness_receipt_file, null);
+    const refreshed = {
+      ...session,
+      updated_at: clock().toISOString(),
+    };
+    store.writeSession(refreshed);
+    return refreshed;
   }
 
   async function pristineSessionProof(session, architecture) {
@@ -1009,7 +1192,23 @@ export function createDeliveryArtWorkSessionController({
           )) {
             if (
               architectureDecisionFingerprint(architecture) !==
-              architectureDecisionFingerprint(currentArchitecture)
+                architectureDecisionFingerprint(currentArchitecture) &&
+              (
+                !currentLandingUnitId ||
+                architectureLandingUnitId({
+                  architecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                }) !== currentLandingUnitId ||
+                architectureLandingUnitDecisionFingerprint({
+                  architecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                  landingUnitId: currentLandingUnitId,
+                }) !== architectureLandingUnitDecisionFingerprint({
+                  architecture: currentArchitecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                  landingUnitId: currentLandingUnitId,
+                })
+              )
             ) {
               throw new DeliveryArtWorkSessionError(
                 "delivery_art_work_session_architecture_superseded",
@@ -1572,10 +1771,11 @@ export function createDeliveryArtWorkSessionController({
 
     assertDurableSessionArtifacts(session);
 
-    const supersession = await architectureSupersession(session);
-    const architecture = session.architecture.artifact_file
-      ? store.readArtifact(session, session.architecture.artifact_file)
+    const architectureState = await architectureBinding(session);
+    const supersession = architectureState.mode === "superseded"
+      ? architectureState
       : null;
+    const architecture = architectureState.artifact;
     const workContract = deliveryArtWorkContractProjection({
       architecture,
       contexts: currentContexts,
@@ -1603,6 +1803,22 @@ export function createDeliveryArtWorkSessionController({
             },
         session,
         state: "architecture-superseded",
+        workContract,
+        workItemId,
+      });
+    }
+    if (architectureState.mode === "compatible-refresh") {
+      return resultEnvelope({
+        context: current,
+        nextAction: {
+          code: "architecture-compatible-refresh-required",
+          command: `npm run art -- work continue ${workItemId}`,
+          reason:
+            "The active Landing Unit design is unchanged; refresh its durable architecture and work-start bindings before continuing.",
+          authority: "operator-orchestration-service",
+        },
+        session,
+        state: "architecture-refresh-required",
         workContract,
         workItemId,
       });
@@ -1979,7 +2195,7 @@ export function createDeliveryArtWorkSessionController({
   async function continueWork(workItemIdInput) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
-      const session = store.readByAlias(workItemId);
+      let session = store.readByAlias(workItemId);
       if (!session) {
         return status(workItemId);
       }
@@ -1996,6 +2212,10 @@ export function createDeliveryArtWorkSessionController({
             });
           }
         }
+        session = await refreshCompatibleArchitecture(
+          session,
+          await architectureBinding(session),
+        );
         const current = await statusForSession(session, workItemId);
         if ([
           "architecture-human-gate-required",

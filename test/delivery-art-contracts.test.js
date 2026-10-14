@@ -7,6 +7,7 @@ import {
   artifactContentDigest,
   deliveryArtArchitectureContractPosture,
   validateDeliveryArtArtifact,
+  validateDeliveryArtHistoricalArchitectureDependency,
   validateDeliveryArtReferences,
   workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
@@ -589,6 +590,28 @@ test("architecture v3 rejects a cross-topology early human-gate cycle", () => {
     validateDeliveryArtArtifact(candidate).errors.includes(
       "architecture combined work, source-landing, and early human-gate topology must be acyclic",
     ),
+  );
+});
+
+test("historical architecture dependency validation preserves immutable superseded semantics", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.required_human_gates[0].authority_work_item_id =
+    "work-item-802";
+  candidate.architecture.required_human_gates[0].authority_owner_repo =
+    "operator-orchestration-service";
+  candidate.architecture.required_human_gates[0].affected_landing_unit_ids = [
+    "delivery-698-contract",
+  ];
+  candidate.architecture.work_item_execution_plan[0].emits_human_gate_ids = [];
+  candidate.architecture.work_item_execution_plan[1].emits_human_gate_ids = [
+    "gate:security-source-merge",
+  ];
+  refreshArchitectureCandidate(candidate);
+
+  assert.equal(validateDeliveryArtArtifact(candidate).valid, false);
+  assert.equal(
+    validateDeliveryArtHistoricalArchitectureDependency(candidate).valid,
+    true,
   );
 });
 

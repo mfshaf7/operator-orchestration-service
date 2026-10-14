@@ -501,6 +501,15 @@ function createHarness({
         error.errorClass = "update_conflict";
         throw error;
       }
+      if (input.artifactType === "delivery_art_architecture_packet") {
+        currentReference = {
+          artifact_id: input.artifactId,
+          artifact_status: input.artifactStatus,
+          artifact_type: input.artifactType,
+          custody_receipt: structuredClone(input.custodyReceipt),
+          reference: structuredClone(input.artifact),
+        };
+      }
       return { projected: true, replayed: false };
     },
     async currentDeliveryArtReference() {
@@ -806,6 +815,53 @@ test("current architecture resolves the latest ART pointer through immutable cus
     persisted.artifact.integrity.content_digest,
   );
   assert.deepEqual(current.projected_reference.reference, projection.artifact);
+});
+
+test("current architecture preserves an immutable superseded packet under newer semantic validation", async () => {
+  const harness = createHarness();
+  const historicalCandidate = architectureV6Candidate();
+  historicalCandidate.architecture.required_human_gates[0]
+    .authority_work_item_id = "work-item-802";
+  historicalCandidate.architecture.required_human_gates[0]
+    .authority_owner_repo = "operator-orchestration-service";
+  historicalCandidate.architecture.required_human_gates[0]
+    .affected_landing_unit_ids = ["delivery-698-contract"];
+  historicalCandidate.architecture.work_item_execution_plan[0]
+    .emits_human_gate_ids = [];
+  historicalCandidate.architecture.work_item_execution_plan[1]
+    .emits_human_gate_ids = ["gate:security-source-merge"];
+  historicalCandidate.scope_fingerprint = architectureScopeFingerprint(
+    historicalCandidate,
+  );
+  historicalCandidate.integrity.content_digest = artifactContentDigest(
+    historicalCandidate,
+  );
+  const historical = durableEnvelope(
+    deliveryArtContentProjection(historicalCandidate),
+    historicalCandidate.integrity.content_digest,
+    "created",
+  );
+  harness.registry.records.set(
+    historical.artifact.integrity.content_digest,
+    historical,
+  );
+
+  const successor = architectureV6Candidate();
+  successor.custody.supersedes = sourceArtifactReference(historical.artifact);
+  successor.scope_fingerprint = architectureScopeFingerprint(successor);
+  successor.integrity.content_digest = artifactContentDigest(successor);
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: successor,
+    callerId: CALLER_ID,
+  });
+
+  const current = await harness.service.currentArchitecturePacket({
+    deliveryId: persisted.artifact.delivery_id,
+  });
+  assert.equal(
+    current.artifact.integrity.content_digest,
+    persisted.artifact.integrity.content_digest,
+  );
 });
 
 test("architecture persistence rejects source-only supersession while preserving exact replay", async () => {
@@ -1283,6 +1339,44 @@ test("new work rejects a historical v3 execution packet", async () => {
     }),
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required",
+  );
+});
+
+test("new work rejects a valid v6 packet that is not the current ART reference", async () => {
+  const harness = createHarness();
+  await harness.service.persistArchitecturePacket({
+    artifact: architectureV6Candidate(),
+    callerId: CALLER_ID,
+  });
+
+  const staleCandidate = architectureV6Candidate();
+  staleCandidate.decision.rationale =
+    "A structurally valid but superseded architecture decision.";
+  staleCandidate.scope_fingerprint = architectureScopeFingerprint(staleCandidate);
+  staleCandidate.integrity.content_digest = artifactContentDigest(staleCandidate);
+  const stale = durableEnvelope(
+    deliveryArtContentProjection(staleCandidate),
+    staleCandidate.integrity.content_digest,
+    "created",
+  );
+  harness.registry.records.set(stale.artifact.integrity.content_digest, stale);
+
+  await assert.rejects(
+    () => harness.service.draftWorkStart({
+      callerId: CALLER_ID,
+      input: {
+        architecture: {
+          reference: sourceArtifactReference(stale.artifact),
+          required: true,
+        },
+        covered_work_item_ids: ["work-item-801"],
+        delivery_id: "delivery-698",
+        landing_unit: fixture("work-start-record.valid.json").landing_unit,
+        operator: { decision_source: "operator" },
+      },
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_superseded",
   );
 });
 

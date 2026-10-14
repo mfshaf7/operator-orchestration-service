@@ -295,6 +295,7 @@ export function createDeliveryArtWorkSessionService({
   controller,
   executor = { available: true, id: "local-engineering-source-executor" },
   lifecycleContext = null,
+  sourceRealization = null,
   store,
 } = {}) {
   for (const method of [
@@ -327,6 +328,14 @@ export function createDeliveryArtWorkSessionService({
       typeof lifecycleContext.status !== "function")
   ) {
     throw new Error("lifecycleContext requires project and status methods");
+  }
+  if (
+    sourceRealization !== null &&
+    ["cancel", "continue", "read", "recover", "start"].some(
+      (method) => typeof sourceRealization?.[method] !== "function",
+    )
+  ) {
+    throw new Error("sourceRealization requires start, continue, cancel, recover, and read methods");
   }
 
   function withLifecycleContext(result, session) {
@@ -475,6 +484,63 @@ export function createDeliveryArtWorkSessionService({
       callerId,
       operatorId,
       request,
+      workItemId,
+    }));
+  }
+
+  async function readRealization({ callerId, operatorId, workItemId: workItemIdInput }) {
+    await assertExecutorAvailable();
+    if (!sourceRealization) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_source_realization_unavailable",
+        "The Delivery source-realization adapter is unavailable.",
+        { statusCode: 503 },
+      );
+    }
+    operatorId ??= callerId;
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const session = store.readByAlias(workItemId);
+    assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    return runWithExecutorContext({
+      caller_id: callerId,
+      command_id: null,
+      operator_id: operatorId,
+      session_id: session?.session_id ?? null,
+      work_item_id: workItemId,
+    }, () => sourceRealization.read({ callerId, operatorId, workItemId }));
+  }
+
+  async function executeRealization({
+    action,
+    callerId,
+    operatorId,
+    request,
+    signal = null,
+    workItemId: workItemIdInput,
+  }) {
+    await assertExecutorAvailable();
+    if (!sourceRealization || !["start", "continue", "cancel", "recover"].includes(action)) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_source_realization_unavailable",
+        "The requested Delivery source-realization action is unavailable.",
+        { statusCode: 503 },
+      );
+    }
+    operatorId ??= callerId;
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const session = store.readByAlias(workItemId);
+    assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    return runWithExecutorContext({
+      caller_id: callerId,
+      command_id: request?.command_id ?? request?.request_id ?? null,
+      operator_id: operatorId,
+      session_id: session?.session_id ?? null,
+      work_item_id: workItemId,
+    }, () => sourceRealization[action]({
+      callerId,
+      operatorId,
+      request,
+      signal,
       workItemId,
     }));
   }
@@ -631,11 +697,13 @@ export function createDeliveryArtWorkSessionService({
     close,
     continue: continueWork,
     execute,
+    executeRealization,
     inspect,
     merge,
     preflight,
     projectContext,
     read,
+    readRealization,
     reconstruct,
     start,
     status,

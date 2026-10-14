@@ -41,7 +41,7 @@
     "validate:model-profile-request-openapi": "node scripts/sync_model_profile_request_openapi.mjs --check",
     "validate:product-publication-openapi": "node scripts/sync_product_publication_openapi.mjs --check",
     "validate:agent-console-openapi": "node scripts/sync_agent_console_openapi.mjs --check",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "test:workspace-intake-source": "node scripts/test_workspace_intake_source.mjs",
     "test:workspace-inventory-source": "node scripts/test_workspace_inventory_source.mjs",
     "sync:workspace-intake-contracts": "node scripts/sync_workspace_intake_contracts.mjs",
