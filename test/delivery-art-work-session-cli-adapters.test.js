@@ -226,6 +226,50 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
     { code: "delivery_art_evidence_profile_incomplete" },
   );
   assert.equal(identityPreflights, 0);
+
+  const invalidProfilePath = path.join(
+    evidenceProfileRoot,
+    "evidence-profile.json",
+  );
+  const invalidProfile = JSON.parse(await readFile(invalidProfilePath, "utf8"));
+  invalidProfile.commands[0].timeout_seconds = 3600;
+  await writeFile(
+    invalidProfilePath,
+    `${JSON.stringify(invalidProfile, null, 2)}\n`,
+    "utf8",
+  );
+  git(repoRoot, ["add", "contracts/delivery-art-work-session/evidence-profile.json"]);
+  git(repoRoot, ["commit", "-m", "invalid evidence profile"]);
+  git(repoRoot, ["push", "origin", "main"]);
+  const repairBase = await adapter.resolveBase({
+    baseRef: "origin/main",
+    ownerRepo: "operator-orchestration-service",
+  });
+  const repairConfiguredPath = await adapter.inspectConfiguredPath({
+    ...session,
+    session_id: `${session.session_id}:profile-repair`,
+    landing_unit: {
+      ...session.landing_unit,
+      base_commit: repairBase.commit,
+      branch: "fix/963-evidence-profile-repair",
+    },
+  }, {
+    conformanceCases: [
+      { fidelity: "filesystem", id: "case:filesystem" },
+      { fidelity: "real-git", id: "case:real-git" },
+    ],
+    requiredEvidenceKinds: ["tests", "validations"],
+  });
+  assert.equal(repairConfiguredPath.base.state, "ready");
+  assert.equal(
+    repairConfiguredPath.runtime.evidence_profile.selection,
+    "reviewed-ancestor-repair",
+  );
+  assert.equal(
+    repairConfiguredPath.runtime.evidence_profile.profile_revision,
+    base.commit,
+  );
+
   assert.equal(await adapter.resolveWorktree(session), null);
   const pristineWithoutWorktree = await adapter.inspectPristineSession(session);
   assert.equal(pristineWithoutWorktree.pristine, true);

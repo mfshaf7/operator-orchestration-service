@@ -146,7 +146,10 @@ test("CLI evidence acquisition records invalid candidate and accepted profiles a
   invalidProfile.commands[0].fidelity = "live-backend";
   invalidProfile.commands[0].kind = "runtime_and_live";
   invalidProfile.commands[0].timeout_seconds = 3600;
+  const incompleteProfile = structuredClone(validProfile);
+  incompleteProfile.commands[0].fidelity = "filesystem";
   let executedProfileCommand = false;
+  let candidateProfile = invalidProfile;
   const adapters = createDeliveryArtLifecycleCliAdapters({
     async brokerRequest() {
       throw new Error("broker request was not expected");
@@ -155,11 +158,15 @@ test("CLI evidence acquisition records invalid candidate and accepted profiles a
       if (command === "git" && args[0] === "show") {
         return JSON.stringify(
           String(args[1]).startsWith(headCommit)
-            ? invalidProfile
+            ? candidateProfile
             : validProfile,
         );
       }
-      if (command !== "git") executedProfileCommand = true;
+      if (
+        command === "git" &&
+        args[0] === "diff" &&
+        args[1] === "--check"
+      ) executedProfileCommand = true;
       return commandStub(command, args);
     },
   });
@@ -193,6 +200,24 @@ test("CLI evidence acquisition records invalid candidate and accepted profiles a
   assert.equal(executedProfileCommand, false);
   assert.equal(projectDeliveryArtOwnerEvidence(candidateFailure).acquisition.state, "blocked");
 
+  candidateProfile = incompleteProfile;
+  const incompleteCandidateFailure = await adapters.sourceAdapter.acquireEvidence({
+    conformance_cases: [{
+      fidelity: "real-git",
+      id: "case:merge-ready",
+      target_readiness: "merge-ready",
+    }],
+    landing_unit: landingUnit,
+    source,
+  });
+  assert.equal(incompleteCandidateFailure.profile_revision, headCommit);
+  assert.match(
+    incompleteCandidateFailure.results[0].command,
+    /delivery_art_evidence_profile_incomplete/,
+  );
+  assert.equal(executedProfileCommand, false);
+
+  candidateProfile = invalidProfile;
   const acceptedFailure = await adapters.sourceAdapter.acquireEvidence({
     conformance_cases: operatingCases,
     landing_unit: landingUnit,
@@ -203,6 +228,76 @@ test("CLI evidence acquisition records invalid candidate and accepted profiles a
   assert.equal(acceptedFailure.results[0].result, "fail");
   assert.equal(projectDeliveryArtOwnerEvidence(acceptedFailure).acquisition.state, "blocked");
   assert.equal(executedProfileCommand, false);
+});
+
+test("CLI evidence acquisition uses the nearest valid reviewed ancestor only for base repair", async () => {
+  const ancestorCommit = "3".repeat(40);
+  const validProfile = {
+    schema_version: 1,
+    profile_id: "reviewed-ancestor-evidence",
+    owner_repo: "operator-orchestration-service",
+    commands: [{
+      id: "exact-diff",
+      kind: "tests",
+      name: "Exact diff validation",
+      executable: "git",
+      args: ["diff", "--check", "{{base_commit}}...{{head_commit}}"],
+      fidelity: "real-git",
+      conformance_binding: "matching-fidelity",
+      timeout_seconds: 30,
+    }],
+  };
+  const invalidBaseProfile = structuredClone(validProfile);
+  invalidBaseProfile.commands[0].timeout_seconds = 3600;
+  const commands = [];
+  const adapters = createDeliveryArtLifecycleCliAdapters({
+    async brokerRequest() {
+      throw new Error("broker request was not expected");
+    },
+    execFileSyncImpl(command, args) {
+      commands.push([command, ...args]);
+      if (command === "git" && args[0] === "log") {
+        return `${baseCommit}\n${ancestorCommit}\n`;
+      }
+      if (command === "git" && args[0] === "show") {
+        const revision = String(args[1]).split(":", 1)[0];
+        return JSON.stringify(
+          revision === baseCommit ? invalidBaseProfile : validProfile,
+        );
+      }
+      if (command === "git" && args[0] === "diff" && args[1] === "--check") {
+        return "";
+      }
+      return commandStub(command, args);
+    },
+  });
+  const landingUnit = {
+    base_commit: baseCommit,
+    base_ref: "origin/main",
+    branch,
+    owner_repo: "operator-orchestration-service",
+    repo_root: "/workspace/repo",
+  };
+  const source = await adapters.sourceAdapter.inspect(landingUnit);
+  const evidence = await adapters.sourceAdapter.acquireEvidence({
+    conformance_cases: [{ fidelity: "real-git", id: "case:merge-ready" }],
+    landing_unit: landingUnit,
+    source,
+  });
+  assert.equal(evidence.profile_revision, ancestorCommit);
+  assert.equal(evidence.results[0].result, "pass");
+  assert.equal(commands.some((entry) =>
+    entry.join(" ") ===
+      `git show ${ancestorCommit}:contracts/delivery-art-work-session/evidence-profile.json`),
+  true);
+
+  const accepted = await adapters.sourceAdapter.acquireEvidence({
+    conformance_cases: [{ fidelity: "real-git", id: "case:accepted" }],
+    landing_unit: landingUnit,
+    profile_revision: headCommit,
+    source,
+  });
+  assert.equal(accepted.profile_revision, headCommit);
 });
 
 test("CLI source inspection uses the recorded base commit and proves real Git ancestry", async () => {
