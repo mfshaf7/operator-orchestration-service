@@ -86,7 +86,7 @@ async function mergeFixtureBranch(fixture) {
 
 async function squashMergeFixtureBranch(
   fixture,
-  { extraChange = false, reviewedBytes = 0 } = {},
+  { extraChange = false, rebaseOnAdvancedBase = false, reviewedBytes = 0 } = {},
 ) {
   const worktree = fixture.ownership.path;
   const reviewedContent = reviewedBytes > 0
@@ -99,12 +99,17 @@ async function squashMergeFixtureBranch(
   );
   git(worktree, ["add", "resource-retirement.txt"]);
   git(worktree, ["commit", "-m", "add owned resource"]);
-  const head = git(worktree, ["rev-parse", "HEAD"]);
+  let head = git(worktree, ["rev-parse", "HEAD"]);
   git(worktree, ["push", "--set-upstream", "origin", fixture.session.landing_unit.branch]);
 
   await writeFile(path.join(fixture.repoRoot, "unrelated.txt"), "base moved\n", "utf8");
   git(fixture.repoRoot, ["add", "unrelated.txt"]);
   git(fixture.repoRoot, ["commit", "-m", "advance base independently"]);
+  if (rebaseOnAdvancedBase) {
+    git(worktree, ["rebase", "main"]);
+    head = git(worktree, ["rev-parse", "HEAD"]);
+    git(worktree, ["push", "--force-with-lease", "origin", fixture.session.landing_unit.branch]);
+  }
   git(fixture.repoRoot, ["merge", "--squash", fixture.session.landing_unit.branch]);
   if (extraChange) {
     await writeFile(path.join(fixture.repoRoot, "unexpected.txt"), "not reviewed\n", "utf8");
@@ -284,6 +289,54 @@ test("exact squash merge evidence makes the reviewed local branch eligible", asy
     resources.every((resource) => resource.outcome === "eligible"),
     true,
   );
+});
+
+test("exact squash merge cleanup accepts a reviewed head rebased onto a descendant base", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await squashMergeFixtureBranch(fixture, {
+    rebaseOnAdvancedBase: true,
+  });
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "eligible");
+  assert.equal(localBranch.locator.expected_head_commit, pullRequest.head_commit);
+});
+
+test("rebased squash cleanup rejects a derived base outside the recorded ancestry", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await squashMergeFixtureBranch(fixture, {
+    rebaseOnAdvancedBase: true,
+  });
+  const session = structuredClone(fixture.session);
+  session.landing_unit.base_commit = pullRequest.merge_commit;
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session,
+  });
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "blocked");
+  assert.match(localBranch.last_error, /does not descend from the recorded session base/);
 });
 
 test("exact squash merge evidence supports a reviewed diff over one MiB", async (t) => {

@@ -1224,6 +1224,32 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         reason: "non-ancestry cleanup requires a single-parent squash merge commit",
       };
     }
+    const reviewedBase = optionalCommand(
+      execFileSyncImpl,
+      ["merge-base", head, ancestry[1]],
+      repoRoot,
+    );
+    if (!reviewedBase.ok || !/^[0-9a-f]{40}$/.test(reviewedBase.output)) {
+      return {
+        ok: false,
+        reason: "reviewed branch and squash parent do not share a proven base",
+      };
+    }
+    if (!optionalCommand(
+      execFileSyncImpl,
+      [
+        "merge-base",
+        "--is-ancestor",
+        session.landing_unit.base_commit,
+        reviewedBase.output,
+      ],
+      repoRoot,
+    ).ok) {
+      return {
+        ok: false,
+        reason: "reviewed branch base does not descend from the recorded session base",
+      };
+    }
     const diffArgs = [
       "diff",
       "--binary",
@@ -1233,7 +1259,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ];
     const reviewedChange = command(
       execFileSyncImpl,
-      [...diffArgs, session.landing_unit.base_commit, head, "--"],
+      [...diffArgs, reviewedBase.output, head, "--"],
       repoRoot,
     );
     const landedChange = command(
