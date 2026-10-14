@@ -482,15 +482,20 @@ recovery and contract-verification commands, not the normal operator path.
 
 Each active architecture-bound session is compared with the latest structured
 architecture reference on its Delivery Epic and the exact immutable WGCF
-artifact behind that reference. A mismatch projects
-`architecture-superseded` and blocks continuation, merge, and close. OOS never
-silently rewrites the binding. `work reconstruct` is permitted only when the
-source branch and worktree remain at the recorded base, no remote branch or
-pull request exists, the evidence file is unchanged, and no Review Packet or
-readiness receipt exists. Reconstruction records the old and replacement
-architecture identities, pristine proof, and resource outcomes in a durable
-supersession receipt outside the replaceable session directory. Any activity
-requires deliberate recovery instead.
+artifact behind that reference. A reference mismatch remains compatible only
+when the canonical active-Landing-Unit projection is unchanged. That projection
+binds the Landing Unit scope and owner, covered execution plan, incoming
+handoffs, owner runtime boundary, conformance cases, and effective human gate;
+it deliberately excludes prerequisites owned by the separate gate-authority
+item. A changed active projection projects `architecture-superseded` and blocks
+continuation, merge, and close. OOS never silently rewrites the recorded packet
+binding. `work reconstruct` is permitted only when the source branch and
+worktree remain at the recorded base, no remote branch or pull request exists,
+the evidence file is unchanged, and no Review Packet or readiness receipt
+exists. Reconstruction records the old and replacement architecture identities,
+pristine proof, and resource outcomes in a durable supersession receipt outside
+the replaceable session directory. Any activity with a changed active
+projection requires deliberate recovery instead.
 
 `recover` is a bounded exception for an open ART item whose active session is
 blocked by architecture supersession or invalid pre-merge source binding and

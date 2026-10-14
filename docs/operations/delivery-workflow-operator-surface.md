@@ -688,14 +688,23 @@ hand-authored execution plan represents the ART graph. Later status or
 description changes may change the digest without invalidating an otherwise
 matching approved packet.
 
-An architecture-bound session must continue to match the latest accepted
+An architecture-bound session is compared with the latest accepted
 Architecture Packet projected on its Delivery Epic and resolved through WGCF.
-If the exact URI and digest change, all normal transitions stop in
-`architecture-superseded`. OOS permits explicit reconstruction only when Git,
-GitHub, evidence, Review Packet, and readiness state prove that no work began.
-It records both architecture bindings and source-retirement outcomes outside
-the replaced session. Sessions with any activity remain fail-closed for a
-deliberate recovery decision.
+An exact URI and digest match continues directly. When only the packet
+reference changes, OOS compares a canonical projection of the active Landing
+Unit: its exact scope and owner, execution plan, incoming evidence handoffs,
+owner runtime boundary, conformance cases, and effective human gate. A gate's
+authority and blocked transition remain binding, while changes to prerequisites
+of that separate authority item do not invalidate unchanged source work. An
+unrelated Landing Unit correction therefore does not strand valid work. Any
+change to the active projection stops in `architecture-superseded`.
+
+OOS never rewrites the session's recorded packet binding. It permits explicit
+reconstruction only when Git, GitHub, evidence, Review Packet, and readiness
+state prove that no work began. It records both architecture bindings and
+source-retirement outcomes outside the replaced session. Sessions with any
+activity and a changed active projection remain fail-closed for a deliberate
+recovery decision.
 
 For the pre-merge evidence gate, `work continue` runs the owner repository's
 admitted evidence profile through the authenticated source executor. The

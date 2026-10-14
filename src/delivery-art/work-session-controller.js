@@ -300,6 +300,70 @@ export function deliveryArtWorkContractProjection({
   };
 }
 
+export function architectureLandingUnitDecisionFingerprint({
+  architecture,
+  coveredWorkItemIds,
+  landingUnitId,
+}) {
+  const covered = new Set(coveredWorkItemIds);
+  const landingUnit = (architecture?.architecture?.landing_units ?? [])
+    .find((entry) => entry?.id === landingUnitId);
+  if (!landingUnit) return null;
+
+  const byId = (field) => (left, right) =>
+    String(left?.[field] ?? "").localeCompare(String(right?.[field] ?? ""));
+  const gates = (architecture.architecture?.required_human_gates ?? [])
+    .filter((gate) => gate?.affected_landing_unit_ids?.includes(landingUnitId))
+    .map(({ evidence_prerequisite_work_item_ids: _prerequisites, ...gate }) =>
+      structuredClone(gate))
+    .sort(byId("gate_id"));
+  const cases = (architecture.conformance_plan?.cases ?? [])
+    .filter((entry) =>
+      entry?.evidence_owner_landing_unit_id === landingUnitId ||
+      (entry?.applies_to_work_item_ids ?? []).some((workItemId) =>
+        covered.has(workItemId)))
+    .map((entry) => structuredClone(entry))
+    .sort(byId("id"));
+
+  return canonicalDigest({
+    schema_version: architecture.schema_version,
+    artifact_type: architecture.artifact_type,
+    delivery_id: architecture.delivery_id,
+    landing_unit: structuredClone(landingUnit),
+    descendant_owner_map:
+      (architecture.architecture?.descendant_owner_map ?? [])
+        .filter((entry) => covered.has(entry?.work_item_id))
+        .map((entry) => structuredClone(entry))
+        .sort(byId("work_item_id")),
+    work_item_execution_plan:
+      (architecture.architecture?.work_item_execution_plan ?? [])
+        .filter((entry) => covered.has(entry?.work_item_id))
+        .map((entry) => structuredClone(entry))
+        .sort(byId("work_item_id")),
+    required_human_gates: gates,
+    evidence_receipt_handoffs:
+      (architecture.architecture?.evidence_receipt_handoffs ?? [])
+        .filter((entry) => entry?.consumer_landing_unit_id === landingUnitId)
+        .map((entry) => structuredClone(entry))
+        .sort(byId("handoff_id")),
+    runtime_boundaries:
+      (architecture.architecture?.runtime_boundaries ?? [])
+        .filter((entry) => entry?.owner_repo === landingUnit.owner_repo)
+        .map((entry) => structuredClone(entry))
+        .sort(byId("owner_repo")),
+    conformance_plan: {
+      required: architecture.conformance_plan?.required === true,
+      cases,
+      work_item_dimension_applicability:
+        (architecture.conformance_plan?.work_item_dimension_applicability ?? [])
+          .filter((entry) => covered.has(entry?.work_item_id))
+          .map((entry) => structuredClone(entry))
+          .sort(byId("work_item_id")),
+    },
+    decision_status: architecture.decision?.status ?? null,
+  });
+}
+
 function configuredPathAction({ authority, code, inputs = {}, reason }) {
   return {
     authority,
@@ -742,6 +806,29 @@ export function createDeliveryArtWorkSessionController({
     ) {
       return null;
     }
+    const boundLandingUnitId = architectureLandingUnitId({
+      architecture: bound,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
+    const currentLandingUnitId = architectureLandingUnitId({
+      architecture: current,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
+    if (
+      boundLandingUnitId === session.landing_unit_id &&
+      currentLandingUnitId === session.landing_unit_id &&
+      architectureLandingUnitDecisionFingerprint({
+        architecture: bound,
+        coveredWorkItemIds: session.covered_work_item_ids,
+        landingUnitId: session.landing_unit_id,
+      }) === architectureLandingUnitDecisionFingerprint({
+        architecture: current,
+        coveredWorkItemIds: session.covered_work_item_ids,
+        landingUnitId: session.landing_unit_id,
+      })
+    ) {
+      return null;
+    }
 
     const proof = await pristineSessionProof(session, current);
     return {
@@ -1009,7 +1096,23 @@ export function createDeliveryArtWorkSessionController({
           )) {
             if (
               architectureDecisionFingerprint(architecture) !==
-              architectureDecisionFingerprint(currentArchitecture)
+                architectureDecisionFingerprint(currentArchitecture) &&
+              (
+                !currentLandingUnitId ||
+                architectureLandingUnitId({
+                  architecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                }) !== currentLandingUnitId ||
+                architectureLandingUnitDecisionFingerprint({
+                  architecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                  landingUnitId: currentLandingUnitId,
+                }) !== architectureLandingUnitDecisionFingerprint({
+                  architecture: currentArchitecture,
+                  coveredWorkItemIds: decision.covered_work_item_ids,
+                  landingUnitId: currentLandingUnitId,
+                })
+              )
             ) {
               throw new DeliveryArtWorkSessionError(
                 "delivery_art_work_session_architecture_superseded",

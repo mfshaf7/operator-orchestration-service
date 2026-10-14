@@ -146,6 +146,8 @@ function architecturePacket(
         {
           id: "delivery-958-work-item-963",
           covered_work_item_ids: workItemIds,
+          owner_repo: "operator-orchestration-service",
+          source_backed: digestCharacter !== "b",
         },
       ],
       work_item_execution_plan: workItemIds.map((workItemId) => ({
@@ -1986,6 +1988,58 @@ test("source-only architecture refresh neither invalidates nor duplicates a work
   const status = await harness.controller.status("963");
   assert.notEqual(status.state, "architecture-superseded");
   assert.equal(status.architecture_supersession, undefined);
+});
+
+test("unrelated architecture changes do not invalidate an unchanged active Landing Unit", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-local-architecture-"));
+  const original = architecturePacket("a");
+  original.architecture.required_human_gates = [{
+    affected_landing_unit_ids: ["delivery-958-work-item-963"],
+    authority_owner_repo: "security-architecture",
+    authority_work_item_id: "work-item-962",
+    blocked_transition: "before_source_merge",
+    evidence_prerequisite_work_item_ids: ["work-item-960"],
+    evidence_requirement: "Review the exact active source head.",
+    gate_id: "gate:active-source",
+  }];
+  const harness = createHarness(root, { architectureArtifact: original });
+  await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  const unrelatedChange = structuredClone(original);
+  unrelatedChange.integrity.content_digest = `sha256:${"e".repeat(64)}`;
+  unrelatedChange.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"e".repeat(64)}`;
+  unrelatedChange.decision.rationale = "Correct an unrelated Landing Unit.";
+  unrelatedChange.architecture.landing_units.push({
+    covered_work_item_ids: ["work-item-964"],
+    id: "delivery-958-work-item-964",
+    owner_repo: "security-architecture",
+    source_backed: true,
+  });
+  unrelatedChange.architecture.required_human_gates[0]
+    .evidence_prerequisite_work_item_ids.push("work-item-961");
+  harness.setCurrentArchitecture(unrelatedChange);
+
+  const compatible = await harness.controller.status("963");
+  assert.notEqual(compatible.state, "architecture-superseded");
+  assert.equal(compatible.architecture_supersession, undefined);
+
+  const activeGateChange = structuredClone(unrelatedChange);
+  activeGateChange.integrity.content_digest = `sha256:${"f".repeat(64)}`;
+  activeGateChange.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"f".repeat(64)}`;
+  activeGateChange.architecture.required_human_gates[0]
+    .authority_work_item_id = "work-item-961";
+  harness.setCurrentArchitecture(activeGateChange);
+
+  const superseded = await harness.controller.status("963");
+  assert.equal(superseded.state, "architecture-superseded");
+  assert.equal(
+    superseded.next_action.code,
+    "architecture-reconstruction-required",
+  );
 });
 
 test("superseded sessions with source or evidence activity cannot reconstruct", async () => {
