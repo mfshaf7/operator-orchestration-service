@@ -9,6 +9,8 @@ security_evidence:
     - src/delivery-art/source-realization.js
     - src/delivery-art/source-executor.js
     - src/delivery-art/work-session-controller.js
+    - src/delivery-art/contracts.js
+    - src/delivery-art/service.js
     - src/delivery-art/work-session-cli-adapters.js
     - src/delivery-art/lifecycle-context.js
     - scripts/validate_openproject_mutation_contracts.py
@@ -48,7 +50,7 @@ Add a staged, replay-safe OOS source-realization workflow that turns an accepted
 ## Source Changes
 
 - changed workflow, adapter, or contract: add versioned start and change-set contracts, authenticated realization routes, CGG-only bounded context, governed-model binding, private draft custody, exact-digest acceptance, isolated Agent Gary apply, cancellation, retry, durable replay, unknown-outcome reconciliation, and pre-commit rollback.
-- tests or validator added: real Git commit and rollback proof; exact post-commit recovery; executor durable replay; CGG/model fail-closed binding; cancellation and retry; API caller/operator forwarding; generated OpenAPI synchronization; stable serial owner-suite execution to avoid the repo's previously documented parallel resource flake; validator self-test coverage proving source-realization routes do not masquerade as OpenProject mutation routes; active-Landing-Unit architecture comparison that preserves unchanged work across unrelated packet corrections while still rejecting any local owner, execution, conformance, handoff, runtime-boundary, or gate change.
+- tests or validator added: real Git commit and rollback proof; exact post-commit recovery; executor durable replay; CGG/model fail-closed binding; cancellation and retry; API caller/operator forwarding; generated OpenAPI synchronization; stable serial owner-suite execution to avoid the repo's previously documented parallel resource flake; validator self-test coverage proving source-realization routes do not masquerade as OpenProject mutation routes; active-Landing-Unit architecture comparison that preserves unchanged work across unrelated packet corrections while still rejecting any local owner, execution, conformance, handoff, runtime-boundary, or gate change; historical dependency compatibility that preserves immutable superseded packets without allowing a valid but non-current packet to authorize new work start.
 - related change records: `docs/records/change-records/2026-09-24-delivery-lifecycle-context.md`; `docs/records/change-records/2026-10-14-owner-evidence-retry-transition.md`
 
 ## Artifact And Deployment Evidence

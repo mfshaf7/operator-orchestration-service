@@ -706,6 +706,14 @@ source-retirement outcomes outside the replaced session. Sessions with any
 activity and a changed active projection remain fail-closed for a deliberate
 recovery decision.
 
+Superseded Architecture Packets remain immutable evidence. Dependency reads
+therefore recheck their schema, canonical content, digest, custody, reference
+binding, and common artifact semantics without retroactively applying a later
+architecture-only semantic rule. The current packet itself is always fully
+validated. New work-start authoring and evaluation additionally require the
+exact current ART-projected packet reference, so historical-read compatibility
+cannot authorize new work from superseded design.
+
 For the pre-merge evidence gate, `work continue` runs the owner repository's
 admitted evidence profile through the authenticated source executor. The
 profile comes from the owner repository's exact recorded base commit, not the

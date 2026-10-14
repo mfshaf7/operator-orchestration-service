@@ -497,6 +497,15 @@ pristine proof, and resource outcomes in a durable supersession receipt outside
 the replaceable session directory. Any activity with a changed active
 projection requires deliberate recovery instead.
 
+Immutable superseded Architecture Packets are historical dependencies, not
+new transition candidates. OOS validates their schema, canonical content,
+digest, custody, reference binding, and common artifact semantics, but does not
+retroactively require them to satisfy architecture-only semantic rules landed
+after their custody decision. The current Architecture Packet still receives
+full validation. Work-start authoring and evaluation also compare the requested
+packet with the exact current ART-projected reference and reject any valid but
+superseded packet before new work is admitted.
+
 `recover` is a bounded exception for an open ART item whose active session is
 blocked by architecture supersession or invalid pre-merge source binding and
 whose exact pull request is already merged without durable or finalized Review

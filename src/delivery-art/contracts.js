@@ -1771,6 +1771,31 @@ export function validateDeliveryArtArtifact(artifact) {
   };
 }
 
+export function validateDeliveryArtHistoricalArchitectureDependency(artifact) {
+  const errors = [
+    ...canonicalJsonErrors(artifact),
+    ...schemaErrors(artifact),
+  ];
+  if (
+    errors.length === 0 &&
+    artifact?.artifact_type === "delivery_art_architecture_packet"
+  ) {
+    errors.push(...commonSemanticErrors(artifact));
+  }
+  if (
+    errors.length === 0 &&
+    artifact?.artifact_type !== "delivery_art_architecture_packet"
+  ) {
+    errors.push("historical dependency validation is limited to Architecture Packets");
+  }
+  return {
+    artifact_type: artifact?.artifact_type ?? null,
+    content_digest: errors.length === 0 ? artifactContentDigest(artifact) : null,
+    errors,
+    valid: errors.length === 0,
+  };
+}
+
 function deliveryArtSemanticErrors(artifact) {
   const errors = [...commonSemanticErrors(artifact)];
   if (artifact.artifact_type === "delivery_art_architecture_packet") {
@@ -1888,7 +1913,11 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
   }
 
   for (const candidate of artifacts) {
-    const validation = validateDeliveryArtArtifact(candidate);
+    const validation =
+      candidate !== artifact &&
+      candidate.artifact_type === "delivery_art_architecture_packet"
+        ? validateDeliveryArtHistoricalArchitectureDependency(candidate)
+        : validateDeliveryArtArtifact(candidate);
     if (!validation.valid) {
       const identifier = resolvedArtifactIdentifier(candidate) ?? "unknown";
       errors.push(
