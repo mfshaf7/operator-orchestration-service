@@ -811,6 +811,7 @@ function architectureSemanticErrors(artifact) {
     const executionPlanByWorkItem = new Map();
     const emittedGateAuthorities = new Map();
     let combinedScheduleEdges = [];
+    let workPrecedenceEdges = [];
     if (artifact.schema_version === 2) {
       const workGraph = artifact.architecture?.work_dependency_graph ?? {};
       const workNodes = normalizedStringSet(workGraph.nodes);
@@ -830,6 +831,7 @@ function architectureSemanticErrors(artifact) {
       if (!graphIsAcyclic(workNodes, workEdges)) {
         errors.push("architecture work dependency graph must be acyclic");
       }
+      workPrecedenceEdges = workEdges;
     } else {
       const executionPlan = objectValues(
         artifact.architecture?.work_item_execution_plan,
@@ -910,6 +912,7 @@ function architectureSemanticErrors(artifact) {
       if (!graphIsAcyclic(workNodes, combinedScheduleEdges)) {
         errors.push("architecture work item execution plan has no executable start-and-close schedule");
       }
+      workPrecedenceEdges = combinedScheduleEdges;
     }
 
     const landingUnits = objectValues(artifact.architecture?.landing_units);
@@ -1024,6 +1027,7 @@ function architectureSemanticErrors(artifact) {
     }
 
     const gates = objectValues(artifact.architecture?.required_human_gates);
+    const earlyHumanGateEdges = [];
     const gateIds = gates.map((gate) => gate.gate_id);
     if (duplicateValues(gateIds).length > 0) {
       errors.push("architecture human gate ids must be unique");
@@ -1046,6 +1050,25 @@ function architectureSemanticErrors(artifact) {
         setDifference(affected, sourceBackedIds).size > 0
       ) {
         errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
+      }
+      if (["before_implementation", "before_source_merge"].includes(
+        gate.blocked_transition,
+      )) {
+        const authorityLandingUnitId = landingUnitByWorkItem.get(
+          authorityWorkItemId,
+        );
+        for (const affectedLandingUnitId of affected) {
+          if (
+            landingUnitIdSet.has(authorityLandingUnitId) &&
+            landingUnitIdSet.has(affectedLandingUnitId) &&
+            authorityLandingUnitId !== affectedLandingUnitId
+          ) {
+            earlyHumanGateEdges.push([
+              authorityLandingUnitId,
+              affectedLandingUnitId,
+            ]);
+          }
+        }
       }
       if ([3, 4, 5, 6].includes(artifact.schema_version)) {
         const evidencePrerequisites = normalizedStringSet(
@@ -1075,6 +1098,32 @@ function architectureSemanticErrors(artifact) {
           );
         }
       }
+    }
+
+    const combinedLandingEdges = [...sourceEdges];
+    for (const [prerequisiteWorkItemId, dependentWorkItemId] of workPrecedenceEdges) {
+      const prerequisiteLandingUnitId = landingUnitByWorkItem.get(
+        prerequisiteWorkItemId,
+      );
+      const dependentLandingUnitId = landingUnitByWorkItem.get(
+        dependentWorkItemId,
+      );
+      if (
+        landingUnitIdSet.has(prerequisiteLandingUnitId) &&
+        landingUnitIdSet.has(dependentLandingUnitId) &&
+        prerequisiteLandingUnitId !== dependentLandingUnitId
+      ) {
+        combinedLandingEdges.push([
+          prerequisiteLandingUnitId,
+          dependentLandingUnitId,
+        ]);
+      }
+    }
+    combinedLandingEdges.push(...earlyHumanGateEdges);
+    if (!graphIsAcyclic(landingUnitIdSet, combinedLandingEdges)) {
+      errors.push(
+        "architecture combined work, source-landing, and early human-gate topology must be acyclic",
+      );
     }
 
     if ([3, 4, 5, 6].includes(artifact.schema_version)) {
