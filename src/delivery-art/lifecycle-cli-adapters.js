@@ -13,8 +13,10 @@ import path from "node:path";
 import { canonicalDigest } from "./canonical-json.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
+  DeliveryArtEvidenceAcquisitionError,
   deliveryArtEvidenceAcquisitionRequest,
   deliveryArtOwnerEvidenceCommandText,
+  validateDeliveryArtEvidenceProfile,
 } from "./review-evidence-acquisition.js";
 
 function commandResult(execFileSyncImpl, command, args, options = {}) {
@@ -89,6 +91,124 @@ function ownerEvidenceEnvironment(kind) {
     delete environment[name];
   }
   return environment;
+}
+
+function evidenceResult(request, input, output = "") {
+  const result = {
+    ...input,
+    output_digest: `sha256:${createHash("sha256").update(output).digest("hex")}`,
+    result_digest: null,
+  };
+  const {
+    output_digest: _outputDigest,
+    result_digest: _resultDigest,
+    ...resultInput
+  } = result;
+  result.result_digest = canonicalDigest({
+    ...resultInput,
+    owner_repo: request.owner_repo,
+    source_revision: request.source_revision,
+  });
+  return result;
+}
+
+function evidenceReceipt({ clock, providerId, request, results, startedAt }) {
+  const receipt = {
+    schema_version: 1,
+    artifact_type: "delivery_art_owner_evidence_receipt",
+    acquisition_id: request.acquisition_id,
+    owner_repo: request.owner_repo,
+    profile_digest: request.profile_digest,
+    profile_id: request.profile_id,
+    profile_path: request.profile_path,
+    profile_revision: request.profile_revision,
+    provider: {
+      id: providerId,
+      kind: "oos-source-executor",
+    },
+    source_revision: request.source_revision,
+    started_at: startedAt,
+    completed_at: clock().toISOString(),
+    results,
+    evidence_digest: canonicalDigest({
+      acquisition_id: request.acquisition_id,
+      owner_repo: request.owner_repo,
+      profile_digest: request.profile_digest,
+      profile_id: request.profile_id,
+      profile_revision: request.profile_revision,
+      provider_id: providerId,
+      results: results.map(({ output_digest: _OutputDigest, ...entry }) => entry),
+      source_revision: request.source_revision,
+    }),
+    receipt_digest: null,
+  };
+  const { receipt_digest: _ReceiptDigest, ...receiptInput } = receipt;
+  receipt.receipt_digest = canonicalDigest(receiptInput);
+  return receipt;
+}
+
+function profileFailureRequest({
+  conformanceCases,
+  error,
+  ownerRepo,
+  profile,
+  profileRevision,
+  profileText,
+  source,
+}) {
+  const profileDigest = `sha256:${createHash("sha256")
+    .update(profileText)
+    .digest("hex")}`;
+  const groups = new Map();
+  for (const conformanceCase of conformanceCases ?? []) {
+    const fidelity = conformanceCase.fidelity ?? "filesystem";
+    const current = groups.get(fidelity) ?? [];
+    current.push(conformanceCase);
+    groups.set(fidelity, current);
+  }
+  if (groups.size === 0) groups.set("filesystem", []);
+  const failure = JSON.stringify({
+    code: error.code ?? "delivery_art_evidence_profile_invalid",
+    details: error.details ?? null,
+    message: error.message,
+  });
+  const request = {
+    acquisition_id: `owner-evidence:${createHash("sha256")
+      .update([
+        ownerRepo,
+        source.head_commit,
+        profileDigest,
+        "profile-validation-failed",
+        ...(conformanceCases ?? []).map((entry) => entry.id).sort(),
+      ].join("\0"))
+      .digest("hex")}`,
+    owner_repo: ownerRepo,
+    profile_digest: profileDigest,
+    profile_id:
+      typeof profile?.profile_id === "string" && profile.profile_id
+        ? profile.profile_id
+        : "invalid-owner-evidence-profile",
+    profile_path: DELIVERY_ART_EVIDENCE_PROFILE_PATH,
+    profile_revision: profileRevision,
+    source_revision: source.head_commit,
+  };
+  return {
+    request,
+    results: [...groups.entries()].map(([fidelity, cases]) =>
+      evidenceResult(request, {
+        command:
+          `internal validate ${DELIVERY_ART_EVIDENCE_PROFILE_PATH} --result ${error.code ?? "delivery_art_evidence_profile_invalid"}`,
+        command_id: `evidence-profile-contract-validation-${fidelity}`,
+        conformance_case_ids: cases.map((entry) => entry.id).sort(),
+        fidelity,
+        kind: cases.some((entry) => entry.target_readiness === "operating-ready")
+          ? "runtime_and_live"
+          : "validations",
+        name: "Owner evidence profile contract validation",
+        result: "fail",
+      }, failure),
+    ),
+  };
 }
 
 function pullRequestBaseName(baseRef) {
@@ -322,6 +442,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
           { code: "delivery_art_evidence_profile_revision_invalid" },
         );
       }
+      const startedAt = clock().toISOString();
       const profileText = evidenceProfilePath === null
         ? optionalOutput(
             execFileSyncImpl,
@@ -335,30 +456,106 @@ export function createDeliveryArtLifecycleSourceAdapter({
         : existsSync(path.resolve(evidenceProfilePath))
           ? { exitCode: 0, stdout: readFileSync(path.resolve(evidenceProfilePath), "utf8") }
           : { exitCode: 1, stdout: "" };
+      let profile = null;
+      let profileFailure = null;
+      let failureProfileRevision = profileRevision;
+      let failureProfileText = profileText.stdout;
       if (profileText.exitCode !== 0) {
-        throw Object.assign(
-          new Error("The owner repository base has no admitted evidence profile."),
-          { code: "delivery_art_evidence_profile_missing" },
+        profileFailure = new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_missing",
+          "The owner repository has no admitted evidence profile at the selected revision.",
         );
+      } else {
+        try {
+          profile = JSON.parse(profileText.stdout);
+        } catch {
+          profileFailure = new DeliveryArtEvidenceAcquisitionError(
+            "delivery_art_evidence_profile_invalid",
+            "The owner evidence profile is not valid JSON.",
+          );
+        }
       }
-      let profile;
-      try {
-        profile = JSON.parse(profileText.stdout);
-      } catch {
-        throw Object.assign(
-          new Error("The owner evidence profile is not valid JSON."),
-          { code: "delivery_art_evidence_profile_invalid" },
-        );
+      let request = null;
+      if (profileFailure === null) {
+        try {
+          request = deliveryArtEvidenceAcquisitionRequest({
+            conformanceCases,
+            ownerRepo: landingUnit.owner_repo,
+            profile,
+            profileRevision,
+            requiredEvidenceKinds,
+            source,
+          });
+          if (
+            evidenceProfilePath === null &&
+            profileRevision === source.base_commit &&
+            source.head_commit !== source.base_commit
+          ) {
+            profile = null;
+            const candidateProfileText = optionalOutput(
+              execFileSyncImpl,
+              "git",
+              [
+                "show",
+                `${source.head_commit}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`,
+              ],
+              landingUnit.repo_root,
+            );
+            failureProfileRevision = source.head_commit;
+            failureProfileText = candidateProfileText.stdout;
+            if (candidateProfileText.exitCode !== 0) {
+              throw new DeliveryArtEvidenceAcquisitionError(
+                "delivery_art_evidence_profile_missing",
+                "The candidate source removes its required owner evidence profile.",
+              );
+            }
+            try {
+              profile = JSON.parse(candidateProfileText.stdout);
+            } catch {
+              throw new DeliveryArtEvidenceAcquisitionError(
+                "delivery_art_evidence_profile_invalid",
+                "The candidate owner evidence profile is not valid JSON.",
+              );
+            }
+            validateDeliveryArtEvidenceProfile(
+              profile,
+              landingUnit.owner_repo,
+            );
+          }
+        } catch (error) {
+          if (!(error instanceof DeliveryArtEvidenceAcquisitionError)) throw error;
+          profileFailure = error;
+        }
       }
-      const request = deliveryArtEvidenceAcquisitionRequest({
-        conformanceCases,
-        ownerRepo: landingUnit.owner_repo,
-        profile,
-        profileRevision,
-        requiredEvidenceKinds,
-        source,
-      });
-      const startedAt = clock().toISOString();
+      if (profileFailure !== null) {
+        const failed = profileFailureRequest({
+          conformanceCases,
+          error: profileFailure,
+          ownerRepo: landingUnit.owner_repo,
+          profile,
+          profileRevision: failureProfileRevision,
+          profileText: failureProfileText,
+          source,
+        });
+        const after = await inspect(landingUnit);
+        if (
+          after.state !== "pushed" ||
+          after.head_commit !== before.head_commit ||
+          after.base_commit !== before.base_commit
+        ) {
+          throw Object.assign(
+            new Error("Owner evidence profile validation observed changing source."),
+            { code: "delivery_art_owner_evidence_source_mutated" },
+          );
+        }
+        return evidenceReceipt({
+          clock,
+          providerId,
+          request: failed.request,
+          results: failed.results,
+          startedAt,
+        });
+      }
       const results = [];
       for (const command of request.commands) {
         const commandEnvironment = ownerEvidenceEnvironment(command.kind);
@@ -383,32 +580,15 @@ export function createDeliveryArtLifecycleSourceAdapter({
             timeout: command.timeout_seconds * 1000,
           },
         );
-        const outputDigest = `sha256:${createHash("sha256")
-          .update(outcome.stdout)
-          .update("\0")
-          .update(outcome.stderr)
-          .digest("hex")}`;
-        const result = {
+        const result = evidenceResult(request, {
           command: deliveryArtOwnerEvidenceCommandText(command),
           command_id: command.id,
           conformance_case_ids: [...command.conformance_case_ids],
           fidelity: command.fidelity,
           kind: command.kind,
           name: command.name,
-          output_digest: outputDigest,
           result: outcome.exitCode === 0 ? "pass" : "fail",
-          result_digest: null,
-        };
-        const {
-          output_digest: _outputDigest,
-          result_digest: _resultDigest,
-          ...resultInput
-        } = result;
-        result.result_digest = canonicalDigest({
-          ...resultInput,
-          owner_repo: request.owner_repo,
-          source_revision: request.source_revision,
-        });
+        }, `${outcome.stdout}\0${outcome.stderr}`);
         results.push(result);
         if (outcome.exitCode !== 0) break;
       }
@@ -423,38 +603,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
           { code: "delivery_art_owner_evidence_source_mutated" },
         );
       }
-      const receipt = {
-        schema_version: 1,
-        artifact_type: "delivery_art_owner_evidence_receipt",
-        acquisition_id: request.acquisition_id,
-        owner_repo: request.owner_repo,
-        profile_digest: request.profile_digest,
-        profile_id: request.profile_id,
-        profile_path: request.profile_path,
-        profile_revision: request.profile_revision,
-        provider: {
-          id: providerId,
-          kind: "oos-source-executor",
-        },
-        source_revision: request.source_revision,
-        started_at: startedAt,
-        completed_at: clock().toISOString(),
-        results,
-        evidence_digest: canonicalDigest({
-          acquisition_id: request.acquisition_id,
-          owner_repo: request.owner_repo,
-          profile_digest: request.profile_digest,
-          profile_id: request.profile_id,
-          profile_revision: request.profile_revision,
-          provider_id: providerId,
-          results: results.map(({ output_digest: _outputDigest, ...entry }) => entry),
-          source_revision: request.source_revision,
-        }),
-        receipt_digest: null,
-      };
-      const { receipt_digest: _receiptDigest, ...receiptInput } = receipt;
-      receipt.receipt_digest = canonicalDigest(receiptInput);
-      return receipt;
+      return evidenceReceipt({ clock, providerId, request, results, startedAt });
     },
     async pullRequest(landingUnit, binding = null) {
       const fields = "state,isDraft,url,headRefOid,baseRefName,mergeCommit";
