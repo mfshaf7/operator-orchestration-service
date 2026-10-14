@@ -314,14 +314,27 @@ function createHarness(
     async currentArchitecture() {
       return structuredClone(currentArchitectureArtifact);
     },
-    async draftWorkStart() {
+    async draftWorkStart({ input } = {}) {
       return {
         artifact_type: "delivery_art_work_start_record",
+        architecture: input?.architecture?.required
+          ? {
+              packet_digest: input.architecture.reference.digest,
+              packet_ref: input.architecture.reference.uri,
+              readiness: "architecture-ready",
+              required: true,
+            }
+          : {
+              packet_digest: null,
+              packet_ref: null,
+              readiness: "not-required",
+              required: false,
+            },
         custody: { state: "local-draft" },
         readiness: { level: "draft" },
       };
     },
-    async evaluateWorkStart(artifact) {
+    async evaluateWorkStart({ artifact }) {
       return {
         ...artifact,
         custody: { state: "durable" },
@@ -2023,8 +2036,69 @@ test("unrelated architecture changes do not invalidate an unchanged active Landi
   harness.setCurrentArchitecture(unrelatedChange);
 
   const compatible = await harness.controller.status("963");
-  assert.notEqual(compatible.state, "architecture-superseded");
+  assert.equal(compatible.state, "architecture-refresh-required");
+  assert.equal(
+    compatible.next_action.code,
+    "architecture-compatible-refresh-required",
+  );
   assert.equal(compatible.architecture_supersession, undefined);
+
+  const interruptedSession = harness.store.readByAlias("work-item-963");
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.architecture.artifact_file,
+    unrelatedChange,
+  );
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.artifacts.review_packet_file,
+    {
+      work_start: {
+        artifact_digest: `sha256:${"c".repeat(64)}`,
+        artifact_ref: `wgcf://artifacts/delivery-art/sha256/${"c".repeat(64)}`,
+      },
+    },
+  );
+  harness.store.writeArtifact(
+    interruptedSession,
+    interruptedSession.artifacts.readiness_receipt_file,
+    { receipt_id: "stale-readiness" },
+  );
+  const resumable = await harness.controller.status("963");
+  assert.equal(resumable.state, "architecture-refresh-required");
+
+  await harness.controller.continue("963");
+  const refreshedSession = harness.store.readByAlias("work-item-963");
+  const refreshedArchitecture = harness.store.readArtifact(
+    refreshedSession,
+    refreshedSession.architecture.artifact_file,
+  );
+  const refreshedWorkStart = harness.store.readArtifact(
+    refreshedSession,
+    refreshedSession.artifacts.work_start_file,
+  );
+  assert.equal(
+    refreshedArchitecture.integrity.content_digest,
+    unrelatedChange.integrity.content_digest,
+  );
+  assert.equal(
+    refreshedWorkStart.architecture.packet_digest,
+    unrelatedChange.integrity.content_digest,
+  );
+  assert.equal(
+    harness.store.readArtifact(
+      refreshedSession,
+      refreshedSession.artifacts.review_packet_file,
+    ),
+    null,
+  );
+  assert.equal(
+    harness.store.readArtifact(
+      refreshedSession,
+      refreshedSession.artifacts.readiness_receipt_file,
+    ),
+    null,
+  );
 
   const activeGateChange = structuredClone(unrelatedChange);
   activeGateChange.integrity.content_digest = `sha256:${"f".repeat(64)}`;

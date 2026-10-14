@@ -696,15 +696,21 @@ Unit: its exact scope and owner, execution plan, incoming evidence handoffs,
 owner runtime boundary, conformance cases, and effective human gate. A gate's
 authority and blocked transition remain binding, while changes to prerequisites
 of that separate authority item do not invalidate unchanged source work. An
-unrelated Landing Unit correction therefore does not strand valid work. Any
-change to the active projection stops in `architecture-superseded`.
+unrelated Landing Unit correction therefore does not strand valid work. OOS
+projects `architecture-compatible-refresh-required`, and the normal
+`work continue` transition serially replaces the session's packet and
+work-start bindings with exact current durable evidence. The transition is
+crash-resumable: a partial binding or stale Review Packet/readiness reference
+projects the same refresh action on restart. Source state is preserved, while
+the prior Review Packet and readiness projections are cleared so they must be
+regenerated against the current binding. Any change to the active projection
+stops in `architecture-superseded`.
 
-OOS never rewrites the session's recorded packet binding. It permits explicit
-reconstruction only when Git, GitHub, evidence, Review Packet, and readiness
-state prove that no work began. It records both architecture bindings and
-source-retirement outcomes outside the replaced session. Sessions with any
-activity and a changed active projection remain fail-closed for a deliberate
-recovery decision.
+OOS permits explicit reconstruction only when Git, GitHub, evidence, Review
+Packet, and readiness state prove that no work began. It records both
+architecture bindings and source-retirement outcomes outside the replaced
+session. Sessions with any activity and a changed active projection remain
+fail-closed for a deliberate recovery decision.
 
 Superseded Architecture Packets remain immutable evidence. Dependency reads
 therefore recheck their schema, canonical content, digest, custody, reference
