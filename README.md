@@ -337,9 +337,16 @@ scope is still intentionally narrow.
   the work-session context API derives ART, repository, validation, and runtime
   sources from authoritative session truth, uses CGG packets by default, fails
   closed when packet projection is unavailable or invalid, and measures every
-  explicit reason-bound raw fallback. OOS retains lifecycle action authority;
-  source support remains uncommissioned until the dedicated Security and
-  Platform activation work lands
+  explicit reason-bound raw fallback. OOS retains lifecycle action authority
+- bounded Delivery source realization:
+  authenticated work-session APIs capture only a clean bounded repository
+  context, admit it through CGG, stage one schema-validated governed-model
+  change set without mutation, require exact operator acceptance of its digest,
+  and then commit through the isolated source executor as Agent Gary. Durable
+  replay, explicit cancellation and retry, unknown-outcome recovery, and
+  pre-commit rollback preserve one mutation boundary. The implementation is
+  disabled until the dedicated Security acceptance and Platform commissioning
+  work activate the exact model profile and runtime composition
 - required WGCF ART readiness in the active dev-integration broker profile:
   `WGCF_ART_READINESS_MODE=required` makes server-side completion and stale-open
   closeout routes call the WGCF API before OpenProject writes

@@ -24,6 +24,12 @@ const lifecycleContextRequestPath = path.join(
   "delivery-art-work-session",
   "lifecycle-context-request.schema.json",
 );
+const sourceRealizationStartPath = path.join(
+  repoRoot,
+  "contracts",
+  "delivery-art-work-session",
+  "source-realization-start.schema.json",
+);
 const original = readFileSync(openApiPath, "utf8");
 let synchronized = original;
 
@@ -35,6 +41,21 @@ const lifecycleContextRequestSchema = JSON.parse(
 );
 delete lifecycleContextRequestSchema.$schema;
 delete lifecycleContextRequestSchema.$id;
+const sourceRealizationStartSchema = JSON.parse(
+  readFileSync(sourceRealizationStartPath, "utf8"),
+);
+delete sourceRealizationStartSchema.$schema;
+delete sourceRealizationStartSchema.$id;
+delete sourceRealizationStartSchema.$defs;
+sourceRealizationStartSchema.properties.request_id = {
+  $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1",
+};
+sourceRealizationStartSchema.properties.execution_id = {
+  $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1",
+};
+sourceRealizationStartSchema.properties.retry_of.oneOf[0] = {
+  $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1",
+};
 
 const nullableRevision = {
   oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
@@ -787,6 +808,120 @@ const components = {
       },
     },
   },
+  DeliveryArtSourceRealizationStableIdV1: {
+    type: "string",
+    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$",
+  },
+  DeliveryArtSourceRealizationDigestV1: {
+    type: "string",
+    pattern: "^sha256:[0-9a-f]{64}$",
+  },
+  DeliveryArtSourceRealizationStartV1: sourceRealizationStartSchema,
+  DeliveryArtSourceRealizationStartEnvelopeV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["realization"],
+    properties: {
+      realization: {
+        $ref: "#/components/schemas/DeliveryArtSourceRealizationStartV1",
+      },
+    },
+  },
+  DeliveryArtSourceRealizationContinueV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "schema_version",
+      "command_id",
+      "expected_revision",
+      "accepted_change_set_digest",
+      "requested_at",
+    ],
+    properties: {
+      schema_version: { const: 1 },
+      command_id: { $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1" },
+      expected_revision: { type: "string", format: "date-time" },
+      accepted_change_set_digest: {
+        $ref: "#/components/schemas/DeliveryArtSourceRealizationDigestV1",
+      },
+      requested_at: { type: "string", format: "date-time" },
+    },
+  },
+  DeliveryArtSourceRealizationCancelV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["schema_version", "command_id", "expected_revision", "reason", "requested_at"],
+    properties: {
+      schema_version: { const: 1 },
+      command_id: { $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1" },
+      expected_revision: { type: "string", format: "date-time" },
+      reason: { type: "string", minLength: 20 },
+      requested_at: { type: "string", format: "date-time" },
+    },
+  },
+  DeliveryArtSourceRealizationRecoverV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["schema_version", "command_id", "expected_revision", "requested_at"],
+    properties: {
+      schema_version: { const: 1 },
+      command_id: { $ref: "#/components/schemas/DeliveryArtSourceRealizationStableIdV1" },
+      expected_revision: { type: "string", format: "date-time" },
+      requested_at: { type: "string", format: "date-time" },
+    },
+  },
+  DeliveryArtSourceRealizationCommandEnvelopeV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["realization"],
+    properties: { realization: { type: "object" } },
+  },
+  DeliveryArtSourceRealizationProjectionV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "schema_version",
+      "workflow_id",
+      "session_id",
+      "work_item_id",
+      "revision",
+      "state",
+      "attempt",
+      "next_action",
+      "replayed",
+    ],
+    properties: {
+      schema_version: { const: 1 },
+      workflow_id: { const: "delivery-art-source-realization" },
+      session_id: { type: "string", minLength: 1 },
+      work_item_id: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+      revision: nullableRevision,
+      state: {
+        enum: [
+          "not-started",
+          "accepted",
+          "draft-ready",
+          "applying",
+          "apply-unknown",
+          "source-created",
+          "cancelled",
+          "failed",
+        ],
+      },
+      attempt: { type: ["object", "null"], additionalProperties: true },
+      next_action: {
+        type: "object",
+        additionalProperties: false,
+        required: ["code", "authority", "reason"],
+        properties: {
+          code: { type: "string", minLength: 1 },
+          authority: { type: "string", minLength: 1 },
+          reason: { type: "string", minLength: 1 },
+        },
+      },
+      replayed: { type: "boolean" },
+    },
+  },
   DeliveryArtWorkSessionErrorV1: {
     type: "object",
     additionalProperties: false,
@@ -1000,6 +1135,123 @@ const commandOperation = ({ action, description, schemaName }) => ({
       503: errorResponse("The admitted source executor or an authoritative dependency is unavailable."),
     },
     ...operationMetadata,
+  },
+});
+const sourceRealizationExample = {
+  schema_version: 1,
+  workflow_id: "delivery-art-source-realization",
+  session_id: "work-session:delivery-1275:delivery-1275-source-realization",
+  work_item_id: "work-item-1285",
+  revision: "2026-10-14T01:00:01Z",
+  state: "draft-ready",
+  attempt: {
+    request_id: "source-realization-request-1285-1",
+    execution_id: "console-execution-1285-1",
+    state: "draft-ready",
+    objective_digest: `sha256:${"a".repeat(64)}`,
+    change_set: {
+      change_set_id: "change-set-1285-1",
+      digest: `sha256:${"b".repeat(64)}`,
+      commit_message: "feat: implement the accepted source plan",
+      operations: [{
+        action: "replace",
+        path: "src/example.js",
+        content_digest: `sha256:${"c".repeat(64)}`,
+        expected_digest: `sha256:${"d".repeat(64)}`,
+      }],
+    },
+  },
+  next_action: {
+    code: "source-realization-acceptance-required",
+    authority: "operator",
+    reason: "Review and accept the exact change-set digest before Agent Gary commits it.",
+  },
+  replayed: false,
+};
+const sourceRealizationRequestExamples = {
+  start: {
+    realization: {
+      schema_version: 1,
+      request_id: "source-realization-request-1285-1",
+      execution_id: "console-execution-1285-1",
+      expected_session_revision: "2026-10-14T00:59:00Z",
+      objective: "Implement the accepted bounded source plan with its required tests.",
+      requested_at: "2026-10-14T00:59:30Z",
+      budget_tokens: 3000,
+      retry_of: null,
+    },
+  },
+  continue: {
+    realization: {
+      schema_version: 1,
+      command_id: "source-realization-accept-1285-1",
+      expected_revision: "2026-10-14T01:00:01Z",
+      accepted_change_set_digest: `sha256:${"b".repeat(64)}`,
+      requested_at: "2026-10-14T01:01:00Z",
+    },
+  },
+  cancel: {
+    realization: {
+      schema_version: 1,
+      command_id: "source-realization-cancel-1285-1",
+      expected_revision: "2026-10-14T01:00:01Z",
+      reason: "The operator rejected this exact draft after review.",
+      requested_at: "2026-10-14T01:01:00Z",
+    },
+  },
+  recover: {
+    realization: {
+      schema_version: 1,
+      command_id: "source-realization-recover-1285-1",
+      expected_revision: "2026-10-14T01:02:00Z",
+      requested_at: "2026-10-14T01:03:00Z",
+    },
+  },
+};
+const sourceRealizationOperation = ({ action, description, schemaName }) => ({
+  post: {
+    tags: ["Delivery ART"],
+    summary: `${action[0].toUpperCase()}${action.slice(1)} bounded source realization`,
+    description,
+    operationId: `${action}DeliveryArtSourceRealization`,
+    security,
+    parameters: [parameter, operatorParameter],
+    requestBody: {
+      required: true,
+      description: "Provide the caller-bound source-realization request or command for the exact current realization revision.",
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["realization"],
+            properties: {
+              realization: { $ref: `#/components/schemas/${schemaName}` },
+            },
+          },
+          example: sourceRealizationRequestExamples[action],
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "Authoritative bounded source-realization projection.",
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/DeliveryArtSourceRealizationProjectionV1" },
+            example: sourceRealizationExample,
+          },
+        },
+      },
+      400: errorResponse("The source-realization command is invalid."),
+      401: errorResponse("Caller authentication is missing or invalid."),
+      403: errorResponse("Caller or operator identity does not match the work session."),
+      409: errorResponse("The source-realization revision, binding, or lifecycle state conflicts."),
+      502: errorResponse("The governed model or source executor returned invalid output."),
+      503: errorResponse("The bounded source-realization runtime is unavailable."),
+    },
+    ...operationMetadata,
+    "x-oos-workflow-family": "delivery-art-source-realization",
   },
 });
 
@@ -1286,6 +1538,57 @@ const paths = {
       ...operationMetadata,
     },
   },
+  "/v1/delivery-work-items/{work_item_id}/work-session/realization": {
+    get: {
+      tags: ["Delivery ART"],
+      summary: "Read bounded source realization",
+      description: "Returns the authoritative staged realization state without exposing generated source content. Exact paths and digests remain visible for operator review.",
+      operationId: "getDeliveryArtSourceRealization",
+      security,
+      parameters: [parameter, operatorParameter],
+      responses: {
+        200: {
+          description: "Authoritative bounded source-realization projection.",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DeliveryArtSourceRealizationProjectionV1" },
+              example: sourceRealizationExample,
+            },
+          },
+        },
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("Caller or operator identity does not match the work session."),
+        409: errorResponse("The Delivery work session is missing."),
+        503: errorResponse("The bounded source-realization runtime is unavailable."),
+      },
+      ...operationMetadata,
+      "x-oos-workflow-family": "delivery-art-source-realization",
+    },
+  },
+  "/v1/delivery-work-items/{work_item_id}/work-session/realization/start":
+    sourceRealizationOperation({
+      action: "start",
+      description: "Captures clean bounded repository context, admits it through CGG, invokes only the commissioned governed model profile, and stages the validated change set without mutating source.",
+      schemaName: "DeliveryArtSourceRealizationStartV1",
+    }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/realization/continue":
+    sourceRealizationOperation({
+      action: "continue",
+      description: "Applies and commits only the exact operator-accepted change-set digest through the isolated source executor as Agent Gary.",
+      schemaName: "DeliveryArtSourceRealizationContinueV1",
+    }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/realization/cancel":
+    sourceRealizationOperation({
+      action: "cancel",
+      description: "Cancels a draft-ready change set without mutating source and retains the reasoned terminal attempt for an explicitly linked retry.",
+      schemaName: "DeliveryArtSourceRealizationCancelV1",
+    }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/realization/recover":
+    sourceRealizationOperation({
+      action: "recover",
+      description: "Reconciles an unknown apply result through the exact replay-safe source action; it never generates a new change set or authorizes another mutation.",
+      schemaName: "DeliveryArtSourceRealizationRecoverV1",
+    }),
   "/v1/delivery-work-items/{work_item_id}/work-session": {
     get: {
       tags: ["Delivery ART"],

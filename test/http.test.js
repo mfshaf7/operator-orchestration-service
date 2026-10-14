@@ -4714,6 +4714,22 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
         mode: "packet",
       };
     },
+    async readRealization(input) {
+      calls.push(["readRealization", input]);
+      return {
+        workflow_id: "delivery-art-source-realization",
+        work_item_id: "work-item-1024",
+        state: "not-started",
+      };
+    },
+    async executeRealization(input) {
+      calls.push(["executeRealization", input]);
+      return {
+        workflow_id: "delivery-art-source-realization",
+        work_item_id: "work-item-1024",
+        state: "draft-ready",
+      };
+    },
   };
   const app = createApp({
     config,
@@ -4764,6 +4780,27 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     method: "POST",
     url: "/v1/delivery-work-items/1024/work-session/context",
   });
+  const realizationStatus = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/delivery-work-items/1024/work-session/realization",
+  });
+  const realizationRequest = {
+    schema_version: 1,
+    request_id: "source-realization-request-1024-1",
+    execution_id: "source-realization-execution-1024-1",
+    expected_session_revision: "2026-08-27T01:00:00.000Z",
+    objective: "Implement the accepted bounded source plan.",
+    requested_at: "2026-08-27T01:00:01.000Z",
+    budget_tokens: 3000,
+    retry_of: null,
+  };
+  const realizationStart = await executeRequest(app, {
+    body: { realization: realizationRequest },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/realization/start",
+  });
   const merge = await executeRequest(app, {
     body: {
       command: {
@@ -4811,6 +4848,8 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   assert.equal(preflight.statusCode, 200);
   assert.equal(command.statusCode, 200);
   assert.equal(context.statusCode, 200);
+  assert.equal(realizationStatus.statusCode, 200);
+  assert.equal(realizationStart.statusCode, 200);
   assert.equal(merge.statusCode, 200);
   assert.equal(reconstruct.statusCode, 200);
   assert.equal(recover.statusCode, 200);
@@ -4840,6 +4879,19 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
       callerId: "operator:workspace-owner",
       operatorId: "operator:workspace-owner",
       request: contextRequest,
+      workItemId: "1024",
+    }],
+    ["readRealization", {
+      callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["executeRealization", {
+      action: "start",
+      callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      request: realizationRequest,
+      signal: calls.find((entry) => entry[0] === "executeRealization")?.[1].signal,
       workItemId: "1024",
     }],
     ["execute", {

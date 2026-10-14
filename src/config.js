@@ -335,6 +335,13 @@ export function loadConfig(
             "operator-orchestration-service",
           callerSecret: env.CGG_LIFECYCLE_CALLER_SECRET?.trim() || "",
         },
+        sourceRealization: {
+          enabled: parseBoolean(env.OOS_SOURCE_REALIZATION_ENABLED),
+          gatewayBaseUrl: env.GOVERNED_AI_GATEWAY_BASE_URL?.trim() || "",
+          profileId:
+            env.OOS_SOURCE_REALIZATION_PROFILE_ID?.trim() ||
+            "source-realization-v1",
+        },
       },
     },
     workDesign: {

@@ -2001,6 +2001,40 @@ async function handleDeliveryArtLifecycleContext({
   sendJson(response, 200, result);
 }
 
+async function handleDeliveryArtSourceRealization({
+  action,
+  config,
+  deliveryArtWorkSessionService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery source realization");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  if (action === "read") {
+    sendJson(response, 200, await deliveryArtWorkSessionService.readRealization({
+      callerId: caller.id,
+      operatorId,
+      workItemId,
+    }));
+    return;
+  }
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.realization, "realization");
+  const controller = new AbortController();
+  request.once?.("aborted", () => controller.abort());
+  sendJson(response, 200, await deliveryArtWorkSessionService.executeRealization({
+    action,
+    callerId: caller.id,
+    operatorId,
+    request: body.realization,
+    signal: controller.signal,
+    workItemId,
+  }));
+}
+
 async function handleDraftDeliveryWorkStart({
   config,
   deliveryArtArtifactService,
@@ -5527,6 +5561,81 @@ export function createApp({
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/context$/.test(url.pathname)
       ) {
         await handleDeliveryArtLifecycleContext({
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtSourceRealization({
+          action: "read",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/start$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtSourceRealization({
+          action: "start",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/continue$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtSourceRealization({
+          action: "continue",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/cancel$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtSourceRealization({
+          action: "cancel",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/recover$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtSourceRealization({
+          action: "recover",
           config,
           deliveryArtWorkSessionService,
           request,

@@ -141,6 +141,11 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
         callerId: "operator-orchestration-service",
         callerSecret: "",
       },
+      sourceRealization: {
+        enabled: false,
+        gatewayBaseUrl: "",
+        profileId: "source-realization-v1",
+      },
     },
     writerTopology: "single-writer",
   });
@@ -150,6 +155,25 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
     deliveryArtBaseUrl: "http://wgcf.local",
     deliveryArtCallerId: "operator-orchestration-service",
     deliveryArtCallerSecret: "s".repeat(32),
+  });
+});
+
+test("bounded source realization stays disabled until its exact runtime profile is configured", () => {
+  const disabled = loadConfig({});
+  assert.deepEqual(disabled.deliveryArt.workSession.sourceRealization, {
+    enabled: false,
+    gatewayBaseUrl: "",
+    profileId: "source-realization-v1",
+  });
+  const configured = loadConfig({
+    GOVERNED_AI_GATEWAY_BASE_URL: "http://governed-ai-gateway.local",
+    OOS_SOURCE_REALIZATION_ENABLED: "true",
+    OOS_SOURCE_REALIZATION_PROFILE_ID: "source-realization-reviewed-v1",
+  });
+  assert.deepEqual(configured.deliveryArt.workSession.sourceRealization, {
+    enabled: true,
+    gatewayBaseUrl: "http://governed-ai-gateway.local",
+    profileId: "source-realization-reviewed-v1",
   });
 });
 

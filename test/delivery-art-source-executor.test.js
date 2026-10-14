@@ -43,6 +43,19 @@ function adapters(calls, configuredPathCalls = []) {
       pullRequest: async () => ({ state: "open" }),
     },
     workSource: {
+      applySourceRealization: async (_session, changeSet) => ({
+        schema_version: 1,
+        receipt_id: "source-realization-receipt:test",
+        outcome: "committed",
+        head_commit: "d".repeat(40),
+        receipt_digest: `sha256:${"e".repeat(64)}`,
+        change_set_id: changeSet.change_set_id,
+      }),
+      captureRealizationContext: async () => ({
+        schema_version: 1,
+        clean: true,
+        context_digest: `sha256:${"f".repeat(64)}`,
+      }),
       ensureOwnedWorktree: async () => ({ path: "/workspace/repo", resources: [] }),
       ensureWorktree: async () => "/workspace/repo",
       inspectConfiguredPath: async (session, requirements) => {
@@ -273,6 +286,79 @@ test("source executor durably replays completed evidence after its caller disapp
     assert.equal(statSync(path.join(resultStoreRoot, records[0])).mode & 0o777, 0o600);
   } finally {
     await close(secondServer);
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("source executor durably replays an Agent Gary commit without a second mutation", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-source-realization-replay-"));
+  const resultStoreRoot = path.join(root, "results");
+  const firstSocket = path.join(root, "executor-first.sock");
+  let applyCalls = 0;
+  const firstAdapters = adapters([]);
+  firstAdapters.workSource.applySourceRealization = async () => {
+    applyCalls += 1;
+    return {
+      schema_version: 1,
+      receipt_id: "source-realization-receipt:durable",
+      outcome: "committed",
+      head_commit: "d".repeat(40),
+      receipt_digest: `sha256:${"e".repeat(64)}`,
+    };
+  };
+  const changeSet = {
+    schema_version: 1,
+    change_set_id: "change-set:durable",
+    session_id: "work-session:test",
+    base_commit: "a".repeat(40),
+    objective_digest: `sha256:${"b".repeat(64)}`,
+    commit_message: "feat: durable source realization",
+    operations: [{ action: "create", path: "src/a.js", content: "a\n", expected_digest: null }],
+  };
+  const firstServer = createDeliveryArtSourceExecutorServer({
+    adapters: firstAdapters,
+    executorId: "delivery-source-executor",
+    resultStoreRoot,
+    secret: SECRET,
+  });
+  await listen(firstServer, firstSocket);
+  try {
+    const client = createDeliveryArtSourceExecutorClient({
+      executorId: "delivery-source-executor",
+      secret: SECRET,
+      socketPath: firstSocket,
+    });
+    const result = await client.executor.run(context(), () =>
+      client.workSource.applySourceRealization({ session_id: "work-session:test" }, changeSet));
+    assert.equal(result.outcome, "committed");
+  } finally {
+    await close(firstServer);
+  }
+
+  const replayAdapters = adapters([]);
+  replayAdapters.workSource.applySourceRealization = async () => {
+    throw new Error("durable source action must replay without another mutation");
+  };
+  const replayServer = createDeliveryArtSourceExecutorServer({
+    adapters: replayAdapters,
+    executorId: "delivery-source-executor",
+    resultStoreRoot,
+    secret: SECRET,
+  });
+  const replaySocket = path.join(root, "executor-replay.sock");
+  await listen(replayServer, replaySocket);
+  try {
+    const client = createDeliveryArtSourceExecutorClient({
+      executorId: "delivery-source-executor",
+      secret: SECRET,
+      socketPath: replaySocket,
+    });
+    const replay = await client.executor.run(context(), () =>
+      client.workSource.applySourceRealization({ session_id: "work-session:test" }, changeSet));
+    assert.equal(replay.head_commit, "d".repeat(40));
+    assert.equal(applyCalls, 1);
+  } finally {
+    await close(replayServer);
     rmSync(root, { force: true, recursive: true });
   }
 });

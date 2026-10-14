@@ -997,6 +997,45 @@ content are never stored in work-session state. Runtime availability remains
 off until Security and Platform commission the dedicated endpoint and
 caller-secret projection.
 
+### Bounded Source Realization
+
+Normal source realization is a Console-driven staged operation on the active
+Delivery work session. It is not a chat instruction and does not grant the
+model repository or shell access.
+
+1. Read the work session and realization status. Start only when the work
+   session reports `source-work-required`, its exact base is clean, and Agent
+   Gary is ready.
+2. Submit the bounded implementation objective to the realization `start`
+   endpoint. OOS captures repository context through the isolated executor and
+   admits it through CGG before invoking the commissioned governed-model
+   profile.
+3. Review the returned paths, actions, commit message, and exact change-set
+   digest. Generated file contents remain in private OOS custody rather than in
+   the public projection.
+4. Accept that exact digest through `continue`, or cancel the draft with a
+   substantive reason. Acceptance is the only transition that may apply source.
+5. After `source-created`, continue the ordinary work session. OOS validates,
+   publishes, obtains exact-head human review and any declared Security gate,
+   merges, records evidence, closes ART, and cleans resources through the
+   existing lifecycle.
+
+For a terminal cancellation or model/provider failure, a new `start` request
+must bind `retry_of` to the immediately preceding request. For
+`apply-unknown`, use only the realization `recover` endpoint; do not edit the
+worktree or generate another draft. Recovery replays the same accepted action
+and reconciles its durable receipt or exact digest-bound Git commit.
+
+Stop and repair the authoritative dependency when the API reports source drift,
+unsafe context, an invalid model binding, missing Security or Platform
+commissioning, identity mismatch, or an unavailable source executor. Never use
+manual file edits, a raw model prompt, a shared credential, or a merge bypass to
+turn a failed realization into apparent completion.
+
+The implementation remains unavailable in normal operation until the exact
+Security review and Platform activation for `source-realization-v1` are both
+present. A merged OOS source change alone is not commissioning evidence.
+
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build
 every JSON body for item completion or initiative closeout. When multiple repo

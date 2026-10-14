@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/source-realization-start.schema.json",
+  "title": "Delivery ART source realization start request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "execution_id",
+    "expected_session_revision",
+    "objective",
+    "requested_at",
+    "budget_tokens",
+    "retry_of"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/stableId" },
+    "execution_id": { "$ref": "#/$defs/stableId" },
+    "expected_session_revision": { "type": "string", "format": "date-time" },
+    "objective": { "type": "string", "minLength": 20, "maxLength": 12000 },
+    "requested_at": { "type": "string", "format": "date-time" },
+    "budget_tokens": { "type": "integer", "minimum": 256, "maximum": 8000 },
+    "retry_of": {
+      "oneOf": [
+        { "$ref": "#/$defs/stableId" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    }
+  }
+}

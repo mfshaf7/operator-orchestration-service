@@ -16,7 +16,10 @@ import path from "node:path";
 import { canonicalDigest } from "./canonical-json.js";
 
 const ARTIFACT_TYPE = "delivery_art_source_action_result";
-const REPLAYABLE_ACTIONS = new Set(["lifecycle.acquire-evidence"]);
+const REPLAYABLE_ACTIONS = new Set([
+  "lifecycle.acquire-evidence",
+  "work.apply-source-realization",
+]);
 
 function isReplayableResult(action, result) {
   if (!REPLAYABLE_ACTIONS.has(action)) return false;
@@ -24,6 +27,13 @@ function isReplayableResult(action, result) {
     return result?.artifact_type === "delivery_art_owner_evidence_receipt" &&
       Array.isArray(result.results) &&
       result.results.every((entry) => entry?.result === "pass");
+  }
+  if (action === "work.apply-source-realization") {
+    return result?.schema_version === 1 &&
+      result?.outcome === "committed" &&
+      /^source-realization-receipt:/.test(result?.receipt_id ?? "") &&
+      /^[0-9a-f]{40}$/.test(result?.head_commit ?? "") &&
+      /^sha256:[0-9a-f]{64}$/.test(result?.receipt_digest ?? "");
   }
   return true;
 }

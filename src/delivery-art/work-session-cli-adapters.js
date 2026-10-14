@@ -1,5 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
@@ -11,6 +22,39 @@ import {
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
+const MAX_REALIZATION_CONTEXT_BYTES = 256 * 1024;
+const MAX_REALIZATION_FILE_BYTES = 64 * 1024;
+const MAX_REALIZATION_FILES = 48;
+const MAX_REALIZATION_TREE_PATHS = 5_000;
+
+function contentDigest(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function normalizedRealizationPath(value) {
+  const candidate = String(value ?? "").replaceAll("\\", "/");
+  if (
+    !candidate ||
+    candidate.length > 240 ||
+    candidate.startsWith("/") ||
+    candidate.includes("\0") ||
+    candidate.split("/").some((part) => !part || part === "." || part === "..") ||
+    candidate.split("/").includes(".git")
+  ) {
+    throw new Error(`Source realization path is outside the bounded repository surface: ${value}.`);
+  }
+  const basename = candidate.split("/").at(-1).toLowerCase();
+  if (
+    basename === ".env" ||
+    basename.startsWith(".env.") ||
+    basename === "id_rsa" ||
+    basename === "id_ed25519" ||
+    /\.(?:pem|p12|pfx|key)$/i.test(basename)
+  ) {
+    throw new Error(`Source realization path is credential-sensitive: ${candidate}.`);
+  }
+  return candidate;
+}
 
 function command(execFileSyncImpl, args, cwd) {
   try {
@@ -780,6 +824,290 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     };
   }
 
+  function realizationTarget(worktree, relativePath) {
+    const normalized = normalizedRealizationPath(relativePath);
+    const target = path.resolve(worktree, ...normalized.split("/"));
+    if (!target.startsWith(`${path.resolve(worktree)}${path.sep}`)) {
+      throw new Error("Source realization path escapes the managed worktree.");
+    }
+    let current = path.resolve(worktree);
+    for (const segment of normalized.split("/").slice(0, -1)) {
+      current = path.join(current, segment);
+      if (existsSync(current) && lstatSync(current).isSymbolicLink()) {
+        throw new Error(`Source realization path traverses a symbolic link: ${normalized}.`);
+      }
+    }
+    if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
+      throw new Error(`Source realization target is a symbolic link: ${normalized}.`);
+    }
+    return { normalized, target };
+  }
+
+  function readableRealizationFile(worktree, relativePath) {
+    const { normalized, target } = realizationTarget(worktree, relativePath);
+    if (!existsSync(target)) return null;
+    const stat = lstatSync(target);
+    if (!stat.isFile() || stat.size > MAX_REALIZATION_FILE_BYTES) return null;
+    const content = readFileSync(target);
+    if (content.includes(0)) return null;
+    const text = content.toString("utf8");
+    return {
+      path: normalized,
+      content: text,
+      content_digest: contentDigest(text),
+      size_bytes: content.length,
+    };
+  }
+
+  async function captureRealizationContext(session, { requestedPaths = [] } = {}) {
+    const worktree = await ensureWorktree(session);
+    const headCommit = command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree);
+    const status = command(
+      execFileSyncImpl,
+      ["status", "--porcelain", "--untracked-files=normal"],
+      worktree,
+    );
+    if (status || headCommit !== session.landing_unit.base_commit) {
+      const error = new Error("Source realization requires a clean managed worktree.");
+      error.code = status
+        ? "delivery_art_source_realization_worktree_dirty"
+        : "delivery_art_source_realization_source_drift";
+      throw error;
+    }
+    const allPaths = command(
+      execFileSyncImpl,
+      ["ls-files", "-co", "--exclude-standard"],
+      worktree,
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map(normalizedRealizationPath)
+      .sort();
+    const explicit = [...new Set(requestedPaths.map(normalizedRealizationPath))];
+    const preferred = explicit.length > 0
+      ? explicit
+      : allPaths.sort((left, right) => {
+          const rank = (value) => {
+            const basename = value.split("/").at(-1).toLowerCase();
+            if (["agents.md", "readme.md", "package.json", "pyproject.toml", "go.mod", "cargo.toml"].includes(basename)) return 0;
+            if (/^(?:src|app|lib|test|tests)\//.test(value)) return 1;
+            return 2;
+          };
+          return rank(left) - rank(right) || left.localeCompare(right);
+        });
+    const files = [];
+    let admittedBytes = 0;
+    for (const candidate of preferred) {
+      if (files.length >= MAX_REALIZATION_FILES) break;
+      const file = readableRealizationFile(worktree, candidate);
+      if (!file) continue;
+      if (admittedBytes + file.size_bytes > MAX_REALIZATION_CONTEXT_BYTES) break;
+      files.push(file);
+      admittedBytes += file.size_bytes;
+    }
+    if (explicit.length > 0) {
+      const admitted = new Set(files.map((file) => file.path));
+      const missing = explicit.filter((entry) => !admitted.has(entry));
+      if (missing.length > 0) {
+        const error = new Error(`Requested source context is unavailable or unsafe: ${missing.join(", ")}.`);
+        error.code = "delivery_art_source_realization_context_unavailable";
+        throw error;
+      }
+    }
+    const context = {
+      schema_version: 1,
+      session_id: session.session_id,
+      owner_repo: session.owner_repo,
+      landing_unit_id: session.landing_unit_id,
+      head_commit: headCommit,
+      clean: true,
+      tree: {
+        paths: allPaths.slice(0, MAX_REALIZATION_TREE_PATHS),
+        total_path_count: allPaths.length,
+        truncated: allPaths.length > MAX_REALIZATION_TREE_PATHS,
+      },
+      files,
+      admitted_bytes: admittedBytes,
+    };
+    return { ...context, context_digest: contentDigest(JSON.stringify(context)) };
+  }
+
+  async function applySourceRealization(session, changeSet) {
+    if (
+      changeSet?.schema_version !== 1 ||
+      changeSet?.session_id !== session.session_id ||
+      changeSet?.base_commit !== session.landing_unit.base_commit ||
+      typeof changeSet?.commit_message !== "string" ||
+      changeSet.commit_message.length < 10 ||
+      !Array.isArray(changeSet?.operations) ||
+      changeSet.operations.length < 1 ||
+      changeSet.operations.length > 64 ||
+      new Set(changeSet.operations.map((entry) => entry?.path)).size !==
+        changeSet.operations.length
+    ) {
+      const error = new Error("Source realization change set failed the executor binding.");
+      error.code = "delivery_art_source_realization_change_set_invalid";
+      throw error;
+    }
+    const worktree = await ensureWorktree(session);
+    const headBefore = command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree);
+    const statusBefore = command(
+      execFileSyncImpl,
+      ["status", "--porcelain", "--untracked-files=normal"],
+      worktree,
+    );
+    if (statusBefore) {
+      const error = new Error("Source realization binding changed before apply.");
+      error.code = "delivery_art_source_realization_source_drift";
+      throw error;
+    }
+    const changeSetDigest = contentDigest(JSON.stringify(changeSet));
+    const expectedPaths = changeSet.operations.map((operation) =>
+      normalizedRealizationPath(operation.path)).sort();
+
+    function committedReceipt(headCommit) {
+      const author = command(
+        execFileSyncImpl,
+        ["show", "-s", "--format=%an <%ae>", headCommit],
+        worktree,
+      );
+      const receipt = {
+        schema_version: 1,
+        receipt_id: `source-realization-receipt:${headCommit.slice(0, 24)}`,
+        session_id: session.session_id,
+        change_set_digest: changeSetDigest,
+        base_commit: changeSet.base_commit,
+        head_commit: headCommit,
+        changed_files: expectedPaths,
+        author,
+        outcome: "committed",
+        secret_values_embedded: false,
+      };
+      return { ...receipt, receipt_digest: contentDigest(JSON.stringify(receipt)) };
+    }
+
+    if (headBefore !== changeSet.base_commit) {
+      const parent = optionalCommand(execFileSyncImpl, ["rev-parse", "HEAD^"], worktree);
+      const message = command(execFileSyncImpl, ["show", "-s", "--format=%B", "HEAD"], worktree);
+      const changedPaths = command(
+        execFileSyncImpl,
+        ["diff", "--name-only", changeSet.base_commit, "HEAD"],
+        worktree,
+      ).split("\n").filter(Boolean).sort();
+      const trailer = `OOS-Source-Realization-Digest: ${changeSetDigest}`;
+      const exactCommit = parent.ok &&
+        parent.output === changeSet.base_commit &&
+        message.split("\n").includes(trailer) &&
+        JSON.stringify(changedPaths) === JSON.stringify(expectedPaths) &&
+        changeSet.operations.every((operation) => {
+          const { target } = realizationTarget(worktree, operation.path);
+          if (operation.action === "delete") return !existsSync(target);
+          return existsSync(target) &&
+            lstatSync(target).isFile() &&
+            contentDigest(readFileSync(target, "utf8")) === contentDigest(operation.content);
+        });
+      if (exactCommit) return committedReceipt(headBefore);
+      const error = new Error("Source realization binding changed before apply.");
+      error.code = "delivery_art_source_realization_source_drift";
+      throw error;
+    }
+    const prepared = [];
+    let totalBytes = 0;
+    for (const operation of changeSet.operations ?? []) {
+      if (!["create", "replace", "delete"].includes(operation?.action)) {
+        throw new Error("Source realization action is not allowlisted.");
+      }
+      const { normalized, target } = realizationTarget(worktree, operation.path);
+      const exists = existsSync(target);
+      const current = exists ? lstatSync(target) : null;
+      if (exists && (!current.isFile() || current.isSymbolicLink())) {
+        throw new Error(`Source realization target is not a regular file: ${normalized}.`);
+      }
+      const currentContent = exists ? readFileSync(target, "utf8") : null;
+      const currentDigest = currentContent === null ? null : contentDigest(currentContent);
+      if (operation.action === "create" && exists) {
+        throw new Error(`Source realization create target already exists: ${normalized}.`);
+      }
+      if (operation.action !== "create" && !exists) {
+        throw new Error(`Source realization target does not exist: ${normalized}.`);
+      }
+      if (operation.action !== "create" && currentDigest !== operation.expected_digest) {
+        const error = new Error(`Source realization expected digest is stale: ${normalized}.`);
+        error.code = "delivery_art_source_realization_source_drift";
+        throw error;
+      }
+      if (operation.action !== "delete") {
+        const size = Buffer.byteLength(operation.content, "utf8");
+        totalBytes += size;
+        if (size > MAX_REALIZATION_FILE_BYTES || totalBytes > 512 * 1024) {
+          throw new Error("Source realization change set exceeds the bounded content limit.");
+        }
+      }
+      prepared.push({
+        ...operation,
+        normalized,
+        target,
+        mode: current?.mode ?? 0o644,
+        original_content: currentContent,
+      });
+    }
+    await prepareAgentSource(session);
+    let committed = false;
+    try {
+      for (const operation of prepared) {
+        if (operation.action === "delete") {
+          unlinkSync(operation.target);
+          continue;
+        }
+        mkdirSync(path.dirname(operation.target), { recursive: true, mode: 0o755 });
+        const temporary = `${operation.target}.source-realization-${process.pid}.tmp`;
+        writeFileSync(temporary, operation.content, { encoding: "utf8", mode: operation.mode & 0o777 });
+        chmodSync(temporary, operation.mode & 0o777);
+        renameSync(temporary, operation.target);
+      }
+      command(execFileSyncImpl, ["diff", "--check"], worktree);
+      command(execFileSyncImpl, ["add", "--all"], worktree);
+      const staged = command(execFileSyncImpl, ["diff", "--cached", "--name-only"], worktree)
+        .split("\n")
+        .filter(Boolean)
+        .sort();
+      if (staged.length === 0) {
+        const error = new Error("Source realization produced no source change.");
+        error.code = "delivery_art_source_realization_empty_change";
+        throw error;
+      }
+      if (JSON.stringify(staged) !== JSON.stringify(expectedPaths)) {
+        const error = new Error("Source realization changed paths outside the accepted change set.");
+        error.code = "delivery_art_source_realization_source_drift";
+        throw error;
+      }
+      command(
+        execFileSyncImpl,
+        ["commit", "-m", changeSet.commit_message, "-m", `OOS-Source-Realization-Digest: ${changeSetDigest}`],
+        worktree,
+      );
+      committed = true;
+      return committedReceipt(command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree));
+    } catch (error) {
+      if (!committed && command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree) === headBefore) {
+        for (const operation of prepared) {
+          if (operation.original_content === null) {
+            if (existsSync(operation.target)) unlinkSync(operation.target);
+            continue;
+          }
+          mkdirSync(path.dirname(operation.target), { recursive: true, mode: 0o755 });
+          writeFileSync(operation.target, operation.original_content, {
+            encoding: "utf8",
+            mode: operation.mode & 0o777,
+          });
+          chmodSync(operation.target, operation.mode & 0o777);
+        }
+        command(execFileSyncImpl, ["reset", "--quiet", "HEAD", "--", "."], worktree);
+      }
+      throw error;
+    }
+  }
+
   async function prepareAgentSource(session) {
     if (!agentSourceIdentity) return { state: "inactive" };
     return agentSourceIdentity.prepare({
@@ -1112,6 +1440,8 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   return {
+    applySourceRealization,
+    captureRealizationContext,
     ensureOwnedWorktree,
     ensureWorktree,
     inspectConfiguredPath,

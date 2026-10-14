@@ -375,6 +375,54 @@ The lifecycle-context endpoint remains uncommissioned when the dedicated CGG
 endpoint or caller credential is absent. Source support does not activate the
 runtime boundary.
 
+### Bounded Source Realization
+
+The source-realization API extends an implementation-ready work session without
+giving a model shell, repository, approval, review, merge, Security, or ART
+authority:
+
+- `GET /v1/delivery-work-items/{work_item_id}/work-session/realization`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/start`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/continue`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/cancel`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/realization/recover`
+
+`start` requires the exact work-session revision, one bounded objective, a
+token budget, and an explicit retry binding. OOS captures a clean exact-base
+repository tree plus a bounded set of safe text files through the authenticated
+source executor. Credential-like paths, symlinks, binary files, oversized
+files, traversal, and `.git` are excluded. The resulting source is projected
+through CGG in packet mode; there is no raw-context fallback for realization.
+Only the commissioned `source-realization-v1` governed-model profile may return
+the versioned change-set schema, bound to the session, base commit, objective
+digest, CGG receipts, caller, and decision identifier.
+
+The model result is a draft. Public projections expose operation paths and
+digests but not generated file contents. `continue` requires the exact current
+record revision and accepted change-set digest. Only then may the isolated
+source executor validate path and content bounds, configure Agent Gary, apply
+the accepted create, replace, or delete operations, and create one real Git
+commit. The existing work-session lifecycle remains responsible for validation,
+publish, human review, Security gates, exact-head merge, evidence, closeout,
+and cleanup.
+
+Cancellation is allowed only before source mutation and retains a substantive
+reason. A later attempt must name the immediately preceding terminal request.
+If the caller loses the response during apply, `recover` replays the same
+digest-bound source action. A durable executor receipt prevents a second
+mutation; if failure occurs after Git commit but before receipt persistence,
+the executor recognizes only the exact first-parent commit carrying the bound
+change-set digest and exact resulting paths and contents. Failures before commit
+restore the pristine worktree. Drift, stale revisions, unsafe context, invalid
+model output, identity mismatch, missing commissioning, or an unavailable
+dependency fail closed.
+
+This source contract is implemented but not commissioned by source merge.
+Security acceptance owns the AI action-path decision, and Platform Engineering
+owns exact profile and runtime activation. The Console is the normal future
+operator surface; CLI and direct artifact manipulation remain recovery and
+engineering paths rather than prerequisites for normal operation.
+
 The current engineering commands remain:
 
 ```bash

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/source-realization-change-set.schema.json",
+  "title": "Delivery ART source realization change set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "change_set_id",
+    "session_id",
+    "base_commit",
+    "objective_digest",
+    "commit_message",
+    "operations"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "change_set_id": { "$ref": "#/$defs/stableId" },
+    "session_id": { "$ref": "#/$defs/stableId" },
+    "base_commit": { "$ref": "#/$defs/commit" },
+    "objective_digest": { "$ref": "#/$defs/digest" },
+    "commit_message": { "type": "string", "minLength": 10, "maxLength": 120 },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "path", "content", "expected_digest"],
+        "properties": {
+          "action": { "enum": ["create", "replace", "delete"] },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+          },
+          "content": {
+            "oneOf": [
+              { "type": "string", "maxLength": 65536 },
+              { "type": "null" }
+            ]
+          },
+          "expected_digest": {
+            "oneOf": [
+              { "$ref": "#/$defs/digest" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "action": { "const": "create" } } },
+            "then": {
+              "properties": {
+                "content": { "type": "string" },
+                "expected_digest": { "type": "null" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "action": { "const": "replace" } } },
+            "then": {
+              "properties": {
+                "content": { "type": "string" },
+                "expected_digest": { "$ref": "#/$defs/digest" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "action": { "const": "delete" } } },
+            "then": {
+              "properties": {
+                "content": { "type": "null" },
+                "expected_digest": { "$ref": "#/$defs/digest" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}
