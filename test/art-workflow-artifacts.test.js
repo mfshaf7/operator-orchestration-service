@@ -19,7 +19,7 @@ import { createWgcfMutationDraft } from "../src/wgcf-art-handshake.js";
 const REVIEW_HEAD_SHA = "a".repeat(40);
 const REVIEW_MERGE_BASE = "b".repeat(40);
 
-test("mutation draft creation locks route to supported broker operations", () => {
+test("mutation draft creation locks route and leaves completion placeholders invalid", () => {
   const draft = createMutationDraft({
     operation: "work-item.complete",
     targetId: "381",
@@ -33,9 +33,56 @@ test("mutation draft creation locks route to supported broker operations", () =>
   });
 
   const validation = validateMutationDraft(draft);
-  assert.equal(validation.valid, true);
-  assert.deepEqual(validation.errors, []);
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("Test Result Evidence: line does not match the required bullet format"),
+    ),
+    true,
+  );
   assert.equal(validation.warnings.some((entry) => entry.includes("CHECK")), true);
+});
+
+test("completion mutation drafts preflight the same evidence contract as the broker", () => {
+  for (const operation of [
+    "initiative.close",
+    "work-item.complete",
+    "work-item.stale-open-close",
+  ]) {
+    const draft = createMutationDraft({
+      operation,
+      targetId: operation === "initiative.close" ? "delivery-1275" : "1283",
+    });
+    draft.payload.input.changed_surfaces =
+      "- `src/art-workflow-artifacts.js`: applies the shared completion-evidence contract before submission.";
+    draft.payload.input.completion_summary =
+      "Completion mutation drafts now fail locally when their evidence is malformed.";
+    draft.payload.input.test_result_evidence = "- PASS: `npm test`";
+    draft.payload.input.validation_evidence =
+      "- PASS: `npm run art -- draft validate .art/drafts/example.json`";
+    if (operation === "initiative.close") {
+      draft.payload.input.demo_evidence = "- PASS: system demo reviewed.";
+      draft.payload.input.inspect_action_items = "- No residual action.";
+    }
+    if (operation === "work-item.stale-open-close") {
+      draft.payload.input.stale_open_justification =
+        "All child scope is terminal and satisfies the parent.";
+    }
+
+    const validResult = validateMutationDraft(draft);
+    assert.equal(validResult.valid, true, `${operation}: ${validResult.errors.join("; ")}`);
+    assert.deepEqual(validResult.errors, []);
+
+    draft.payload.input.test_result_evidence = "- npm test";
+    const invalidResult = validateMutationDraft(draft);
+    assert.equal(invalidResult.valid, false);
+    assert.equal(
+      invalidResult.errors.some((entry) =>
+        entry.includes("Test Result Evidence: line does not match the required bullet format"),
+      ),
+      true,
+    );
+  }
 });
 
 test("planning repair mutation drafts accept bounded terminal-child closeout metadata", () => {

@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 
 import {
+  buildCompletionSections,
   DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
   DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES,
   validateCompletionSections,
@@ -53,6 +54,12 @@ const REVIEW_PACKET_EXCLUDED_PREFIXES = [
   ".platform-drills/",
   ".tmp/",
 ];
+
+const COMPLETION_EVIDENCE_MUTATION_OPERATIONS = new Set([
+  "initiative.close",
+  "work-item.complete",
+  "work-item.stale-open-close",
+]);
 
 const MUTATION_OPERATIONS = {
   "initiative.close": {
@@ -432,7 +439,33 @@ function completionEvidenceIssuesForDescription(description) {
   return validateCompletionSections(sectionBodies).issues;
 }
 
+function completionEvidenceIssuesForInput(input) {
+  return validateCompletionSections(
+    buildCompletionSections({
+      changedSurfaces: input.changed_surfaces,
+      completionSummary: input.completion_summary,
+      residualFollowUp: input.residual_follow_up,
+      testResultArtifact: input.test_result_artifact,
+      testResultEvidence: input.test_result_evidence,
+      validationEvidence: input.validation_evidence,
+    }),
+  ).issues;
+}
+
 function validateMutationDraftPayloadSemantics({ draft, errors }) {
+  if (COMPLETION_EVIDENCE_MUTATION_OPERATIONS.has(draft.operation)) {
+    const input = draft.payload?.input;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      errors.push(`payload.input must be an object for ${draft.operation}`);
+      return;
+    }
+
+    for (const issue of completionEvidenceIssuesForInput(input)) {
+      errors.push(`payload.input: ${issue}`);
+    }
+    return;
+  }
+
   if (draft.operation === "work-item.blocker") {
     const input = draft.payload?.input;
     if (!input || typeof input !== "object" || Array.isArray(input)) {
