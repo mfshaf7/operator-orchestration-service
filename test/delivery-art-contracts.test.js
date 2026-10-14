@@ -570,6 +570,28 @@ test("architecture v3 rejects an impossible combined start-and-close schedule", 
   );
 });
 
+test("architecture v3 rejects a cross-topology early human-gate cycle", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.required_human_gates[0].authority_work_item_id =
+    "work-item-802";
+  candidate.architecture.required_human_gates[0].authority_owner_repo =
+    "operator-orchestration-service";
+  candidate.architecture.required_human_gates[0].affected_landing_unit_ids = [
+    "delivery-698-contract",
+  ];
+  candidate.architecture.work_item_execution_plan[0].emits_human_gate_ids = [];
+  candidate.architecture.work_item_execution_plan[1].emits_human_gate_ids = [
+    "gate:security-source-merge",
+  ];
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture combined work, source-landing, and early human-gate topology must be acyclic",
+    ),
+  );
+});
+
 test("architecture v3 requires every declared human gate to be emitted", () => {
   const candidate = architectureV3Candidate();
   candidate.architecture.work_item_execution_plan[0].emits_human_gate_ids = [];
