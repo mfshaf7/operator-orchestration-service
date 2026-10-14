@@ -731,6 +731,17 @@ in the work contract but are checked later against the reviewed and merged
 source revision that is allowed to introduce its own verification-only
 verifier.
 
+If the exact base profile is missing, malformed, schema-invalid, or incomplete,
+configured-path preflight may select only the nearest exact ancestor revision
+whose reviewed profile satisfies the same merge-ready cases and evidence
+kinds. The source executor records that ancestor revision and uses its bounded
+commands for the repair attempt. Before any command runs, the candidate profile
+must itself satisfy the current schema and coverage contract. This is a
+profile-self-repair boundary, not a general fallback: it walks only Git
+ancestors of the recorded base, never executes candidate commands, and never
+applies to post-merge operating evidence. If no qualifying reviewed ancestor
+exists, work start remains blocked.
+
 A `matching-fidelity` command runs only when it binds at least one requested
 conformance case. Capability-specific commands must declare exact
 `conformance_case_ids`; an unrelated command with the same fidelity is neither
@@ -759,10 +770,11 @@ runtime behavior inside code shared with tests.
 An owner repository's first evidence-profile landing is a controlled
 bootstrap. It completes through the already-active reviewed evidence path; the
 new automated path must not be activated for that repository until the profile
-is present on its accepted base. A missing base-owned profile fails closed and
-must not fall back to candidate-worktree policy. Runtime activation therefore
-requires an explicit inventory check that every admitted source-work owner has
-either a base-owned profile or a recorded non-activation posture.
+is present on its accepted base. A repository with no qualifying reviewed
+base-or-ancestor profile fails closed and must not fall back to
+candidate-worktree policy. Runtime activation therefore requires an explicit
+inventory check that every admitted source-work owner has either a base-owned
+profile or a recorded non-activation posture.
 
 The executor returns a typed receipt with provider identity, start and finish
 times, profile and source bindings, semantic result digests, and a receipt

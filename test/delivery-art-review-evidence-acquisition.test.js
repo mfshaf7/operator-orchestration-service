@@ -7,6 +7,7 @@ import {
   DeliveryArtEvidenceAcquisitionError,
   deliveryArtEvidenceAcquisitionRequest,
   projectDeliveryArtOwnerEvidence,
+  selectTrustedDeliveryArtEvidenceProfile,
   validateDeliveryArtEvidenceProfile,
 } from "../src/delivery-art/review-evidence-acquisition.js";
 
@@ -226,6 +227,47 @@ test("acquisition request binds exact source and covers every conformance fideli
       source: SOURCE,
     }),
     { code: "delivery_art_evidence_profile_incomplete" },
+  );
+});
+
+test("profile selection uses the nearest valid reviewed ancestor for base repair", () => {
+  const baseRevision = SOURCE.base_commit;
+  const invalidRevision = "c".repeat(40);
+  const ancestorRevision = "d".repeat(40);
+  const invalid = profile();
+  invalid.commands[0].timeout_seconds = 3600;
+  const profiles = new Map([
+    [baseRevision, JSON.stringify(invalid)],
+    [invalidRevision, JSON.stringify(invalid)],
+    [ancestorRevision, JSON.stringify(profile())],
+  ]);
+  const selection = selectTrustedDeliveryArtEvidenceProfile({
+    conformanceCases: [{ fidelity: "real-git", id: "case:positive" }],
+    ownerRepo: OWNER_REPO,
+    readProfileText: (revision) => profiles.get(revision) ?? null,
+    revisions: [baseRevision, invalidRevision, ancestorRevision],
+  });
+  assert.equal(selection.profile_revision, ancestorRevision);
+  assert.equal(selection.used_reviewed_ancestor, true);
+
+  const request = deliveryArtEvidenceAcquisitionRequest({
+    conformanceCases: [{ fidelity: "real-git", id: "case:positive" }],
+    ownerRepo: OWNER_REPO,
+    profile: selection.profile,
+    profileRevision: selection.profile_revision,
+    source: SOURCE,
+    trustedProfileRevisions: [selection.profile_revision],
+  });
+  assert.equal(request.profile_revision, ancestorRevision);
+  assert.throws(
+    () => deliveryArtEvidenceAcquisitionRequest({
+      conformanceCases: [{ fidelity: "real-git", id: "case:positive" }],
+      ownerRepo: OWNER_REPO,
+      profile: selection.profile,
+      profileRevision: selection.profile_revision,
+      source: SOURCE,
+    }),
+    { code: "delivery_art_evidence_profile_revision_invalid" },
   );
 });
 

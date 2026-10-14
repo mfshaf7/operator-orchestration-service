@@ -18,7 +18,7 @@ import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
   DeliveryArtEvidenceAcquisitionError,
-  validateDeliveryArtEvidenceProfileCoverage,
+  selectTrustedDeliveryArtEvidenceProfile,
 } from "./review-evidence-acquisition.js";
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
@@ -726,37 +726,40 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       : null;
     const evidenceProfileRequired =
       conformanceCases.length > 0 || requiredEvidenceKinds.length > 0;
+    let evidenceProfileSelection = null;
     if (
       evidenceProfileRequired &&
       (!remoteBaseCommit || remoteBaseCommit === baseCommit)
     ) {
-      const profileResult = optionalCommand(
+      const history = optionalCommand(
         execFileSyncImpl,
-        ["show", `${baseCommit}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`],
+        [
+          "log",
+          "--format=%H",
+          "--max-count=50",
+          baseCommit,
+          "--",
+          DELIVERY_ART_EVIDENCE_PROFILE_PATH,
+        ],
         repoRoot,
       );
-      if (!profileResult.ok) {
-        throw new DeliveryArtEvidenceAcquisitionError(
-          "delivery_art_evidence_profile_missing",
-          "The owner repository base has no admitted evidence profile.",
-          { profile_revision: baseCommit },
-        );
-      }
-      let profile;
-      try {
-        profile = JSON.parse(profileResult.output);
-      } catch {
-        throw new DeliveryArtEvidenceAcquisitionError(
-          "delivery_art_evidence_profile_invalid",
-          "The owner evidence profile is not valid JSON.",
-          { profile_revision: baseCommit },
-        );
-      }
-      validateDeliveryArtEvidenceProfileCoverage({
+      const revisions = [
+        baseCommit,
+        ...(history.ok ? history.output.split("\n").filter(Boolean) : []),
+      ];
+      evidenceProfileSelection = selectTrustedDeliveryArtEvidenceProfile({
         conformanceCases,
         ownerRepo: session.owner_repo,
-        profile,
+        readProfileText(revision) {
+          const result = optionalCommand(
+            execFileSyncImpl,
+            ["show", `${revision}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`],
+            repoRoot,
+          );
+          return result.ok ? result.output : null;
+        },
         requiredEvidenceKinds,
+        revisions,
       });
     }
     const worktree = parseWorktrees(
@@ -821,7 +824,20 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         state: changedFiles.length === 0 ? "clean" : "dirty",
       },
       provider: identity.provider,
-      runtime: identity.runtime,
+      runtime: {
+        ...identity.runtime,
+        ...(evidenceProfileSelection
+          ? {
+              evidence_profile: {
+                profile_id: evidenceProfileSelection.profile.profile_id,
+                profile_revision: evidenceProfileSelection.profile_revision,
+                selection: evidenceProfileSelection.used_reviewed_ancestor
+                  ? "reviewed-ancestor-repair"
+                  : "base",
+              },
+            }
+          : {}),
+      },
     };
   }
 

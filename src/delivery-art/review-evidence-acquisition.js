@@ -218,6 +218,68 @@ export function validateDeliveryArtEvidenceProfileCoverage({
   };
 }
 
+export function selectTrustedDeliveryArtEvidenceProfile({
+  conformanceCases,
+  ownerRepo,
+  readProfileText,
+  requiredEvidenceKinds = [],
+  revisions,
+}) {
+  if (!Array.isArray(revisions) || revisions.length === 0) {
+    throw new DeliveryArtEvidenceAcquisitionError(
+      "delivery_art_evidence_profile_revision_invalid",
+      "Owner evidence profile selection requires at least one exact revision.",
+    );
+  }
+  const candidates = [...new Set(revisions)];
+  let baseFailure = null;
+  for (const [index, revision] of candidates.entries()) {
+    if (!/^[0-9a-f]{40}$/.test(String(revision))) {
+      throw new DeliveryArtEvidenceAcquisitionError(
+        "delivery_art_evidence_profile_revision_invalid",
+        "Owner evidence profile selection received a non-exact revision.",
+        { profile_revision: revision },
+      );
+    }
+    const profileText = readProfileText(revision);
+    try {
+      if (typeof profileText !== "string") {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_missing",
+          "The owner repository has no admitted evidence profile at the selected revision.",
+          { profile_revision: revision },
+        );
+      }
+      let profile;
+      try {
+        profile = JSON.parse(profileText);
+      } catch {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_invalid",
+          "The owner evidence profile is not valid JSON.",
+          { profile_revision: revision },
+        );
+      }
+      const coverage = validateDeliveryArtEvidenceProfileCoverage({
+        conformanceCases,
+        ownerRepo,
+        profile,
+        requiredEvidenceKinds,
+      });
+      return {
+        profile: coverage.profile,
+        profile_revision: revision,
+        profile_text: profileText,
+        used_reviewed_ancestor: index > 0,
+      };
+    } catch (error) {
+      if (!(error instanceof DeliveryArtEvidenceAcquisitionError)) throw error;
+      if (baseFailure === null) baseFailure = error;
+    }
+  }
+  throw baseFailure;
+}
+
 export function deliveryArtEvidenceAcquisitionRequest({
   conformanceCases,
   ownerRepo,
@@ -225,6 +287,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
   profileRevision = null,
   requiredEvidenceKinds = [],
   source,
+  trustedProfileRevisions = [],
 }) {
   if (!/^[0-9a-f]{40}$/.test(String(source?.base_commit ?? "")) ||
       !/^[0-9a-f]{40}$/.test(String(source?.head_commit ?? ""))) {
@@ -242,7 +305,11 @@ export function deliveryArtEvidenceAcquisitionRequest({
   const normalizedProfile = coverage.profile;
   const cases = coverage.cases;
   const trustedProfileRevision = profileRevision ?? source.base_commit;
-  if (![source.base_commit, source.head_commit].includes(trustedProfileRevision)) {
+  if (![
+    source.base_commit,
+    source.head_commit,
+    ...trustedProfileRevisions,
+  ].includes(trustedProfileRevision)) {
     throw new DeliveryArtEvidenceAcquisitionError(
       "delivery_art_evidence_profile_revision_invalid",
       "Owner evidence acquisition requires the exact base or accepted source revision for its profile.",

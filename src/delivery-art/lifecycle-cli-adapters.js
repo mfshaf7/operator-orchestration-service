@@ -16,7 +16,8 @@ import {
   DeliveryArtEvidenceAcquisitionError,
   deliveryArtEvidenceAcquisitionRequest,
   deliveryArtOwnerEvidenceCommandText,
-  validateDeliveryArtEvidenceProfile,
+  selectTrustedDeliveryArtEvidenceProfile,
+  validateDeliveryArtEvidenceProfileCoverage,
 } from "./review-evidence-acquisition.js";
 
 function commandResult(execFileSyncImpl, command, args, options = {}) {
@@ -443,7 +444,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
         );
       }
       const startedAt = clock().toISOString();
-      const profileText = evidenceProfilePath === null
+      let profileText = evidenceProfilePath === null
         ? optionalOutput(
             execFileSyncImpl,
             "git",
@@ -458,9 +459,60 @@ export function createDeliveryArtLifecycleSourceAdapter({
           : { exitCode: 1, stdout: "" };
       let profile = null;
       let profileFailure = null;
+      let selectedProfileRevision = profileRevision;
+      let trustedProfileRevisions = [];
       let failureProfileRevision = profileRevision;
       let failureProfileText = profileText.stdout;
-      if (profileText.exitCode !== 0) {
+      if (
+        evidenceProfilePath === null &&
+        profileRevision === source.base_commit
+      ) {
+        const history = optionalOutput(
+          execFileSyncImpl,
+          "git",
+          [
+            "log",
+            "--format=%H",
+            "--max-count=50",
+            source.base_commit,
+            "--",
+            DELIVERY_ART_EVIDENCE_PROFILE_PATH,
+          ],
+          landingUnit.repo_root,
+        );
+        const revisions = [
+          source.base_commit,
+          ...(history.exitCode === 0
+            ? history.stdout.trim().split("\n").filter(Boolean)
+            : []),
+        ];
+        try {
+          const selection = selectTrustedDeliveryArtEvidenceProfile({
+            conformanceCases,
+            ownerRepo: landingUnit.owner_repo,
+            readProfileText(revision) {
+              const result = optionalOutput(
+                execFileSyncImpl,
+                "git",
+                ["show", `${revision}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`],
+                landingUnit.repo_root,
+              );
+              return result.exitCode === 0 ? result.stdout : null;
+            },
+            requiredEvidenceKinds,
+            revisions,
+          });
+          profile = selection.profile;
+          profileText = { exitCode: 0, stdout: selection.profile_text };
+          selectedProfileRevision = selection.profile_revision;
+          trustedProfileRevisions = selection.used_reviewed_ancestor
+            ? [selection.profile_revision]
+            : [];
+        } catch (error) {
+          if (!(error instanceof DeliveryArtEvidenceAcquisitionError)) throw error;
+          profileFailure = error;
+        }
+      } else if (profileText.exitCode !== 0) {
         profileFailure = new DeliveryArtEvidenceAcquisitionError(
           "delivery_art_evidence_profile_missing",
           "The owner repository has no admitted evidence profile at the selected revision.",
@@ -482,9 +534,10 @@ export function createDeliveryArtLifecycleSourceAdapter({
             conformanceCases,
             ownerRepo: landingUnit.owner_repo,
             profile,
-            profileRevision,
+            profileRevision: selectedProfileRevision,
             requiredEvidenceKinds,
             source,
+            trustedProfileRevisions,
           });
           if (
             evidenceProfilePath === null &&
@@ -517,10 +570,12 @@ export function createDeliveryArtLifecycleSourceAdapter({
                 "The candidate owner evidence profile is not valid JSON.",
               );
             }
-            validateDeliveryArtEvidenceProfile(
+            validateDeliveryArtEvidenceProfileCoverage({
+              conformanceCases,
+              ownerRepo: landingUnit.owner_repo,
               profile,
-              landingUnit.owner_repo,
-            );
+              requiredEvidenceKinds,
+            });
           }
         } catch (error) {
           if (!(error instanceof DeliveryArtEvidenceAcquisitionError)) throw error;
