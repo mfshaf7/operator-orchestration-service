@@ -643,7 +643,7 @@ test("workflow descriptor endpoint returns broker-owned guidance", async () => {
   assert.equal(response.body.lifecycle_statuses[0].status, "captured");
 });
 
-test("delivery mutation draft endpoints create and validate broker-owned route drafts", async () => {
+test("delivery mutation draft endpoints require completion placeholders to be resolved", async () => {
   const app = createApp({
     config: createBaseConfig(),
     ideaService: {},
@@ -691,7 +691,37 @@ test("delivery mutation draft endpoints create and validate broker-owned route d
   });
 
   assert.equal(validateResponse.statusCode, 200);
-  assert.equal(validateResponse.body.validation.valid, true);
+  assert.equal(validateResponse.body.validation.valid, false);
+  assert.equal(
+    validateResponse.body.validation.errors.some((entry) =>
+      entry.includes("Test Result Evidence: line does not match the required bullet format"),
+    ),
+    true,
+  );
+
+  const completedDraft = structuredClone(createResponse.body.mutation_draft);
+  completedDraft.payload.input = {
+    changed_surfaces:
+      "- `src/art-workflow-artifacts.js`: validates completion evidence before submission.",
+    completion_summary: "The managed completion draft is ready for submission.",
+    test_result_evidence: "- PASS: `npm test`",
+    validation_evidence: "- PASS: local draft validation passed.",
+  };
+  const completedValidationResponse = await executeRequest(app, {
+    body: {
+      mutation_draft: completedDraft,
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/mutation-drafts/validate",
+  });
+
+  assert.equal(completedValidationResponse.statusCode, 200);
+  assert.equal(completedValidationResponse.body.validation.valid, true);
 });
 
 test("WGCF mutation draft endpoint imports receipt refs without submitting ART mutations", async () => {
