@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { canonicalDigest } from "./canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
@@ -961,7 +962,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       error.code = "delivery_art_source_realization_source_drift";
       throw error;
     }
-    const changeSetDigest = contentDigest(JSON.stringify(changeSet));
+    const changeSetDigest = canonicalDigest(changeSet);
     const expectedPaths = changeSet.operations.map((operation) =>
       normalizedRealizationPath(operation.path)).sort();
 
@@ -983,7 +984,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         outcome: "committed",
         secret_values_embedded: false,
       };
-      return { ...receipt, receipt_digest: contentDigest(JSON.stringify(receipt)) };
+      return { ...receipt, receipt_digest: canonicalDigest(receipt) };
     }
 
     if (headBefore !== changeSet.base_commit) {

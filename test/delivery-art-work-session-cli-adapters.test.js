@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { validateDeliveryArtWorkSessionArchitectureSupersessionReceipt } from "../src/delivery-art/work-session.js";
 
@@ -98,10 +99,15 @@ test("source realization captures bounded context and commits an exact Agent Gar
   const receipt = await adapter.applySourceRealization(session, changeSet);
 
   assert.equal(receipt.outcome, "committed");
+  assert.equal(receipt.change_set_digest, canonicalDigest(changeSet));
   assert.deepEqual(receipt.changed_files, ["README.md"]);
   assert.match(receipt.author, /^Agent Gary </);
   assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "base\nrealized\n");
   assert.equal(git(worktree, ["status", "--porcelain"]), "");
+  assert.match(
+    git(worktree, ["show", "-s", "--format=%B", "HEAD"]),
+    new RegExp(`OOS-Source-Realization-Digest: ${canonicalDigest(changeSet)}`),
+  );
   const replay = await adapter.applySourceRealization(session, changeSet);
   assert.equal(replay.head_commit, receipt.head_commit);
   assert.equal(replay.receipt_digest, receipt.receipt_digest);
