@@ -26,6 +26,10 @@
       "description": "OOS-owned immutable definition projections, aggregate runs, and bounded run controls. Starts remain disabled until all runtime and Security gates are satisfied."
     },
     {
+      "name": "Platform Operations",
+      "description": "OOS-retained, operator-approved commands and exact owner readback for dev-integration and governed-release operations."
+    },
+    {
       "name": "Ideas",
       "description": "Broker-owned proposal workflow routes. Internal-only routes are marked in the operation description."
     },
@@ -68,6 +72,12 @@
       "name": "Durable Orchestration",
       "tags": [
         "Durable Orchestration"
+      ]
+    },
+    {
+      "name": "Platform Operations",
+      "tags": [
+        "Platform Operations"
       ]
     },
     {
@@ -22420,6 +22430,769 @@
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-art-source-realization"
+      }
+    },
+    "/v1/platform-operations/catalog": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Read current Platform operation capabilities",
+        "description": "Returns the bounded Platform-owned capability projection used to bind commands to exact subjects and source versions. Stale or unavailable truth is visible but cannot admit a command.",
+        "operationId": "getPlatformOperationCatalog",
+        "responses": {
+          "200": {
+            "description": "Current Platform capability projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationCatalog"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "catalog_id": "platform-console-operations",
+                  "source_version": "version:42",
+                  "observed_at": "2026-10-15T00:00:00.000Z",
+                  "freshness": "current",
+                  "subjects": [
+                    {
+                      "kind": "dev-integration-profile",
+                      "ref": "profile:accepted-idea-delivery",
+                      "source_version": "version:42",
+                      "owner": "platform-engineering",
+                      "capabilities": [
+                        {
+                          "capability_id": "dev-integration.accepted-idea-delivery.start",
+                          "action": "dev-integration.start",
+                          "available": true,
+                          "unavailable_reason": null,
+                          "required_capability": "platform.dev-integration.start",
+                          "approval_required": true,
+                          "destructive": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The Platform operation adapter or owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "platform_operation_provider_unavailable",
+                  "message": "Platform operation provider could not be reached."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platform-operations/commands": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Submit one approved Platform operation",
+        "description": "Persists one exact operator-approved command before dispatch to the Platform owner. Replays return the retained record; conflicts fail closed.",
+        "operationId": "submitPlatformOperation",
+        "requestBody": {
+          "required": true,
+          "description": "Exact command, canonical intent digest, idempotency binding, and operator approval.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "$ref": "#/components/schemas/PlatformOperationCommand"
+                  }
+                }
+              },
+              "example": {
+                "command": {
+                  "schema_version": 1,
+                  "command_id": "command:accepted-idea-delivery:start:1",
+                  "idempotency_key": "idempotency:accepted-idea-delivery:start:1",
+                  "correlation_id": "correlation:accepted-idea-delivery:1",
+                  "causation_id": null,
+                  "actor_ref": "operator:workspace-owner",
+                  "subject": {
+                    "kind": "dev-integration-profile",
+                    "ref": "profile:accepted-idea-delivery",
+                    "expected_source_version": "version:42"
+                  },
+                  "capability_id": "dev-integration.accepted-idea-delivery.start",
+                  "action": "dev-integration.start",
+                  "input": {},
+                  "requested_at": "2026-10-15T00:00:00.000Z",
+                  "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "approval": {
+                    "decision": "approved",
+                    "operator_id": "operator:workspace-owner",
+                    "decision_ref": "approval:accepted-idea-delivery:start:1",
+                    "decided_at": "2026-10-15T00:00:00.000Z",
+                    "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted durable operation record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationRecord"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "platform-operation",
+                  "operation_id": "platform-operation:0123456789abcdef01234567",
+                  "command": {
+                    "schema_version": 1,
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "idempotency_key": "idempotency:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "causation_id": null,
+                    "actor_ref": "operator:workspace-owner",
+                    "subject": {
+                      "kind": "dev-integration-profile",
+                      "ref": "profile:accepted-idea-delivery",
+                      "expected_source_version": "version:42"
+                    },
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "input": {},
+                    "requested_at": "2026-10-15T00:00:00.000Z",
+                    "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "approval": {
+                      "decision": "approved",
+                      "operator_id": "operator:workspace-owner",
+                      "decision_ref": "approval:accepted-idea-delivery:start:1",
+                      "decided_at": "2026-10-15T00:00:00.000Z",
+                      "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  },
+                  "state": "succeeded",
+                  "provider_operation": {
+                    "schema_version": 1,
+                    "operation_id": "platform-owner-operation:accepted-idea-delivery:start:1",
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "state": "succeeded",
+                    "attempt": 1,
+                    "subject_ref": "profile:accepted-idea-delivery",
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "retryable": false,
+                    "cancel_available": false,
+                    "blocker": null,
+                    "failure": null,
+                    "receipt": {
+                      "receipt_ref": "platform://receipts/accepted-idea-delivery-start-1",
+                      "outcome": "succeeded",
+                      "recorded_at": "2026-10-15T00:00:01.000Z",
+                      "source_version": "version:43",
+                      "effect": "verified"
+                    },
+                    "safe_log_ref": "cgg:packet:platform-operation-1",
+                    "updated_at": "2026-10-15T00:00:01.000Z",
+                    "events": [
+                      {
+                        "event_id": "event:accepted-idea-delivery:start:1",
+                        "sequence": 1,
+                        "state": "succeeded",
+                        "occurred_at": "2026-10-15T00:00:01.000Z",
+                        "summary": "Platform owner projected current operation state."
+                      }
+                    ]
+                  },
+                  "security_decision": {
+                    "uri": "github://mfshaf7/security-architecture/commit/review.md",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "controls": [],
+                  "next_action": {
+                    "code": "complete",
+                    "authority": "operator",
+                    "reason": "Platform receipt and owner readback are terminal."
+                  },
+                  "created_at": "2026-10-15T00:00:00.000Z",
+                  "updated_at": "2026-10-15T00:00:01.000Z",
+                  "reconciled": false,
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The Platform operation adapter or owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "platform_operation_provider_unavailable",
+                  "message": "Platform operation provider could not be reached."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platform-operations": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "List durable Platform operations",
+        "description": "Returns bounded OOS-retained operations and exact next actions without exposing provider credentials or raw logs.",
+        "operationId": "listPlatformOperations",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded operation list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationList"
+                },
+                "example": {
+                  "workflow_id": "platform-operation-list",
+                  "operations": [
+                    {
+                      "schema_version": 1,
+                      "workflow_id": "platform-operation",
+                      "operation_id": "platform-operation:0123456789abcdef01234567",
+                      "command": {
+                        "schema_version": 1,
+                        "command_id": "command:accepted-idea-delivery:start:1",
+                        "idempotency_key": "idempotency:accepted-idea-delivery:start:1",
+                        "correlation_id": "correlation:accepted-idea-delivery:1",
+                        "causation_id": null,
+                        "actor_ref": "operator:workspace-owner",
+                        "subject": {
+                          "kind": "dev-integration-profile",
+                          "ref": "profile:accepted-idea-delivery",
+                          "expected_source_version": "version:42"
+                        },
+                        "capability_id": "dev-integration.accepted-idea-delivery.start",
+                        "action": "dev-integration.start",
+                        "input": {},
+                        "requested_at": "2026-10-15T00:00:00.000Z",
+                        "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "approval": {
+                          "decision": "approved",
+                          "operator_id": "operator:workspace-owner",
+                          "decision_ref": "approval:accepted-idea-delivery:start:1",
+                          "decided_at": "2026-10-15T00:00:00.000Z",
+                          "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                      },
+                      "state": "succeeded",
+                      "provider_operation": {
+                        "schema_version": 1,
+                        "operation_id": "platform-owner-operation:accepted-idea-delivery:start:1",
+                        "command_id": "command:accepted-idea-delivery:start:1",
+                        "correlation_id": "correlation:accepted-idea-delivery:1",
+                        "state": "succeeded",
+                        "attempt": 1,
+                        "subject_ref": "profile:accepted-idea-delivery",
+                        "capability_id": "dev-integration.accepted-idea-delivery.start",
+                        "action": "dev-integration.start",
+                        "retryable": false,
+                        "cancel_available": false,
+                        "blocker": null,
+                        "failure": null,
+                        "receipt": {
+                          "receipt_ref": "platform://receipts/accepted-idea-delivery-start-1",
+                          "outcome": "succeeded",
+                          "recorded_at": "2026-10-15T00:00:01.000Z",
+                          "source_version": "version:43",
+                          "effect": "verified"
+                        },
+                        "safe_log_ref": "cgg:packet:platform-operation-1",
+                        "updated_at": "2026-10-15T00:00:01.000Z",
+                        "events": [
+                          {
+                            "event_id": "event:accepted-idea-delivery:start:1",
+                            "sequence": 1,
+                            "state": "succeeded",
+                            "occurred_at": "2026-10-15T00:00:01.000Z",
+                            "summary": "Platform owner projected current operation state."
+                          }
+                        ]
+                      },
+                      "security_decision": {
+                        "uri": "github://mfshaf7/security-architecture/commit/review.md",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      },
+                      "controls": [],
+                      "next_action": {
+                        "code": "complete",
+                        "authority": "operator",
+                        "reason": "Platform receipt and owner readback are terminal."
+                      },
+                      "created_at": "2026-10-15T00:00:00.000Z",
+                      "updated_at": "2026-10-15T00:00:01.000Z",
+                      "reconciled": false,
+                      "replayed": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The Platform operation adapter or owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "platform_operation_provider_unavailable",
+                  "message": "Platform operation provider could not be reached."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platform-operations/{operation_id}": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Read and reconcile one Platform operation",
+        "description": "Reads one retained operation and reconciles non-terminal owner state by immutable command identity. Terminal receipts are served from durable OOS state.",
+        "operationId": "getPlatformOperation",
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current operation record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationRecord"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "platform-operation",
+                  "operation_id": "platform-operation:0123456789abcdef01234567",
+                  "command": {
+                    "schema_version": 1,
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "idempotency_key": "idempotency:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "causation_id": null,
+                    "actor_ref": "operator:workspace-owner",
+                    "subject": {
+                      "kind": "dev-integration-profile",
+                      "ref": "profile:accepted-idea-delivery",
+                      "expected_source_version": "version:42"
+                    },
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "input": {},
+                    "requested_at": "2026-10-15T00:00:00.000Z",
+                    "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "approval": {
+                      "decision": "approved",
+                      "operator_id": "operator:workspace-owner",
+                      "decision_ref": "approval:accepted-idea-delivery:start:1",
+                      "decided_at": "2026-10-15T00:00:00.000Z",
+                      "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  },
+                  "state": "succeeded",
+                  "provider_operation": {
+                    "schema_version": 1,
+                    "operation_id": "platform-owner-operation:accepted-idea-delivery:start:1",
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "state": "succeeded",
+                    "attempt": 1,
+                    "subject_ref": "profile:accepted-idea-delivery",
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "retryable": false,
+                    "cancel_available": false,
+                    "blocker": null,
+                    "failure": null,
+                    "receipt": {
+                      "receipt_ref": "platform://receipts/accepted-idea-delivery-start-1",
+                      "outcome": "succeeded",
+                      "recorded_at": "2026-10-15T00:00:01.000Z",
+                      "source_version": "version:43",
+                      "effect": "verified"
+                    },
+                    "safe_log_ref": "cgg:packet:platform-operation-1",
+                    "updated_at": "2026-10-15T00:00:01.000Z",
+                    "events": [
+                      {
+                        "event_id": "event:accepted-idea-delivery:start:1",
+                        "sequence": 1,
+                        "state": "succeeded",
+                        "occurred_at": "2026-10-15T00:00:01.000Z",
+                        "summary": "Platform owner projected current operation state."
+                      }
+                    ]
+                  },
+                  "security_decision": {
+                    "uri": "github://mfshaf7/security-architecture/commit/review.md",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "controls": [],
+                  "next_action": {
+                    "code": "complete",
+                    "authority": "operator",
+                    "reason": "Platform receipt and owner readback are terminal."
+                  },
+                  "created_at": "2026-10-15T00:00:00.000Z",
+                  "updated_at": "2026-10-15T00:00:01.000Z",
+                  "reconciled": true,
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The Platform operation adapter or owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "platform_operation_provider_unavailable",
+                  "message": "Platform operation provider could not be reached."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platform-operations/{operation_id}/controls": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Retry or cancel one Platform operation",
+        "description": "Persists an idempotent retry or cancel request before dispatch. Unknown outcomes remain blocked for owner reconciliation and may only be replayed with the same immutable control binding.",
+        "operationId": "controlPlatformOperation",
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One bounded operator control with its own idempotency binding.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "control"
+                ],
+                "properties": {
+                  "control": {
+                    "$ref": "#/components/schemas/PlatformOperationControl"
+                  }
+                }
+              },
+              "example": {
+                "control": {
+                  "schema_version": 1,
+                  "control_id": "control:cancel:1",
+                  "idempotency_key": "idempotency:control:cancel:1",
+                  "action": "cancel",
+                  "operator_id": "operator:workspace-owner",
+                  "reason": "Stop before another owner effect.",
+                  "requested_at": "2026-10-15T00:00:02.000Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated operation record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationRecord"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "platform-operation",
+                  "operation_id": "platform-operation:0123456789abcdef01234567",
+                  "command": {
+                    "schema_version": 1,
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "idempotency_key": "idempotency:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "causation_id": null,
+                    "actor_ref": "operator:workspace-owner",
+                    "subject": {
+                      "kind": "dev-integration-profile",
+                      "ref": "profile:accepted-idea-delivery",
+                      "expected_source_version": "version:42"
+                    },
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "input": {},
+                    "requested_at": "2026-10-15T00:00:00.000Z",
+                    "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "approval": {
+                      "decision": "approved",
+                      "operator_id": "operator:workspace-owner",
+                      "decision_ref": "approval:accepted-idea-delivery:start:1",
+                      "decided_at": "2026-10-15T00:00:00.000Z",
+                      "intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  },
+                  "state": "succeeded",
+                  "provider_operation": {
+                    "schema_version": 1,
+                    "operation_id": "platform-owner-operation:accepted-idea-delivery:start:1",
+                    "command_id": "command:accepted-idea-delivery:start:1",
+                    "correlation_id": "correlation:accepted-idea-delivery:1",
+                    "state": "succeeded",
+                    "attempt": 1,
+                    "subject_ref": "profile:accepted-idea-delivery",
+                    "capability_id": "dev-integration.accepted-idea-delivery.start",
+                    "action": "dev-integration.start",
+                    "retryable": false,
+                    "cancel_available": false,
+                    "blocker": null,
+                    "failure": null,
+                    "receipt": {
+                      "receipt_ref": "platform://receipts/accepted-idea-delivery-start-1",
+                      "outcome": "succeeded",
+                      "recorded_at": "2026-10-15T00:00:01.000Z",
+                      "source_version": "version:43",
+                      "effect": "verified"
+                    },
+                    "safe_log_ref": "cgg:packet:platform-operation-1",
+                    "updated_at": "2026-10-15T00:00:01.000Z",
+                    "events": [
+                      {
+                        "event_id": "event:accepted-idea-delivery:start:1",
+                        "sequence": 1,
+                        "state": "succeeded",
+                        "occurred_at": "2026-10-15T00:00:01.000Z",
+                        "summary": "Platform owner projected current operation state."
+                      }
+                    ]
+                  },
+                  "security_decision": {
+                    "uri": "github://mfshaf7/security-architecture/commit/review.md",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "controls": [],
+                  "next_action": {
+                    "code": "complete",
+                    "authority": "operator",
+                    "reason": "Platform receipt and owner readback are terminal."
+                  },
+                  "created_at": "2026-10-15T00:00:00.000Z",
+                  "updated_at": "2026-10-15T00:00:01.000Z",
+                  "reconciled": false,
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The Platform operation adapter or owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "platform_operation_provider_unavailable",
+                  "message": "Platform operation provider could not be reached."
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -65721,6 +66494,484 @@
           },
           "replayed": {
             "type": "boolean"
+          }
+        }
+      },
+      "PlatformOperationCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "idempotency_key",
+          "correlation_id",
+          "causation_id",
+          "actor_ref",
+          "subject",
+          "capability_id",
+          "action",
+          "input",
+          "requested_at",
+          "intent_digest",
+          "approval"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "causation_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actor_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref",
+              "expected_source_version"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "dev-integration-profile",
+                  "profile-request",
+                  "product-release",
+                  "product-runtime-lifecycle"
+                ]
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "expected_source_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "capability_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "action": {
+            "enum": [
+              "dev-integration.request-profile",
+              "dev-integration.start",
+              "dev-integration.status",
+              "dev-integration.access",
+              "dev-integration.smoke",
+              "dev-integration.stop",
+              "dev-integration.reset",
+              "dev-integration.promote-check",
+              "governed-release.execute-step",
+              "governed-release.change-runtime-lifecycle"
+            ]
+          },
+          "input": {
+            "type": "object"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "approval": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "operator_id",
+              "decision_ref",
+              "decided_at",
+              "intent_digest"
+            ],
+            "properties": {
+              "decision": {
+                "const": "approved"
+              },
+              "operator_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "decision_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "decided_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "intent_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "PlatformOperationControl": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "control_id",
+          "idempotency_key",
+          "action",
+          "operator_id",
+          "reason",
+          "requested_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "control_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "action": {
+            "enum": [
+              "retry",
+              "cancel"
+            ]
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PlatformOperationCatalog": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "catalog_id",
+          "source_version",
+          "observed_at",
+          "freshness",
+          "subjects"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "catalog_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "source_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "freshness": {
+            "enum": [
+              "current",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "subjects": {
+            "type": "array",
+            "maxItems": 512,
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "PlatformOwnerOperationProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "operation_id",
+          "command_id",
+          "correlation_id",
+          "state",
+          "attempt",
+          "subject_ref",
+          "capability_id",
+          "action",
+          "retryable",
+          "cancel_available",
+          "blocker",
+          "failure",
+          "receipt",
+          "safe_log_ref",
+          "updated_at",
+          "events"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "command_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "queued",
+              "running",
+              "blocked",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "subject_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "capability_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "action": {
+            "enum": [
+              "dev-integration.request-profile",
+              "dev-integration.start",
+              "dev-integration.status",
+              "dev-integration.access",
+              "dev-integration.smoke",
+              "dev-integration.stop",
+              "dev-integration.reset",
+              "dev-integration.promote-check",
+              "governed-release.execute-step",
+              "governed-release.change-runtime-lifecycle"
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "cancel_available": {
+            "type": "boolean"
+          },
+          "blocker": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "safe_log_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 1024,
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "PlatformOperationRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "operation_id",
+          "command",
+          "state",
+          "provider_operation",
+          "security_decision",
+          "controls",
+          "next_action",
+          "created_at",
+          "updated_at",
+          "reconciled",
+          "replayed"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "platform-operation"
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "command": {
+            "$ref": "#/components/schemas/PlatformOperationCommand"
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "queued",
+              "running",
+              "blocked",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "provider_operation": {
+            "$ref": "#/components/schemas/PlatformOwnerOperationProjection"
+          },
+          "security_decision": {
+            "type": "object"
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "next_action": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reconciled": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PlatformOperationList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflow_id",
+          "operations"
+        ],
+        "properties": {
+          "workflow_id": {
+            "const": "platform-operation-list"
+          },
+          "operations": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/PlatformOperationRecord"
+            }
           }
         }
       }

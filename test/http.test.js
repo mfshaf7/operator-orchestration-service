@@ -3731,6 +3731,91 @@ test("delivery work-item update endpoint rejects an empty input object", async (
   assert.match(response.body.message, /must provide at least one delivery work-item update field/);
 });
 
+test("platform operation endpoints expose catalog, submit, read, list, and bounded control routes", async () => {
+  const calls = [];
+  const projection = {
+    workflow_id: "platform-operation",
+    operation_id: "platform-operation:abc",
+    state: "running",
+  };
+  const platformOperationService = {
+    async catalog(input) {
+      calls.push(["catalog", input]);
+      return { schema_version: 1, catalog_id: "platform-console-operations" };
+    },
+    async submit(input) {
+      calls.push(["submit", input]);
+      return projection;
+    },
+    async get(input) {
+      calls.push(["read", input]);
+      return projection;
+    },
+    async list(input) {
+      calls.push(["list", input]);
+      return { workflow_id: "platform-operation-list", operations: [projection] };
+    },
+    async control(input) {
+      calls.push(["control", input]);
+      return { ...projection, state: "cancelled" };
+    },
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {},
+    platformOperationService,
+    proposalWorkflowService: {},
+    prototypeDeliveryApplicationService: {},
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  assert.equal((await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/platform-operations/catalog",
+  })).statusCode, 200);
+  assert.equal((await executeRequest(app, {
+    body: { command: { schema_version: 1 } },
+    headers,
+    method: "POST",
+    url: "/v1/platform-operations/commands",
+  })).statusCode, 202);
+  assert.equal((await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/platform-operations/platform-operation%3Aabc",
+  })).statusCode, 200);
+  assert.equal((await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/platform-operations?limit=17",
+  })).statusCode, 200);
+  assert.equal((await executeRequest(app, {
+    body: { control: { schema_version: 1 } },
+    headers,
+    method: "POST",
+    url: "/v1/platform-operations/platform-operation%3Aabc/controls",
+  })).statusCode, 200);
+
+  assert.deepEqual(calls.map(([action]) => action), [
+    "catalog",
+    "submit",
+    "read",
+    "list",
+    "control",
+  ]);
+  assert.equal(calls[2][1].operationId, "platform-operation:abc");
+  assert.equal(calls[3][1].limit, 17);
+  assert.equal(calls[4][1].operationId, "platform-operation:abc");
+});
+
 test("delivery work-item create endpoint returns the broker response", async () => {
   const deliveryCalls = [];
   const app = createApp({

@@ -411,6 +411,10 @@ scope is still intentionally narrow.
   [docs/contracts/durable-orchestration-v1.md](docs/contracts/durable-orchestration-v1.md)
 - durable orchestration operator surface:
   [docs/operations/durable-orchestration-operator-surface.md](docs/operations/durable-orchestration-operator-surface.md)
+- Platform operation adapter contract:
+  [docs/contracts/platform-operation-adapter-v1.md](docs/contracts/platform-operation-adapter-v1.md)
+- Platform operation adapter operator surface:
+  [docs/operations/platform-operation-adapter.md](docs/operations/platform-operation-adapter.md)
 - WGCF ART handoff contract:
   [docs/contracts/wgcf-art-handoff-v1.md](docs/contracts/wgcf-art-handoff-v1.md)
 - OpenProject adapter contract:
