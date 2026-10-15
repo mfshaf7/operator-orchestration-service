@@ -20,6 +20,13 @@ export function createRepositoryCustodyRuntime({
       "Repository custody runtime activation has not been approved.",
     );
   }
+  if (config.profile !== activation.allowed_runtime_profile) {
+    throw new HttpError(
+      503,
+      "repository_custody_runtime_profile_not_admitted",
+      "Repository custody runtime is admitted only in the reviewed runtime profile.",
+    );
+  }
 
   return createRepositoryCustodyService({
     audit,
