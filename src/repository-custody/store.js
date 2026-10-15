@@ -5,6 +5,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -189,6 +190,40 @@ export function createRepositoryCustodyStore({ root = repositoryCustodyStateRoot
 
   return {
     get: read,
+    list({ cursor = null, limit = 25 } = {}) {
+      if (
+        (cursor !== null && !/^[a-f0-9]{64}$/.test(cursor)) ||
+        !Number.isInteger(limit) || limit < 1 || limit > 25
+      ) {
+        throw new RepositoryCustodyStoreError(
+          "repository_custody_page_invalid",
+          "Repository custody pages require a valid cursor and a limit from 1 to 25.",
+        );
+      }
+      const keys = readdirSync(records)
+        .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
+        .map((name) => name.slice(0, -5))
+        .filter((key) => cursor === null || key > cursor)
+        .sort();
+      const page = keys.slice(0, limit).map((key) => {
+        try {
+          const value = JSON.parse(readFileSync(path.join(records, `${key}.json`), "utf8"));
+          if (storageKey(value?.request?.request_id ?? "") !== key) {
+            throw new Error("request identity mismatch");
+          }
+          return read(value.request.request_id);
+        } catch (error) {
+          throw new RepositoryCustodyStoreError(
+            "repository_custody_state_corrupt",
+            `Repository custody state could not be read: ${error.message}`,
+          );
+        }
+      });
+      return {
+        records: page,
+        next_cursor: keys.length > limit ? keys[limit - 1] : null,
+      };
+    },
     put(record, options = {}) {
       const requestId = record?.request?.request_id;
       return withRequestLock(requestId, ({ put }) => put(record, options));

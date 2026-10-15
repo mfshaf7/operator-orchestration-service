@@ -442,6 +442,21 @@ export function createRepositoryCustodyService({
   return {
     execute,
     project,
+    async list({ cursor = null, limit = 25 } = {}) {
+      try {
+        const page = store.list({ cursor, limit });
+        return {
+          schema_version: 1,
+          records: page.records.map((record) => ({ ...validateStored(record), replayed: true })),
+          next_cursor: page.next_cursor,
+        };
+      } catch (error) {
+        if (error?.code === "repository_custody_page_invalid") {
+          throw new HttpError(400, error.code, error.message);
+        }
+        storeFailure(error);
+      }
+    },
   };
 }
 
