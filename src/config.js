@@ -570,6 +570,7 @@ export function loadConfig(
     },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_REPOSITORY_CUSTODY_STATE_ROOT?.trim() || undefined,
       wgcfBaseUrl:
         env.WGCF_REPOSITORY_CUSTODY_BASE_URL ??

@@ -8292,7 +8292,7 @@
                 "authority": {
                   "policy_profile_ref": {
                     "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                    "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
+                    "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
                   },
                   "approval_ref": {
                     "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -8308,7 +8308,7 @@
                   "causation_id": null
                 },
                 "idempotency_key": "repository-custody-link-example-001",
-                "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
               }
             }
           }
@@ -8355,7 +8355,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
+                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -8371,7 +8371,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                    "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                   },
                   "status": "succeeded",
                   "replayed": false,
@@ -8381,8 +8381,8 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
@@ -8401,12 +8401,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                      "content_digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                    "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                   },
                   "provider_operation": {
                     "command": "read-provider",
@@ -8420,8 +8420,8 @@
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -8444,28 +8444,28 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                      "content_digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
-                    "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
+                    "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                      "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
-                      "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
+                      "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -8492,12 +8492,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
+                      "content_digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928.json",
-                    "digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713.json",
+                    "digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -8634,7 +8634,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
+                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -8650,7 +8650,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                    "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                   },
                   "status": "succeeded",
                   "replayed": true,
@@ -8660,8 +8660,8 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
@@ -8680,12 +8680,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                      "content_digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                    "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                   },
                   "provider_operation": {
                     "command": "read-provider",
@@ -8699,8 +8699,8 @@
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -8723,28 +8723,28 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                      "content_digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
-                    "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
+                    "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
-                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
+                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
+                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                      "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
-                      "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
+                      "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -8771,12 +8771,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
+                      "content_digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928.json",
-                    "digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713.json",
+                    "digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -42090,10 +42090,7 @@
                 "action": {
                   "enum": [
                     "observe-existing",
-                    "link-existing",
-                    "transfer-custody",
-                    "archive-provider",
-                    "retire-workspace-record"
+                    "link-existing"
                   ]
                 }
               }
@@ -42116,10 +42113,7 @@
                 "action": {
                   "enum": [
                     "link-existing",
-                    "provision-new",
-                    "transfer-custody",
-                    "archive-provider",
-                    "retire-workspace-record"
+                    "provision-new"
                   ]
                 }
               }
@@ -42193,10 +42187,7 @@
             "enum": [
               "observe-existing",
               "link-existing",
-              "provision-new",
-              "transfer-custody",
-              "archive-provider",
-              "retire-workspace-record"
+              "provision-new"
             ]
           },
           "provisioningSettings": {
@@ -42521,10 +42512,7 @@
             "enum": [
               "observe-existing",
               "link-existing",
-              "provision-new",
-              "transfer-custody",
-              "archive-provider",
-              "retire-workspace-record"
+              "provision-new"
             ]
           },
           "digest": {
@@ -42873,6 +42861,38 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "archive-provider"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider_lifecycle_state": {
+                  "const": "archived"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "unarchive-provider"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider_lifecycle_state": {
+                  "const": "active"
+                }
+              }
+            }
           }
         ],
         "$defs": {
@@ -42885,9 +42905,8 @@
               "observe-existing",
               "link-existing",
               "provision-new",
-              "transfer-custody",
               "archive-provider",
-              "retire-workspace-record"
+              "unarchive-provider"
             ]
           },
           "githubRepositoryId": {
@@ -43096,10 +43115,7 @@
             "enum": [
               "observe-existing",
               "link-existing",
-              "provision-new",
-              "transfer-custody",
-              "archive-provider",
-              "retire-workspace-record"
+              "provision-new"
             ]
           },
           "outcome": {
@@ -43220,9 +43236,7 @@
                   "enum": [
                     "observe-existing",
                     "link-existing",
-                    "provision-new",
-                    "transfer-custody",
-                    "archive-provider"
+                    "provision-new"
                   ]
                 },
                 "outcome": {
@@ -43283,10 +43297,7 @@
               "unrecorded",
               "observed",
               "linked",
-              "provisioned",
-              "transfer-pending",
-              "archived",
-              "retired"
+              "provisioned"
             ]
           },
           "handoffState": {

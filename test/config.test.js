@@ -252,12 +252,14 @@ test("Platform operation adapter is disabled by default and keeps every trust bi
 
 test("repository custody keeps read and provisioning identities separate", () => {
   const config = loadConfig({
+    OOS_RUNTIME_PROFILE: "dev-integration",
     OOS_REPOSITORY_CUSTODY_ENABLED: "true",
     OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN: "read-token",
     OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN: "provision-token",
     OOS_REPOSITORY_PROVIDER_SANDBOX: "true",
   });
 
+  assert.equal(config.repositoryCustody.profile, "dev-integration");
   assert.equal(config.repositoryCustody.providerReadInstallationToken, "read-token");
   assert.equal(
     config.repositoryCustody.providerProvisioningInstallationToken,

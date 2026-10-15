@@ -2,10 +2,12 @@
 
 ## Current Posture
 
-The implementation is available for injected sandbox validation only. Do not
-set `OOS_REPOSITORY_CUSTODY_ENABLED=true` while the synchronized upstream
-manifest keeps runtime activation disabled. OOS fails startup closed if the
-environment requests activation before an explicit authority change.
+The source is Security-approved for local `dev-integration` activation. It
+remains absent unless Platform sets `OOS_REPOSITORY_CUSTODY_ENABLED=true`, and
+OOS fails startup closed if that setting is used outside
+`OOS_RUNTIME_PROFILE=dev-integration`. Source activation does not mean the
+runtime is currently operating: Platform must still deliver fresh dedicated
+credentials and complete the live evidence owned by ART `#1291` and `#1298`.
 
 ## Required Runtime Inputs
 
@@ -29,10 +31,13 @@ accepted only when `OOS_REPOSITORY_PROVIDER_SANDBOX=true` for bounded tests.
 
 ## Operator Path
 
-After the authority manifest enables runtime activation, the Governance
-Operations Console creates the request with exact operator approval and
-credential-binding references. The Console then projects the returned status
-and receipt; it does not call WGCF or the provider directly.
+After Platform commissions the exact activated source and credentials, the
+Governance Operations Console creates the request with exact operator approval
+and credential-binding references. The Console then projects the returned
+status and receipt; it does not call WGCF or the provider directly.
+
+The active source capabilities are `link-existing` and `provision-new` only.
+Repository lifecycle actions remain on their separately gated workflow.
 
 ## Recovery
 

@@ -48,11 +48,24 @@ test("repository custody contract rejects digest and integrity drift", () => {
   );
 });
 
-test("normal repository custody activation remains blocked", () => {
+test("repository custody activation is bound to the reviewed local profile and capabilities", () => {
   assert.deepEqual(repositoryCustodyRuntimeActivation(), {
-    enabled: false,
-    current_maturity: "contract-only",
+    enabled: true,
+    current_maturity: "security-reviewed-dev-integration",
+    active_capabilities: ["link-existing", "provision-new"],
     first_active_capability: "link-existing",
+    activation_owner: "platform-engineering",
+    allowed_runtime_profile: "dev-integration",
+    activation_work_item: "openproject://work_packages/1288",
+    platform_commissioning_work_item: "openproject://work_packages/1291",
+    operating_proof_work_item: "openproject://work_packages/1298",
+    security_review: {
+      decision: "approved-with-findings",
+      work_item: "openproject://work_packages/1302",
+      repo: "security-architecture",
+      commit: "3b110925ebf7088242f62f821e8959c59c2bf07d",
+      path: "docs/reviews/components/2026-10-15-repository-custody-controlled-activation.md",
+    },
   });
 });
 
