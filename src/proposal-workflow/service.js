@@ -763,9 +763,10 @@ export function createProposalWorkflowService({
     if (event && (event.event_type !== "repository-gate-resolved" || !event.receipt_refs.includes(receiptRef))) {
       throw new HttpError(409, "proposal_command_id_conflict", "Resolution id was already used for different content.");
     }
-    const replayed = Boolean(event || state.receipt_refs.includes(receiptRef));
+    const sourceCommitted = state.repository_resolution?.receipt_ref === receiptRef;
+    const replayed = Boolean(event || sourceCommitted || state.receipt_refs.includes(receiptRef));
     if (!event) {
-      if (state.receipt_refs.includes(receiptRef)) {
+      if (sourceCommitted || state.receipt_refs.includes(receiptRef)) {
         if (state.repository_resolution?.receipt_ref !== receiptRef) {
           throw new HttpError(409, "proposal_repository_resolution_recovery_conflict", "Refresh canonical history before resolving an interrupted repository acknowledgement.");
         }

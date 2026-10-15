@@ -126,10 +126,14 @@ test("current Repository resolution remains visible after the bounded recent-rec
   const state = JSON.parse(currentRecord.workflowState);
   state.receipt_refs = [];
   currentRecord.workflowState = JSON.stringify(state);
-  const cold = createHarness({ currentRecord });
+  const cold = createHarness({ currentRecord, readRepositoryCustody: async () => successfulRepositoryCustody() });
   const projection = await cold.service.getProjection({ callerId: "governance-operations-console", proposalId: "idea-851" });
   assert.equal(projection.repository_resolution.receipt_ref, state.repository_resolution.receipt_ref);
   assert.equal(projection.repository_resolution_history_pending, true);
+  const recovered = await cold.service.resolveRepositoryGate({ callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() });
+  assert.equal(recovered.replayed, true);
+  assert.equal(recovered.projection.repository_resolution_history_pending, false);
+  assert.equal(cold.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 0);
 });
 
 function record(overrides = {}) {
