@@ -27,6 +27,7 @@ function commandResult(execFileSyncImpl, command, args, options = {}) {
       stderr: "",
       stdout: String(execFileSyncImpl(command, args, {
         cwd: options.cwd,
+        detached: options.detached === true,
         encoding: "utf8",
         env: options.env,
         maxBuffer: options.maxBuffer,
@@ -630,6 +631,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
           {
             allowFailure: true,
             cwd: landingUnit.repo_root,
+            detached: command.kind === "runtime_and_live",
             env: commandEnvironment,
             maxBuffer: 4 * 1024 * 1024,
             timeout: command.timeout_seconds * 1000,

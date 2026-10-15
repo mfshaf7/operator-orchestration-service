@@ -481,6 +481,7 @@ test("runtime evidence receives explicit verification-only context without enabl
     }],
   };
   let observedEnvironment = null;
+  let observedDetached = null;
   const adapters = createDeliveryArtLifecycleCliAdapters({
     async brokerRequest() {
       throw new Error("broker request was not expected");
@@ -491,6 +492,7 @@ test("runtime evidence receives explicit verification-only context without enabl
       }
       if (command === "node") {
         observedEnvironment = options.env;
+        observedDetached = options.detached;
         return "";
       }
       return commandStub(command, args);
@@ -516,6 +518,7 @@ test("runtime evidence receives explicit verification-only context without enabl
   assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_MODE, "verification-only");
   assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID, "runtime-readback");
   assert.equal(observedEnvironment.OOS_DELIVERY_ART_MUTATION_ENABLED, "false");
+  assert.equal(observedDetached, true);
 });
 
 test("test evidence receives a minimal environment without caller composition or secret state", async () => {
@@ -535,6 +538,7 @@ test("test evidence receives a minimal environment without caller composition or
     }],
   };
   let observedEnvironment = null;
+  let observedDetached = null;
   const inherited = {
     CGG_REFINEMENT_CALLER_SECRET: "must-not-reach-owner-tests",
     DEVINT_NAMESPACE: "devint-unrelated-runtime",
@@ -557,6 +561,7 @@ test("test evidence receives a minimal environment without caller composition or
         }
         if (command === "node") {
           observedEnvironment = options.env;
+          observedDetached = options.detached;
           return "";
         }
         return commandStub(command, args);
@@ -586,6 +591,7 @@ test("test evidence receives a minimal environment without caller composition or
   assert.equal(observedEnvironment.CI, "true");
   assert.equal(observedEnvironment.NO_COLOR, "1");
   assert.equal(observedEnvironment.PATH, process.env.PATH);
+  assert.equal(observedDetached, false);
 });
 
 test("runtime evidence retains composition context only behind its purpose-bound marker", async () => {
