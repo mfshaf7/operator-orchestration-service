@@ -2464,6 +2464,65 @@ test("recovery preserves merge-ready evidence when post-merge operating evidence
   assert.equal(harness.store.readByAlias("work-item-963"), null);
 });
 
+test("recovery preserves merge-ready evidence when operating acquisition was interrupted before a result", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-interrupted-operating-evidence-recovery-"));
+  const architecture = architecturePacket("a");
+  const harness = createHarness(root, { architectureArtifact: architecture });
+  const decision = architectureBoundDecision(["work-item-963"]);
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  const pullRequest = {
+    base_ref: "main",
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  };
+  const packet = durableMergeReadyPacket(original, pullRequest);
+  harness.store.writeArtifact(original, original.artifacts.review_packet_file, packet);
+  harness.relocate("/tmp/oos-work-interrupted-operating-evidence-recovery");
+  harness.setPullRequest(pullRequest);
+  harness.setFacts({
+    operating_evidence: "required",
+    pull_request: "merged",
+    review_packet: "merge-ready",
+    source: "not-required",
+  });
+  harness.setProjection({
+    complete: false,
+    gate: null,
+    next_action: "acquire-operating-evidence",
+    state: "operating-evidence-acquisition-required",
+    summary: "The merged Landing Unit must acquire its owned operating-ready cases before finalization.",
+  });
+  const recovery = {
+    mode: "archive-merged-evidence",
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the interrupted merged attempt before a reviewed operating-evidence verifier repair.",
+    pull_request: {
+      url: pullRequest.url,
+      head_commit: pullRequest.head_commit,
+      merge_commit: pullRequest.merge_commit,
+    },
+  };
+
+  const result = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+
+  assert.equal(result.state, "recovery-recorded");
+  assert.equal(result.recovery_receipt.mode, "archive-merged-evidence");
+  assert.equal(result.recovery_receipt.missing_premerge_review_packet, false);
+  assert.deepEqual(result.recovery_receipt.preserved_review_packet, {
+    content_digest: packet.integrity.content_digest,
+    custody_uri: packet.custody.uri,
+    status: "merge-ready",
+  });
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
 test("unmerged architecture recovery retains source and starts a distinct replacement session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-unmerged-recovery-"));
   const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
