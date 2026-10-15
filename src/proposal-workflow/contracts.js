@@ -27,6 +27,8 @@ const schemaFilenames = [
   "handoff-application-result.schema.json",
   "history.schema.json",
   "projection.schema.json",
+  "repository-resolution.schema.json",
+  "repository-resolution-record.schema.json",
   "storage-state.schema.json",
 ];
 const schemas = new Map(
@@ -69,6 +71,11 @@ export function assertProposalCommand(value) {
     value,
     "Proposal command",
   );
+}
+
+export function assertProposalRepositoryResolution(value) {
+  return assertProposalContract("repository-resolution.schema.json", value,
+    "Proposal Repository resolution");
 }
 
 export function assertProposalCommandResult(value) {

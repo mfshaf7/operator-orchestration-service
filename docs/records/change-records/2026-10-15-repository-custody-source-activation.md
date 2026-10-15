@@ -124,3 +124,76 @@ Revert this Landing Unit to restore the disabled source gate and prior
 authority bundle. Platform must remove the runtime projections and revoke
 issued tokens without deleting a repository or its retained governance
 evidence.
+
+
+## Canonical Repository Gate Maintenance — 2026-10-16
+
+### Summary
+
+Extend the existing Repository custody to Proposal handoff with an authenticated,
+source-bound resolution consuming a successful retained custody receipt. Preserve
+the accepted Disposition and use the existing canonical workflow-state mutation,
+immutable Proposal event history, and replay recovery rather than browser-local
+resolution state.
+
+### Classification
+
+- area: Repository to Proposal handoff
+- type: maintenance; extend existing owner workflow
+- runtime impact: new bounded resolution operation in the existing local lane
+- Landing Unit Decision: child_isolated_landing_unit; OOS is an independent
+  owner/review/rollback boundary from the dependent Console adapter.
+
+### Ownership
+
+- owner repo: `operator-orchestration-service`
+- related ART slice: acceptance-exposed maintenance for #1275 / #1298; no new child
+- related products or components: Governance Operations Console, Repository custody
+
+### Root Cause
+
+- immediate failure: real accepted Proposal requested Repository Control, which
+  had no canonical pending request or live gate resolution.
+- actual root cause: the local cross-domain receipt path was excluded correctly
+  by live fixture isolation but had not been replaced with owner-backed progression.
+- why it escaped earlier controls: capability-by-capability proof omitted the
+  Proposal-to-Repository-to-Proposal handoff and cold-browser continuity.
+
+### Source Changes
+
+- changed workflow, adapter, or contract: bounded repository-resolution operation;
+  OOS derives resolved custody from exact successful owner evidence, never from
+  browser-supplied owner/ref or a re-recorded Disposition.
+- tests or validator added: positive, invalid receipt, wrong identity, stale
+  source, replay, interrupted mutation/event write, and canonical cold-read cases.
+- related change records: existing repository-custody workflow and list repairs.
+
+### Artifact And Deployment Evidence
+
+- source-only change, or build/deployment evidence: source candidate; not operating proof
+- image tag or digest: None
+- runtime revision: None
+- exact-revision consumers: complete-runtime policy and controlled Security
+  acceptance pin current OOS 5c75a8d and Console 8b7eac7. Both need reacceptance
+  and ordered activation after this OOS change and its Console adapter land.
+- sequence: OOS contract/service, Console adapter, exact Security acceptance,
+  Platform composition reconciliation, browser acceptance and operating proof.
+
+### Live Verification
+
+- local validation: pending; do not interpret planned cases as passing evidence
+- live or dev-integration verification: OpenProject work package 1305 form schema
+  returned HTTP 200 at lockVersion 2; description, status, and Proposal Workflow
+  State customField57 each writable=true. Read-only form inspection used the
+  existing Node transport and configured Host/authentication. No record mutation.
+- residual risk: source integration is not accepted runtime availability until
+  exact Security acceptance and activation are refreshed.
+
+### Follow-Up
+
+- required follow-up: prove the browser can resolve and refresh the accepted
+  Proposal without fixtures, direct backend writes, or hidden CLI product work.
+- owner: operator-orchestration-service and governance-operations-console
+- due date or closure condition: before final #1298 acceptance.
+
+Security review boundary: the existing [controlled Console runtime review](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-10-15-governance-console-platform-operation.md) must accept the exact repair sources before activation. This source candidate is not operating acceptance.

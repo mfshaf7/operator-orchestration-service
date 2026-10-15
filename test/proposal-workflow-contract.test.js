@@ -17,14 +17,8 @@ function readJson(relativePath) {
 function compileSchema(filename) {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
-  if (filename === "handoff-application-result.schema.json") {
-    for (const dependency of [
-      "projection.schema.json",
-      "event.schema.json",
-      "history.schema.json",
-    ]) {
-      ajv.addSchema(readJson(dependency));
-    }
+  for (const dependency of ["command.schema.json", "repository-resolution.schema.json", "repository-resolution-record.schema.json", "projection.schema.json", "event.schema.json", "history.schema.json"]) {
+    if (filename !== dependency) ajv.addSchema(readJson(dependency));
   }
   return ajv.compile(readJson(filename));
 }

@@ -1434,6 +1434,20 @@ async function handleProposalCommand({
   sendJson(response, result.replayed ? 200 : 201, result);
 }
 
+async function handleProposalRepositoryResolution({ config, proposalId, proposalWorkflowService, request, response }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository gate resolution");
+  if (caller.id !== "governance-operations-console") {
+    throw new HttpError(403, "proposal_repository_resolution_caller_invalid", "Only the authenticated Console may resolve a Repository gate.");
+  }
+  assertProposalWorkflowConfigured(config);
+  const result = await proposalWorkflowService.resolveRepositoryGate({
+    callerId: caller.id, proposalId, correlationId: createCorrelationId(request),
+    resolution: await readJsonBody(request, { maxBytes: MAX_PROPOSAL_COMMAND_BODY_BYTES }),
+  });
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
 async function handleProposalHandoffApplication({
   config,
   proposalId,
@@ -6587,6 +6601,11 @@ export function createApp({
           request,
           response,
         });
+        return;
+      }
+
+      if (request.method === "POST" && /^\/v1\/proposals\/[^/]+\/repository-resolution$/.test(url.pathname)) {
+        await handleProposalRepositoryResolution({ config, proposalId: decodeURIComponent(url.pathname.split("/")[3]), proposalWorkflowService, request, response });
         return;
       }
 

@@ -23492,6 +23492,109 @@
           }
         }
       }
+    },
+    "/v1/proposals/{proposal_id}/repository-resolution": {
+      "post": {
+        "tags": [
+          "Proposal Workflow"
+        ],
+        "summary": "Resolve a pending Proposal Repository gate from successful custody evidence",
+        "description": "Console-only, caller-bound resolution consumes the exact successful retained Repository custody receipt. It preserves Disposition, applies optimistic source guards, journals an immutable typed resolution, and supports same-request replay and interrupted acknowledgement recovery. It does not admit inventory or apply the downstream handoff.",
+        "operationId": "resolveProposalRepositoryGate",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical Proposal identifier such as idea-851.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Current accepted Proposal source, exact successful custody receipt, and operator-reviewed resolution notes. Retain identical inputs for interrupted acknowledgement replay.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalRepositoryResolutionV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "resolution_id": "repository-resolution:idea-851:review-1",
+                "proposal_id": "idea-851",
+                "source": {
+                  "record_ref": "openproject://work_packages/851",
+                  "record_version": "version-17",
+                  "projection_state": "current",
+                  "status": "accepted"
+                },
+                "operator": {
+                  "id": "governance-operations-console"
+                },
+                "repository_request_ref": "repo-request://proposal/idea-851",
+                "custody_request_id": "repository-custody-request:todo",
+                "custody_receipt_ref": {
+                  "uri": "oos://receipts/repository-custody/todo.json",
+                  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "notes": "Use the reviewed successfully provisioned private repository."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing result returned for an exact idempotent replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Command accepted and durably journaled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "proposal-workflow",
+        "x-oos-workflow-family": "proposal"
+      }
     }
   },
   "components": {
@@ -34642,6 +34745,12 @@
           "updated_at"
         ],
         "properties": {
+          "repository_resolution": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1"
+          },
+          "repository_resolution_history_pending": {
+            "type": "boolean"
+          },
           "schema_version": {
             "const": 1
           },
@@ -35100,6 +35209,7 @@
               "captured",
               "triaged",
               "disposition-recorded",
+              "repository-gate-resolved",
               "handoff-blocked",
               "handoff-prepared",
               "handoff-applied",
@@ -35155,6 +35265,9 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1000
+          },
+          "repository_resolution": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1"
           },
           "occurred_at": {
             "type": "string",
@@ -35238,7 +35351,7 @@
             "type": "array",
             "maxItems": 100,
             "items": {
-              "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/event"
+              "$ref": "#/components/schemas/ProposalWorkflowEventV1"
             }
           },
           "next_cursor": {
@@ -35299,104 +35412,6 @@
               "rejected",
               "implemented"
             ]
-          },
-          "event": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "event_id",
-              "proposal_id",
-              "record_version",
-              "event_type",
-              "status_before",
-              "status_after",
-              "actor",
-              "command_id",
-              "receipt_refs",
-              "summary",
-              "occurred_at"
-            ],
-            "properties": {
-              "schema_version": {
-                "const": 1
-              },
-              "event_id": {
-                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
-              },
-              "proposal_id": {
-                "type": "string",
-                "pattern": "^idea-[1-9][0-9]*$"
-              },
-              "record_version": {
-                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
-              },
-              "event_type": {
-                "enum": [
-                  "captured",
-                  "triaged",
-                  "disposition-recorded",
-                  "handoff-blocked",
-                  "handoff-prepared",
-                  "handoff-applied",
-                  "target-application-failed",
-                  "implementation-reconciled"
-                ]
-              },
-              "status_before": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/lifecycle_status"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "status_after": {
-                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/lifecycle_status"
-              },
-              "actor": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "kind",
-                  "id"
-                ],
-                "properties": {
-                  "kind": {
-                    "enum": [
-                      "operator",
-                      "system",
-                      "target"
-                    ]
-                  },
-                  "id": {
-                    "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
-                  }
-                }
-              },
-              "command_id": {
-                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/nullable_identifier"
-              },
-              "receipt_refs": {
-                "type": "array",
-                "maxItems": 8,
-                "uniqueItems": true,
-                "items": {
-                  "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
-                }
-              },
-              "summary": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 1000
-              },
-              "occurred_at": {
-                "type": "string",
-                "format": "date-time"
-              }
-            }
           }
         },
         "x-oos-canonical-schema": "contracts/proposal-workflow/history.schema.json"
@@ -67283,6 +67298,242 @@
             }
           }
         }
+      },
+      "ProposalRepositoryResolutionRecordV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receipt_ref",
+          "source_version",
+          "proposal_id",
+          "repository_request_ref",
+          "resolved_owner",
+          "resolved_repo_ref",
+          "recorded_at",
+          "notes",
+          "custody_receipt_ref",
+          "resolution_id",
+          "custody_request_id"
+        ],
+        "properties": {
+          "receipt_ref": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/identifier"
+          },
+          "source_version": {
+            "type": "string",
+            "pattern": "^version-[0-9]+$"
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/proposal_id"
+          },
+          "repository_request_ref": {
+            "type": "string",
+            "pattern": "^repo-request://proposal/idea-[1-9][0-9]*$"
+          },
+          "resolved_owner": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/identifier"
+          },
+          "resolved_repo_ref": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/identifier"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "custody_receipt_ref": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/artifact_ref"
+          },
+          "resolution_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/identifier"
+          },
+          "custody_request_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1/$defs/identifier"
+          }
+        },
+        "title": "Canonical Repository Gate Resolution V1",
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "artifact_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "format": "uri"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/repository-resolution-record.schema.json"
+      },
+      "ProposalRepositoryResolutionV1": {
+        "title": "Proposal Repository Gate Resolution Request V1",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "resolution_id",
+          "proposal_id",
+          "source",
+          "operator",
+          "repository_request_ref",
+          "custody_request_id",
+          "custody_receipt_ref",
+          "notes"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "resolution_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/identifier"
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/proposal_id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/handoff_source_precondition"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/operator"
+          },
+          "repository_request_ref": {
+            "type": "string",
+            "pattern": "^repo-request://proposal/idea-[1-9][0-9]*$"
+          },
+          "custody_request_id": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/identifier"
+          },
+          "custody_receipt_ref": {
+            "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/artifact_ref"
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "\\S"
+          }
+        },
+        "$defs": {
+          "artifact_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "format": "uri"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/identifier"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "handoff_source_precondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status"
+            ],
+            "properties": {
+              "record_ref": {
+                "$ref": "#/components/schemas/ProposalRepositoryResolutionV1/$defs/identifier"
+              },
+              "record_version": {
+                "type": "string",
+                "pattern": "^version-[0-9]+$"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "const": "accepted"
+              }
+            }
+          }
+        },
+        "example": {
+          "schema_version": 1,
+          "resolution_id": "repository-resolution:idea-851:review-1",
+          "proposal_id": "idea-851",
+          "source": {
+            "record_ref": "openproject://work_packages/851",
+            "record_version": "version-17",
+            "projection_state": "current",
+            "status": "accepted"
+          },
+          "operator": {
+            "id": "governance-operations-console"
+          },
+          "repository_request_ref": "repo-request://proposal/idea-851",
+          "custody_request_id": "repository-custody-request:todo",
+          "custody_receipt_ref": {
+            "uri": "oos://receipts/repository-custody/todo.json",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "notes": "Use the reviewed successfully provisioned private repository."
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/repository-resolution.schema.json"
       }
     }
   }

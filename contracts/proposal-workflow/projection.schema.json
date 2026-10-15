@@ -25,6 +25,10 @@
     "updated_at"
   ],
   "properties": {
+    "repository_resolution": {
+      "$ref": "repository-resolution-record.schema.json"
+    },
+    "repository_resolution_history_pending": { "type": "boolean" },
     "schema_version": {
       "const": 1
     },

@@ -1,6 +1,7 @@
 import { parseIdeaId } from "../idea-model.js";
 import { HttpError } from "../errors.js";
 import { deliveryIngressId } from "../delivery-ingress/service.js";
+import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import {
   assertProposalCommand,
   assertProposalCommandResult,
@@ -9,6 +10,8 @@ import {
   assertProposalHandoffApplicationResult,
   assertProposalHistory,
   assertProposalProjection,
+  assertProposalRepositoryResolution,
+  assertProposalStorageState,
 } from "./contracts.js";
 import { decodeProposalEvent, encodeProposalEvent } from "./event-codec.js";
 import {
@@ -420,6 +423,7 @@ export function createProposalWorkflowService({
   audit,
   deliveryIngressService,
   openProjectClient,
+  readRepositoryCustody,
 }) {
   let automationUserRefPromise = null;
 
@@ -499,7 +503,19 @@ export function createProposalWorkflowService({
       record.updatedAt ?? new Date().toISOString(),
     );
     const lastEvent = events.at(-1) ?? null;
+    const repositoryResolution = [
+      ...(state.repository_resolution ? [state.repository_resolution] : []),
+      ...events.slice().reverse().filter((event) => event.event_type === "repository-gate-resolved").map((event) => event.repository_resolution),
+    ].find((resolution) => {
+      return resolution &&
+        state.receipt_refs.includes(resolution.receipt_ref) &&
+        state.route?.source_custody.repository_gate_state === "resolved" &&
+        state.route.source_custody.owner === resolution.resolved_owner &&
+        state.route.source_custody.source_ref === resolution.resolved_repo_ref;
+    });
     return assertProposalProjection({
+      ...(repositoryResolution ? { repository_resolution: repositoryResolution } : {}),
+      ...(repositoryResolution ? { repository_resolution_history_pending: !events.some((event) => event.repository_resolution?.receipt_ref === repositoryResolution.receipt_ref) } : {}),
       schema_version: 1,
       proposal_id: record.ideaId,
       record_ref: record.recordRef,
@@ -731,6 +747,93 @@ export function createProposalWorkflowService({
       status: "succeeded",
     });
     return result;
+  }
+
+  async function resolveRepositoryGate({ callerId, resolution, correlationId, proposalId }) {
+    assertProposalRepositoryResolution(resolution);
+    assertCommandBinding({ callerId, command: resolution, proposalId });
+    if (resolution.repository_request_ref !== `repo-request://proposal/${proposalId}`) {
+      throw new HttpError(409, "proposal_repository_request_mismatch", "Repository request does not belong to this Proposal.");
+    }
+    const { events, record: initialRecord, recordId } = await getRecordAndEvents(proposalId);
+    let record = initialRecord;
+    const state = parseProposalState(record.workflowState, record.updatedAt);
+    const receiptRef = `repository-resolution:${proposalId}:${canonicalDigest(resolution).slice(7)}`;
+    let event = events.find((entry) => entry.command_id === resolution.resolution_id);
+    if (event && (event.event_type !== "repository-gate-resolved" || !event.receipt_refs.includes(receiptRef))) {
+      throw new HttpError(409, "proposal_command_id_conflict", "Resolution id was already used for different content.");
+    }
+    const replayed = Boolean(event || state.receipt_refs.includes(receiptRef));
+    if (!event) {
+      if (state.receipt_refs.includes(receiptRef)) {
+        if (state.repository_resolution?.receipt_ref !== receiptRef) {
+          throw new HttpError(409, "proposal_repository_resolution_recovery_conflict", "Refresh canonical history before resolving an interrupted repository acknowledgement.");
+        }
+      } else {
+        assertSourcePrecondition({ command: resolution, record });
+        if (state.route?.source_custody.classification !== "new-repo-required" ||
+            state.route.source_custody.repository_gate_state !== "pending" ||
+            !["not-requested", "blocked"].includes(state.handoff.state)) {
+          throw new HttpError(409, "proposal_repository_gate_not_pending", "Only an accepted pending repository gate may be resolved.");
+        }
+      }
+      if (!readRepositoryCustody) {
+        throw new HttpError(503, "proposal_repository_custody_unavailable", "Repository custody evidence is unavailable.");
+      }
+      const custody = await readRepositoryCustody(resolution.custody_request_id);
+      if (custody.status !== "succeeded" || custody.receipt?.outcome !== "succeeded" ||
+          custody.receipt_ref?.uri !== resolution.custody_receipt_ref.uri ||
+          custody.receipt_ref?.digest !== resolution.custody_receipt_ref.digest ||
+          !custody.provider_readback?.repository_identity) {
+        throw new HttpError(409, "proposal_repository_custody_not_proven", "Resolution requires the exact successful Repository custody receipt and provider readback.");
+      }
+      const owner = custody.request.requested_custody.workspace_owner_ref;
+      const repoRef = custody.provider_readback.canonical_url;
+      const recordedAt = replayed ? state.repository_resolution.recorded_at : timestampAfter(state.updated_at);
+      event = assertProposalEvent({
+        schema_version: 1, event_id: proposalEventId(proposalId, resolution.resolution_id),
+        proposal_id: proposalId, record_version: proposalRecordVersion(parseProposalRecordVersion(resolution.source.record_version) + 1),
+        event_type: "repository-gate-resolved", status_before: "accepted", status_after: "accepted",
+        actor: { kind: "operator", id: callerId }, command_id: resolution.resolution_id,
+        receipt_refs: [receiptRef, resolution.custody_receipt_ref.uri], summary: resolution.notes,
+        occurred_at: recordedAt,
+        repository_resolution: {
+          resolution_id: resolution.resolution_id, custody_request_id: resolution.custody_request_id,
+          receipt_ref: receiptRef, proposal_id: proposalId, source_version: resolution.source.record_version,
+          repository_request_ref: resolution.repository_request_ref, resolved_owner: owner,
+          resolved_repo_ref: repoRef, notes: resolution.notes, recorded_at: recordedAt,
+          custody_receipt_ref: resolution.custody_receipt_ref,
+        },
+      });
+      if (!replayed) {
+        const nextState = structuredClone(state);
+        nextState.route.source_custody = { ...nextState.route.source_custody,
+          repository_gate_state: "resolved", owner, source_ref: repoRef, rationale: resolution.notes };
+        nextState.receipt_refs = [...nextState.receipt_refs, receiptRef].slice(-8);
+        nextState.repository_resolution = event.repository_resolution;
+        nextState.updated_at = recordedAt;
+        record = await openProjectClient.applyProposalWorkflowMutation({
+          currentRecord: record, decisionNotes: null, expectedLockVersion: record.lockVersion,
+          recordId, status: "accepted", triageSummary: null, workflowState: assertProposalStorageState(nextState),
+        });
+        if (record.lockVersion !== parseProposalRecordVersion(resolution.source.record_version) + 1) {
+          throw new HttpError(502, "proposal_record_version_unexpected", "Repository acknowledgement returned an unexpected source version.");
+        }
+      } else if (state.route?.source_custody.owner !== owner || state.route.source_custody.source_ref !== repoRef) {
+        throw new HttpError(409, "proposal_repository_resolution_recovery_conflict", "Canonical resolved custody differs from the retained Repository receipt.");
+      }
+      await openProjectClient.addProposalEvent({ raw: encodeProposalEvent(event), recordId });
+      events.push(event);
+    }
+    events.sort((left, right) => left.occurred_at.localeCompare(right.occurred_at) || left.event_id.localeCompare(right.event_id));
+    const projection = projectionFromRecord(record, events);
+    audit?.emit({ caller: { id: callerId }, correlation_id: correlationId,
+      event_type: "proposal.repository-gate.resolved", proposal_id: proposalId,
+      receipt_ref: receiptRef, replayed, status: "succeeded" });
+    return assertProposalCommandResult({ schema_version: 1, command_id: resolution.resolution_id,
+      replayed, receipt: resultReceipt({ event, projection, receiptRef }), projection, event,
+      history: assertProposalHistory({ schema_version: 1, proposal_id: proposalId,
+        record_version: projection.record_version, events: events.slice(-100), next_cursor: null }) });
   }
 
   async function applyHandoff({
@@ -1055,6 +1158,7 @@ export function createProposalWorkflowService({
 
   return {
     applyCommand,
+    resolveRepositoryGate,
     applyHandoff,
     acknowledgePrototypeHandoff,
     getEvent,

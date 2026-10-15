@@ -19,6 +19,11 @@
   "capabilities": {
     "live": [
       {
+        "id": "proposal-repository-resolution",
+        "method": "POST",
+        "path": "/v1/proposals/{proposal_id}/repository-resolution"
+      },
+      {
         "id": "proposal-list",
         "method": "GET",
         "path": "/v1/ideas"

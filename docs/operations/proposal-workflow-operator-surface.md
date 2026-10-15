@@ -46,6 +46,28 @@ Each logical submission needs a stable `command_id`. Replaying the same ID and
 same command returns HTTP `200` with `replayed: true`. First acceptance returns
 HTTP `201`. Reusing an ID for different content is rejected.
 
+## Resolve A Pending Repository Gate
+
+Repository Control reads the current canonical Proposal and retained successful
+Repository custody requests. The operator selects a successful request and
+reviews its exact provider identity and receipt before submitting
+`POST /v1/proposals/{proposal_id}/repository-resolution`. Only the authenticated
+Console caller is admitted; caller/operator binding and the current accepted
+source version are required. OOS derives owner/ref from retained owner evidence,
+not browser-provided repository claims. No new repository or inventory action is
+performed by resolution.
+
+Keep `resolution_id`, source version, selected custody receipt, and notes stable
+when retrying an interrupted submission. A successful canonical update followed
+by a lost response or event-journal failure is recovered without applying the
+source twice. Changed content under the same id is rejected. A stale source
+requires refresh and a newly reviewed request, not an automatic overwrite.
+
+The canonical Projection and History carry the immutable typed resolution.
+Completed Disposition remains unchanged; refresh Proposal before preparing the
+downstream handoff. Provisioning and gate resolution do not grant Workspace
+Intake, inventory, Delivery Catalog, or product admission.
+
 ## Apply A Prepared Delivery Handoff
 
 After a fresh Projection reports all of the following:
@@ -105,7 +127,7 @@ Do not retry blindly when OOS reports:
 
 ## Deferred Boundaries
 
-Console adapter wiring, Repository resolution, Prototype application, realtime
+Console adapter wiring, Prototype application, realtime
 push, and governed AI assistance remain separate governed work. Delivery
 application is live only through the authenticated OOS application route.
 
