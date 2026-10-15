@@ -317,6 +317,20 @@ export function architectureLandingUnitDecisionFingerprint({
     .map(({ evidence_prerequisite_work_item_ids: _prerequisites, ...gate }) =>
       structuredClone(gate))
     .sort(byId("gate_id"));
+  const consumerHandoffs =
+    (architecture.architecture?.evidence_receipt_handoffs ?? [])
+      .filter((entry) => entry?.consumer_landing_unit_id === landingUnitId)
+      .map((entry) => {
+        const projected = structuredClone(entry);
+        const producerIsGateAuthority = gates.some((gate) =>
+          gate.authority_owner_repo === projected.producer &&
+          gate.authority_work_item_id === projected.producer_work_item_id);
+        if (producerIsGateAuthority) {
+          delete projected.producer_landing_unit_id;
+        }
+        return projected;
+      })
+      .sort(byId("handoff_id"));
   const cases = (architecture.conformance_plan?.cases ?? [])
     .filter((entry) =>
       entry?.evidence_owner_landing_unit_id === landingUnitId ||
@@ -341,11 +355,7 @@ export function architectureLandingUnitDecisionFingerprint({
         .map((entry) => structuredClone(entry))
         .sort(byId("work_item_id")),
     required_human_gates: gates,
-    evidence_receipt_handoffs:
-      (architecture.architecture?.evidence_receipt_handoffs ?? [])
-        .filter((entry) => entry?.consumer_landing_unit_id === landingUnitId)
-        .map((entry) => structuredClone(entry))
-        .sort(byId("handoff_id")),
+    evidence_receipt_handoffs: consumerHandoffs,
     runtime_boundaries:
       (architecture.architecture?.runtime_boundaries ?? [])
         .filter((entry) => entry?.owner_repo === landingUnit.owner_repo)

@@ -2116,6 +2116,66 @@ test("unrelated architecture changes do not invalidate an unchanged active Landi
   );
 });
 
+test("a gated handoff remains compatible when only the authority attempt identity changes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-gated-handoff-refresh-"));
+  const original = architecturePacket("a");
+  original.architecture.required_human_gates = [{
+    affected_landing_unit_ids: ["delivery-958-work-item-963"],
+    authority_owner_repo: "security-architecture",
+    authority_work_item_id: "work-item-962",
+    blocked_transition: "before_source_merge",
+    evidence_prerequisite_work_item_ids: ["work-item-960"],
+    evidence_requirement: "Review the exact active source head.",
+    gate_id: "gate:active-source",
+  }];
+  original.architecture.evidence_receipt_handoffs = [{
+    acceptance: "Security accepts the exact candidate before merge.",
+    artifact: "exact candidate decision",
+    consumer: "operator-orchestration-service",
+    consumer_landing_unit_id: "delivery-958-work-item-963",
+    consumer_work_item_id: "work-item-963",
+    handoff_id: "handoff:962-963",
+    integration_point: "accepted source boundary",
+    producer: "security-architecture",
+    producer_landing_unit_id: "delivery-958-security-repair",
+    producer_work_item_id: "work-item-962",
+  }];
+  const harness = createHarness(root, { architectureArtifact: original });
+  await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  const refreshed = structuredClone(original);
+  refreshed.integrity.content_digest = `sha256:${"e".repeat(64)}`;
+  refreshed.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"e".repeat(64)}`;
+  refreshed.architecture.evidence_receipt_handoffs[0]
+    .producer_landing_unit_id = "delivery-958-security-refresh";
+  harness.setCurrentArchitecture(refreshed);
+
+  const compatible = await harness.controller.status("963");
+  assert.equal(compatible.state, "architecture-refresh-required");
+  assert.equal(
+    compatible.next_action.code,
+    "architecture-compatible-refresh-required",
+  );
+  assert.equal(compatible.architecture_supersession, undefined);
+
+  refreshed.architecture.evidence_receipt_handoffs[0].acceptance =
+    "Security accepts a different boundary.";
+  refreshed.integrity.content_digest = `sha256:${"f".repeat(64)}`;
+  refreshed.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"f".repeat(64)}`;
+  harness.setCurrentArchitecture(refreshed);
+
+  const changedContract = await harness.controller.status("963");
+  assert.equal(changedContract.state, "architecture-superseded");
+  assert.equal(
+    changedContract.next_action.code,
+    "architecture-reconstruction-required",
+  );
+});
+
 test("superseded sessions with source or evidence activity cannot reconstruct", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-active-"));
   const harness = createHarness(root, {

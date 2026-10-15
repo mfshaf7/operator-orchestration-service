@@ -466,6 +466,11 @@ lifecycle plan and rediscovering commands and paths:
    `architecture-recovery-required`, stop and reconcile the existing activity;
    the session cannot be rebound. Use the bounded recovery paths below only
    after proving the exact source state; recovery never claims completion.
+   A producer Landing Unit attempt rename does not invalidate an active
+   consumer when an unchanged applicable human gate still binds the same
+   authority owner, authority work item, evidence contract, and blocked
+   transition. Any change to those stable gate or handoff semantics still
+   requires reconstruction or recovery.
 6. Review the exact current PR head as the designated human reviewer. Status
    remains at `pull-request-review-required` when approval is missing, stale,
    dismissed, superseded by changes requested, or attached to another head.
