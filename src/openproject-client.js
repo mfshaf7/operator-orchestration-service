@@ -11144,6 +11144,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
 
         if (normalizedParkDecision === "retire") {
+          const currentTypeName = workPackageTypeName(currentPayload);
           const targetPiField = customFieldMap.get("Target PI");
           if (!targetPiField) {
             throw new OpenProjectError(
@@ -11154,7 +11155,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             );
           }
           const iterationField = customFieldMap.get("Iteration");
-          if (!iterationField) {
+          if (!iterationField && currentTypeName !== "Epic") {
             throw new OpenProjectError(
               "backend_contract_drift",
               "OpenProject work package form is missing the Iteration field.",
@@ -11171,7 +11172,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             };
           }
 
-          if (currentIteration !== DELIVERY_BACKLOG_ITERATION_LABEL) {
+          if (
+            iterationField &&
+            currentIteration !== DELIVERY_BACKLOG_ITERATION_LABEL
+          ) {
             setCustomFieldPayloadValue(
               patchPayload,
               iterationField,
