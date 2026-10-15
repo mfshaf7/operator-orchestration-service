@@ -4,7 +4,6 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
-    - .github/workflows/validate-governance-docs.yaml
     - src/openproject-client.js
     - test/openproject-client.test.js
   findings: []
@@ -51,9 +50,6 @@ already terminal. The same failure previously affected Epic 896.
   Iteration; every other type retains the existing fail-closed check.
 - `test/openproject-client.test.js` reproduces the real Epic form shape and
   proves retirement neither fabricates nor writes an Iteration value.
-- `.github/workflows/validate-governance-docs.yaml` replaces the brittle fixed
-  API-startup sleep with a bounded readiness poll and emits container logs when
-  the API never becomes ready.
 
 ## Validation
 
@@ -74,11 +70,6 @@ schema: Target PI remained writable, the status, Parking Decision, and
 Retirement Reason fields exposed the required `allowedValues`, and Iteration
 was absent. The regression test preserves that observed contract shape and
 proves the patch does not fabricate or write an Iteration value.
-
-The original PR check also reproduced a separate API-smoke race: the container
-was not always ready after the workflow's fixed two-second sleep. The unchanged
-image passed when retried locally. The replacement poll is bounded to fifteen
-seconds and keeps the same health assertion.
 
 After merge and dev-integration reconciliation, resubmit the managed retirement
 draft for Epic 698 and confirm the broker returns `retired` without writing an
