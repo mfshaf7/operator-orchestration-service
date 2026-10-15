@@ -10741,6 +10741,173 @@ test("manageDeliveryParking retires PI-committed story work and clears stale PI 
   assert.equal(result.parking.retirement_reason, "superseded");
 });
 
+test("manageDeliveryParking retires an Epic whose form omits Iteration", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/698"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "parked" },
+                type: { title: "Epic" },
+                customField31: { title: "defer" },
+                customField34: { title: null },
+              },
+              customField14: null,
+              customField32: "Preserve completed durable-orchestration foundations.",
+              customField33: "2026-09-15",
+              customField41: null,
+              customField42: null,
+              customField43: null,
+              customField44: null,
+              customField45: null,
+              customField46: null,
+              customField47: null,
+              customField48: null,
+              description: { raw: "## What This Initiative Achieves\n\nPreserve history." },
+              dueDate: null,
+              id: 698,
+              lockVersion: 12,
+              startDate: null,
+              subject: "Build durable governance orchestration runtime",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/698/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/11", title: "parked" },
+                        { href: "/api/v3/statuses/12", title: "retired" },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    fieldFormat: "string",
+                    location: "payload",
+                    name: "Target PI",
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "defer" },
+                        { href: "/api/v3/custom_options/2", title: "retire" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Parking Decision",
+                  },
+                  customField32: { fieldFormat: "string", name: "Parking Reason" },
+                  customField33: { fieldFormat: "date", name: "Parking Review Date" },
+                  customField34: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3", title: "superseded" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Retirement Reason",
+                  },
+                  customField41: { fieldFormat: "string", name: "Blocker Statement" },
+                  customField42: { fieldFormat: "string", name: "Blocker Impact" },
+                  customField43: { fieldFormat: "string", name: "Blocker Owner" },
+                  customField44: { fieldFormat: "date", name: "Blocker Discovered On" },
+                  customField45: { fieldFormat: "string", name: "Blocker Decision Path" },
+                  customField46: { fieldFormat: "string", name: "Blocker Justification" },
+                  customField47: { fieldFormat: "string", name: "Blocker Follow-Up Owner" },
+                  customField48: { fieldFormat: "date", name: "Blocker Review Date" },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/698"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "Epic" },
+                customField31: { title: "retire" },
+                customField34: { title: "superseded" },
+              },
+              customField14: null,
+              customField32: "Epic 698 is superseded as an active delivery vehicle.",
+              customField33: null,
+              customField41: null,
+              customField42: null,
+              customField43: null,
+              customField44: null,
+              customField45: null,
+              customField46: null,
+              customField47: null,
+              customField48: null,
+              description: { raw: "## What This Initiative Achieves\n\nPreserve history." },
+              dueDate: null,
+              id: 698,
+              startDate: null,
+              subject: "Build durable governance orchestration runtime",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryParking({
+    action: "park",
+    parkDecision: "retire",
+    parkReason: "Epic 698 is superseded as an active delivery vehicle.",
+    recordId: 698,
+    retirementReason: "superseded",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/698",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.status.title, "retired");
+  assert.equal(patchPayload._links.customField31.title, "retire");
+  assert.equal(patchPayload._links.customField34.title, "superseded");
+  assert.equal(Object.hasOwn(patchPayload, "customField39"), false);
+  assert.equal(result.workItem.status, "retired");
+  assert.equal(result.changesApplied.iteration, undefined);
+});
+
 test("manageDeliveryParking resumes an inactive work item and clears parking fields", async () => {
   const calls = [];
   const client = createOpenProjectClient({
