@@ -1,3 +1,18 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - src/openproject-client.js
+    - test/openproject-client.test.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: The change preserves fail-closed Iteration enforcement for executable non-Epic work and permits omission only for the OpenProject Epic form shape, which does not expose that field. It introduces no new identity, privilege, secret, deployment authority, or external action path.
+---
+
 # 2026-10-15 Epic retirement field shape
 
 ## Summary
