@@ -1,5 +1,13 @@
 export const PROPOSAL_OPENAPI_SCHEMA_BINDINGS = [
   {
+    canonicalFilename: "repository-resolution-record.schema.json",
+    componentName: "ProposalRepositoryResolutionRecordV1",
+  },
+  {
+    canonicalFilename: "repository-resolution.schema.json",
+    componentName: "ProposalRepositoryResolutionV1",
+  },
+  {
     canonicalFilename: "command.schema.json",
     componentName: "ProposalWorkflowCommandV1",
   },

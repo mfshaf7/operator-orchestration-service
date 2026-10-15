@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
+import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
 import {
   projectCanonicalSchemaForOpenApi,
 } from "./orchestration_openapi_schema_tools.mjs";
@@ -52,6 +52,15 @@ for (const { canonicalFilename, componentName } of
     projected,
   );
 }
+
+const resolutionPath = structuredClone(spec.paths["/v1/proposals/{proposal_id}/commands"]);
+const resolutionExample = JSON.parse(readFileSync(path.join(contractRoot, "repository-resolution.schema.json"), "utf8")).example;
+resolutionPath.post.operationId = "resolveProposalRepositoryGate";
+resolutionPath.post.summary = "Resolve a pending Proposal Repository gate from successful custody evidence";
+resolutionPath.post.description = "Console-only, caller-bound resolution consumes the exact successful retained Repository custody receipt. It preserves Disposition, applies optimistic source guards, journals an immutable typed resolution, and supports same-request replay and interrupted acknowledgement recovery. It does not admit inventory or apply the downstream handoff.";
+resolutionPath.post["x-oos-primary-caller"] = "governance-operations-console";
+resolutionPath.post.requestBody = { required: true, description: "Current accepted Proposal source, exact successful custody receipt, and operator-reviewed resolution notes. Retain identical inputs for interrupted acknowledgement replay.", content: { "application/json": { schema: { $ref: "#/components/schemas/ProposalRepositoryResolutionV1" }, example: resolutionExample } } };
+synchronized = upsertOpenApiPath(synchronized, "/v1/proposals/{proposal_id}/repository-resolution", resolutionPath);
 
 if (process.argv.includes("--check")) {
   if (synchronized !== original) {

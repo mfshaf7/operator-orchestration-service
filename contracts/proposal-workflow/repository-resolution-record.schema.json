@@ -1,0 +1,92 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_ref",
+    "source_version",
+    "proposal_id",
+    "repository_request_ref",
+    "resolved_owner",
+    "resolved_repo_ref",
+    "recorded_at",
+    "notes",
+    "custody_receipt_ref",
+    "resolution_id",
+    "custody_request_id"
+  ],
+  "properties": {
+    "receipt_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "source_version": {
+      "type": "string",
+      "pattern": "^version-[0-9]+$"
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/proposal_id"
+    },
+    "repository_request_ref": {
+      "type": "string",
+      "pattern": "^repo-request://proposal/idea-[1-9][0-9]*$"
+    },
+    "resolved_owner": {
+      "$ref": "#/$defs/identifier"
+    },
+    "resolved_repo_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "custody_receipt_ref": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "resolution_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "custody_request_id": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/repository-resolution-record.schema.json",
+  "title": "Canonical Repository Gate Resolution V1",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "digest"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "format": "uri"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^idea-[1-9][0-9]*$"
+    }
+  }
+}

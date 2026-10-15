@@ -38,6 +38,7 @@
         "captured",
         "triaged",
         "disposition-recorded",
+        "repository-gate-resolved",
         "handoff-blocked",
         "handoff-prepared",
         "handoff-applied",
@@ -93,6 +94,9 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 1000
+    },
+    "repository_resolution": {
+      "$ref": "repository-resolution-record.schema.json"
     },
     "occurred_at": {
       "type": "string",

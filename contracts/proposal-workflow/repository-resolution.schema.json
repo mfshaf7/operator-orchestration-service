@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/repository-resolution.schema.json",
+  "title": "Proposal Repository Gate Resolution Request V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "resolution_id",
+    "proposal_id",
+    "source",
+    "operator",
+    "repository_request_ref",
+    "custody_request_id",
+    "custody_receipt_ref",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "resolution_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/proposal_id"
+    },
+    "source": {
+      "$ref": "#/$defs/handoff_source_precondition"
+    },
+    "operator": {
+      "$ref": "#/$defs/operator"
+    },
+    "repository_request_ref": {
+      "type": "string",
+      "pattern": "^repo-request://proposal/idea-[1-9][0-9]*$"
+    },
+    "custody_request_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "custody_receipt_ref": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "\\S"
+    }
+  },
+  "$defs": {
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "digest"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "format": "uri"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^idea-[1-9][0-9]*$"
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "handoff_source_precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "projection_state",
+        "status"
+      ],
+      "properties": {
+        "record_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "record_version": {
+          "type": "string",
+          "pattern": "^version-[0-9]+$"
+        },
+        "projection_state": {
+          "const": "current"
+        },
+        "status": {
+          "const": "accepted"
+        }
+      }
+    }
+  },
+  "example": {
+    "schema_version": 1,
+    "resolution_id": "repository-resolution:idea-851:review-1",
+    "proposal_id": "idea-851",
+    "source": {
+      "record_ref": "openproject://work_packages/851",
+      "record_version": "version-17",
+      "projection_state": "current",
+      "status": "accepted"
+    },
+    "operator": {
+      "id": "governance-operations-console"
+    },
+    "repository_request_ref": "repo-request://proposal/idea-851",
+    "custody_request_id": "repository-custody-request:todo",
+    "custody_receipt_ref": {
+      "uri": "oos://receipts/repository-custody/todo.json",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "Use the reviewed successfully provisioned private repository."
+  }
+}

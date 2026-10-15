@@ -16,6 +16,126 @@ import {
 const NOW = "2026-08-16T03:10:00.000Z";
 const AUTOMATION_USER_REF = "/api/v3/users/5";
 
+function pendingRepositoryRecord() {
+  const state = readyPrototypeState();
+  state.route.source_custody = { classification: "new-repo-required", repository_mode: "new",
+    repository_gate_state: "pending", owner: null, source_ref: null, rationale: "Provision the product source." };
+  state.handoff = defaultProposalState(NOW).handoff;
+  return record({ status: "accepted", workflowState: JSON.stringify(state), operatorDecisionNotes: "Original accepted decision." });
+}
+
+function repositoryResolution() {
+  return { schema_version: 1, resolution_id: "repository-resolution:851:review-1", proposal_id: "idea-851",
+    source: { record_ref: "openproject://work_packages/851", record_version: "version-17", projection_state: "current", status: "accepted" },
+    operator: { id: "governance-operations-console" }, repository_request_ref: "repo-request://proposal/idea-851",
+    custody_request_id: "repository-request:todo", custody_receipt_ref: { uri: "oos://receipts/repository-custody/todo.json", digest: `sha256:${"a".repeat(64)}` },
+    notes: "Use the successfully provisioned private product repository." };
+}
+
+function successfulRepositoryCustody() {
+  return { status: "succeeded", receipt: { outcome: "succeeded" }, receipt_ref: repositoryResolution().custody_receipt_ref,
+    request: { requested_custody: { workspace_owner_ref: "repo:todo" } },
+    provider_readback: { repository_identity: { provider: "github", provider_repository_id: "12345" }, canonical_url: "https://github.com/example-workspace/todo" } };
+}
+
+test("Repository resolution preserves accepted Disposition and survives canonical cold read and replay", async () => {
+  let evidenceReads = 0;
+  const h = createHarness({ currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => { evidenceReads++; return successfulRepositoryCustody(); } });
+  const input = { callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() };
+  const result = await h.service.resolveRepositoryGate(input);
+  assert.equal(result.replayed, false);
+  assert.equal(result.projection.route.target, "prototype");
+  assert.equal(result.projection.route.source_custody.repository_gate_state, "resolved");
+  assert.equal(result.projection.route.source_custody.owner, "repo:todo");
+  assert.equal(result.projection.route.source_custody.source_ref, "https://github.com/example-workspace/todo");
+  assert.equal(result.projection.decision_notes, "Original accepted decision.");
+  assert.equal(result.projection.handoff.state, "not-requested");
+  assert.equal(JSON.parse(h.storedRecord().workflowState).last_accepted_command, null);
+  assert.equal(result.event.event_type, "repository-gate-resolved");
+  assert.equal(result.projection.repository_resolution.receipt_ref, result.receipt.receipt_ref);
+  const cold = await h.service.getProjection({ callerId: input.callerId, proposalId: input.proposalId });
+  assert.deepEqual(cold.repository_resolution, result.projection.repository_resolution);
+  const replay = await h.service.resolveRepositoryGate(input);
+  assert.equal(replay.replayed, true);
+  assert.equal(evidenceReads, 1);
+  assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
+});
+
+for (const failure of ["wrong-operator", "wrong-request", "stale-source", "changed-receipt", "denied", "unavailable", "injected-owner"]) {
+  test(`Repository resolution denies ${failure} before canonical mutation`, async () => {
+    const resolution = repositoryResolution();
+    const custody = successfulRepositoryCustody();
+    if (failure === "wrong-operator") resolution.operator.id = "unrelated-caller";
+    if (failure === "wrong-request") resolution.repository_request_ref = "repo-request://proposal/idea-852";
+    if (failure === "stale-source") resolution.source.record_version = "version-16";
+    if (failure === "changed-receipt") resolution.custody_receipt_ref.digest = `sha256:${"b".repeat(64)}`;
+    if (failure === "denied") custody.status = "denied";
+    if (failure === "injected-owner") resolution.resolved_owner = "repo:other";
+    const h = createHarness({ currentRecord: pendingRepositoryRecord(),
+      ...(failure !== "unavailable" ? { readRepositoryCustody: async () => custody } : {}) });
+    await assert.rejects(h.service.resolveRepositoryGate({ callerId: "governance-operations-console", proposalId: "idea-851", resolution }));
+    assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 0);
+  });
+}
+
+for (const interruption of ["mutationFailureAfterCommit", "addEventFailureAfterCommit"]) {
+  test(`Repository resolution repairs ${interruption} without duplicate source mutation`, async () => {
+    const h = createHarness({ currentRecord: pendingRepositoryRecord(), [interruption]: true, readRepositoryCustody: async () => successfulRepositoryCustody() });
+    const input = { callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() };
+    await assert.rejects(h.service.resolveRepositoryGate(input), /socket closed/);
+    const result = await h.service.resolveRepositoryGate(input);
+    assert.equal(result.replayed, true);
+    assert.equal(result.projection.repository_resolution.receipt_ref, result.receipt.receipt_ref);
+    assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
+    assert.equal(result.history.events.filter((event) => event.event_type === "repository-gate-resolved").length, 1);
+  });
+}
+
+test("Repository resolution rejects changed logical replay and already resolved gates", async () => {
+  const h = createHarness({ currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => successfulRepositoryCustody() });
+  const input = { callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() };
+  await h.service.resolveRepositoryGate(input);
+  await assert.rejects(h.service.resolveRepositoryGate({ ...input, resolution: { ...input.resolution, notes: "Different request content." } }), { code: "proposal_command_id_conflict" });
+  await assert.rejects(h.service.resolveRepositoryGate({ ...input, resolution: { ...input.resolution, resolution_id: "resolution:new", source: { ...input.resolution.source, record_version: "version-18" } } }), { code: "proposal_repository_gate_not_pending" });
+});
+
+test("cold browser can recover exact persisted acknowledgement after source commit and lost response", async () => {
+  const h = createHarness({ currentRecord: pendingRepositoryRecord(), mutationFailureAfterCommit: true,
+    readRepositoryCustody: async () => successfulRepositoryCustody() });
+  const input = { callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() };
+  await assert.rejects(h.service.resolveRepositoryGate(input), /socket closed/);
+  const restarted = h.reopen();
+  const projection = await restarted.getProjection({ callerId: input.callerId, proposalId: input.proposalId });
+  assert.equal(projection.repository_resolution_history_pending, true);
+  const persisted = projection.repository_resolution;
+  const rebuilt = { schema_version: 1, resolution_id: persisted.resolution_id, proposal_id: persisted.proposal_id,
+    operator: input.resolution.operator, source: { ...input.resolution.source, record_version: persisted.source_version },
+    repository_request_ref: persisted.repository_request_ref, custody_request_id: persisted.custody_request_id,
+    custody_receipt_ref: persisted.custody_receipt_ref, notes: persisted.notes };
+  const result = await restarted.resolveRepositoryGate({ ...input, resolution: rebuilt });
+  assert.equal(result.replayed, true);
+  assert.equal(result.projection.repository_resolution_history_pending, false);
+  assert.equal(result.event.occurred_at, persisted.recorded_at);
+  assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
+});
+
+test("current Repository resolution remains visible after the bounded recent-receipt ring advances", async () => {
+  const initial = createHarness({ currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => successfulRepositoryCustody() });
+  await initial.service.resolveRepositoryGate({ callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() });
+  const currentRecord = initial.storedRecord();
+  const state = JSON.parse(currentRecord.workflowState);
+  state.receipt_refs = [];
+  currentRecord.workflowState = JSON.stringify(state);
+  const cold = createHarness({ currentRecord, readRepositoryCustody: async () => successfulRepositoryCustody() });
+  const projection = await cold.service.getProjection({ callerId: "governance-operations-console", proposalId: "idea-851" });
+  assert.equal(projection.repository_resolution.receipt_ref, state.repository_resolution.receipt_ref);
+  assert.equal(projection.repository_resolution_history_pending, true);
+  const recovered = await cold.service.resolveRepositoryGate({ callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() });
+  assert.equal(recovered.replayed, true);
+  assert.equal(recovered.projection.repository_resolution_history_pending, false);
+  assert.equal(cold.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 0);
+});
+
 function record(overrides = {}) {
   return {
     body: "Build the live Proposal integration.",
@@ -139,6 +259,7 @@ function createHarness({
   consumeFailures = 0,
   currentRecord = record(),
   mutationFailureAfterCommit = false,
+  readRepositoryCustody,
 } = {}) {
   const calls = [];
   let storedRecord = structuredClone(currentRecord);
@@ -221,6 +342,7 @@ function createHarness({
   };
   return {
     calls,
+    reopen: () => createProposalWorkflowService({ openProjectClient, readRepositoryCustody }),
     service: createProposalWorkflowService({
       deliveryIngressService: createDeliveryIngressService({
         adapters: {
@@ -229,6 +351,7 @@ function createHarness({
         clock: () => new Date(NOW),
       }),
       openProjectClient,
+      readRepositoryCustody,
     }),
     storedRecord: () => structuredClone(storedRecord),
   };

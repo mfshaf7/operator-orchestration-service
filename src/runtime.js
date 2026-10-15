@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { HttpError } from "./errors.js";
 import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
@@ -134,6 +135,12 @@ export function createRuntime({
     audit,
     deliveryIngressService,
     openProjectClient,
+    readRepositoryCustody: (requestId) => {
+      if (!repositoryCustodyService) {
+        throw new HttpError(503, "proposal_repository_custody_unavailable", "Repository custody runtime is unavailable.");
+      }
+      return repositoryCustodyService.project(requestId);
+    },
   });
   const wgcfDeliveryArtReadinessClient = createWgcfDeliveryArtReadinessClient({
     baseUrl: config.wgcf.deliveryArtBaseUrl,
