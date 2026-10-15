@@ -508,7 +508,7 @@ export function createProposalWorkflowService({
       ...events.slice().reverse().filter((event) => event.event_type === "repository-gate-resolved").map((event) => event.repository_resolution),
     ].find((resolution) => {
       return resolution &&
-        state.receipt_refs.includes(resolution.receipt_ref) &&
+        (state.repository_resolution?.receipt_ref === resolution.receipt_ref || state.receipt_refs.includes(resolution.receipt_ref)) &&
         state.route?.source_custody.repository_gate_state === "resolved" &&
         state.route.source_custody.owner === resolution.resolved_owner &&
         state.route.source_custody.source_ref === resolution.resolved_repo_ref;

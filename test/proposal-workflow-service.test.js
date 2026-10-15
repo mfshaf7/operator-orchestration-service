@@ -119,6 +119,19 @@ test("cold browser can recover exact persisted acknowledgement after source comm
   assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
 });
 
+test("current Repository resolution remains visible after the bounded recent-receipt ring advances", async () => {
+  const initial = createHarness({ currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => successfulRepositoryCustody() });
+  await initial.service.resolveRepositoryGate({ callerId: "governance-operations-console", proposalId: "idea-851", resolution: repositoryResolution() });
+  const currentRecord = initial.storedRecord();
+  const state = JSON.parse(currentRecord.workflowState);
+  state.receipt_refs = [];
+  currentRecord.workflowState = JSON.stringify(state);
+  const cold = createHarness({ currentRecord });
+  const projection = await cold.service.getProjection({ callerId: "governance-operations-console", proposalId: "idea-851" });
+  assert.equal(projection.repository_resolution.receipt_ref, state.repository_resolution.receipt_ref);
+  assert.equal(projection.repository_resolution_history_pending, true);
+});
+
 function record(overrides = {}) {
   return {
     body: "Build the live Proposal integration.",
