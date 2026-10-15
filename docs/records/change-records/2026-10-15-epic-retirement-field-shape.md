@@ -65,9 +65,15 @@ pending exact-head review and merge.
 
 ## Live Verification
 
-After merge and dev-integration reconciliation, resubmit the existing managed
-retirement draft for Epic 698 and confirm the broker returns `retired` without
-writing an Iteration value.
+The blocked managed submission for Epic 698 read the live OpenProject form
+schema: Target PI remained writable, the status, Parking Decision, and
+Retirement Reason fields exposed the required `allowedValues`, and Iteration
+was absent. The regression test preserves that observed contract shape and
+proves the patch does not fabricate or write an Iteration value.
+
+After merge and dev-integration reconciliation, resubmit the managed retirement
+draft for Epic 698 and confirm the broker returns `retired` without writing an
+Iteration value.
 
 ## Rollback
 
