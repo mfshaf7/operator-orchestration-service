@@ -68,6 +68,28 @@ test("repository custody API preserves caller and request identity", async () =>
   assert.equal(calls[1].requestId, request.request_id);
 });
 
+test("custody list API authenticates reads and preserves bounded page coordinates", async () => {
+  const calls = [];
+  const service = {
+    async list(input) {
+      calls.push(input);
+      return { schema_version: 1, records: [], next_cursor: null };
+    },
+  };
+  const options = { deliveryService: {}, ideaService: {}, openProjectClient: {}, repositoryCustodyService: service };
+  const app = createApp({ ...options, config: config() });
+  const cursor = "a".repeat(64);
+  const result = await execute(app, { method: "GET", url: `/v1/repository-custody/requests?cursor=${cursor}&limit=2` });
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(calls, [{ callerId: "governance-operations-console", cursor, limit: 2 }]);
+  assert.equal((await execute(app, { method: "GET", url: "/v1/repository-custody/requests?unknown=true" })).statusCode, 400);
+  const unbound = createApp({ ...options, config: loadConfig({
+    CALLER_ALLOWED_IDS: "governance-operations-console", CALLER_AUTH_SHARED_SECRET: "console-secret",
+  }) });
+  assert.equal((await execute(unbound, { method: "GET", url: "/v1/repository-custody/requests" })).statusCode, 403);
+  assert.equal(calls.length, 1);
+});
+
 test("repository custody API accepts the canonical provisioning command", async () => {
   const calls = [];
   const request = provisionRequest();

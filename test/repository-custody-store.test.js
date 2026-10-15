@@ -14,6 +14,32 @@ import test from "node:test";
 import { createRepositoryCustodyStore } from "../src/repository-custody/store.js";
 import { custodyRequest, provisionRequest } from "../test-fixtures/repository-custody.js";
 
+test("custody pages survive store reconstruction and reject invalid cursors and corrupt records", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-repository-custody-pages-"));
+  try {
+    const store = createRepositoryCustodyStore({ root });
+    const ids = ["page-a", "page-b", "page-c"].map((id) => `repository-custody-request:${id}`);
+    for (const request_id of ids) {
+      store.put({ request: custodyRequest({ request_id }), retryable: false, status: "denied" });
+    }
+    const restored = createRepositoryCustodyStore({ root });
+    const first = restored.list({ limit: 2 });
+    const second = restored.list({ cursor: first.next_cursor, limit: 2 });
+    assert.equal(first.records.length, 2);
+    assert.equal(second.records.length, 1);
+    assert.equal(second.next_cursor, null);
+    assert.deepEqual(new Set([...first.records, ...second.records].map((r) => r.request.request_id)), new Set(ids));
+    for (const options of [{ cursor: "../records" }, { limit: 0 }, { limit: 26 }]) {
+      assert.throws(() => restored.list(options), (error) => error.code === "repository_custody_page_invalid");
+    }
+    const name = readdirSync(path.join(root, "records"))[0];
+    writeFileSync(path.join(root, "records", name), "broken");
+    assert.throws(() => restored.list(), (error) => error.code === "repository_custody_state_corrupt");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
 test("repository custody store binds request identity and rejects corrupt state", () => {
   const root = mkdtempSync(path.join(tmpdir(), "oos-repository-custody-store-"));
   const store = createRepositoryCustodyStore({ root });

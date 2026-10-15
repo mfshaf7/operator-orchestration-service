@@ -64,6 +64,34 @@ function harness({ decision, provider } = {}) {
   };
 }
 
+test("canonical custody listing rereads durable evidence without provider mutation", async () => {
+  const fixture = harness();
+  try {
+    await fixture.service.execute({ callerId: "governance-operations-console", input: fixture.request });
+    const callCount = fixture.calls.length;
+    const restored = createRepositoryCustodyService({
+      store: createRepositoryCustodyStore({ root: fixture.root }),
+      clock: TEST_CLOCK,
+    });
+    const page = await restored.list();
+    assert.equal(page.schema_version, 1);
+    assert.equal(page.records.length, 1);
+    assert.equal(page.records[0].status, "succeeded");
+    assert.equal(page.records[0].replayed, true);
+    assert.equal(page.records[0].request.request_id, fixture.request.request_id);
+    assert.equal(page.next_cursor, null);
+    assert.equal(fixture.calls.length, callCount);
+    await assert.rejects(restored.list({ cursor: "invalid" }), (error) => error.statusCode === 400);
+    const file = path.join(fixture.root, "records", readdirSync(path.join(fixture.root, "records"))[0]);
+    const corrupt = JSON.parse(readFileSync(file, "utf8"));
+    corrupt.receipt.integrity.content_digest = "sha256:" + "0".repeat(64);
+    writeFileSync(file, JSON.stringify(corrupt));
+    await assert.rejects(restored.list(), (error) => /integrity|contract|state/.test(error.code));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 function provisioningHarness({ create, find, read, decision } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-repository-provisioning-"));
   const calls = [];

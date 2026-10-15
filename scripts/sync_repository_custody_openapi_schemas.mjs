@@ -229,6 +229,39 @@ const errorResponse = (description) => ({
   content: { "application/json": { schema: { $ref: "#/components/schemas/RepositoryCustodyErrorV1" } } },
 });
 synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests", {
+  get: {
+    tags: ["Repository Custody"],
+    summary: "List retained repository custody requests",
+    description: "Reads a bounded page of integrity-validated durable custody results so the Console can recover canonical repository state after reload. No provider or downstream mutation occurs.",
+    operationId: "listRepositoryCustodyResults",
+    security,
+    parameters: [
+      { name: "cursor", in: "query", required: false, schema: { type: "string", pattern: "^[a-f0-9]{64}$" } },
+      { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 25, default: 25 } },
+    ],
+    responses: {
+      200: {
+        description: "One canonical page of retained custody workflow results.",
+        content: { "application/json": { schema: {
+          type: "object",
+          required: ["schema_version", "records", "next_cursor"],
+          properties: {
+            schema_version: { const: 1 },
+            records: { type: "array", maxItems: 25, items: { $ref: "#/components/schemas/RepositoryCustodyWorkflowResultV1" } },
+            next_cursor: { oneOf: [{ type: "string", pattern: "^[a-f0-9]{64}$" }, { type: "null" }] },
+          },
+          additionalProperties: false,
+        }, example: { schema_version: 1, records: [{ ...sample.result, replayed: true }], next_cursor: null } } },
+      },
+      400: errorResponse("Page cursor, limit, or filter is invalid."),
+      403: errorResponse("Caller identity is not bound to a caller-specific credential."),
+      503: errorResponse("The workflow runtime or durable state is unavailable or corrupt."),
+    },
+    "x-oos-owner": "operator-orchestration-service",
+    "x-oos-primary-caller": "governance-operations-console",
+    "x-oos-surface": "operator-facing",
+    "x-oos-workflow-family": "repository-custody",
+  },
   post: {
     tags: ["Repository Custody"],
     summary: "Execute a repository custody command",

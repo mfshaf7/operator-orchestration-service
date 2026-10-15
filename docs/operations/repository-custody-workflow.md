@@ -41,6 +41,13 @@ Repository lifecycle actions remain on their separately gated workflow.
 
 ## Recovery
 
+The Console reloads retained custody requests through authenticated
+`GET /v1/repository-custody/requests`. Pages contain at most 25 validated
+workflow results, with an opaque `next_cursor` for the next page. A caller may
+set `limit` from 1 to 25. The list uses the same caller-bound read authority as
+individual request readback and performs no provider operation. Invalid
+cursors, corrupt state, and unavailable runtime remain visible failures.
+
 - Same request ID and digest after success or denial: read the existing result.
 - Same request ID with different content: stop and create a new request
   identity after correcting the operator draft.

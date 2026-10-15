@@ -27,8 +27,16 @@ OOS activates the existing repository-custody workflow for the reviewed local
 Workspace Governance authority bundle so OOS and WGCF evaluate identical
 policy and schema bytes.
 
+The maintenance continuation adds authenticated, bounded request enumeration
+over the same retained custody records so the Console can recover its register
+after reload. It preserves the existing individual request and mutation paths.
+
 ## Classification
 
+- maintenance Landing Unit: `maintenance-1275-repository-request-readback`
+- Landing Unit Decision: `child_isolated_landing_unit`; the OOS read contract
+  and runtime have their own review, source landing, and rollback boundary.
+  This record tracks maintenance under the existing acceptance exercise.
 - area: repository custody and provisioning
 - type: reviewed source activation and authority synchronization
 - runtime impact: permits Platform to compose the workflow only in the local
@@ -51,6 +59,11 @@ policy and schema bytes.
 - correction: synchronize the current canonical bundle, bind the exact
   Security decision, activate only the two reviewed actions, and deny runtime
   construction outside `dev-integration`
+- acceptance-exposed gap: provider creation results were retained in OOS, but
+  the Console could discover them only while their request IDs remained in its
+  component memory. Removing live fixture fallback exposed the absent durable
+  register-read path. The maintenance continuation enumerates those existing
+  records rather than introducing another state owner.
 
 ## Source Changes
 
@@ -65,6 +78,10 @@ policy and schema bytes.
   enabled
 - preserves distinct read-only and provisioning credentials, pinned provider
   destination, redirect denial, idempotency, recovery, readback, and receipts
+- exposes cursor-based read pages of at most 25 integrity-validated retained
+  workflow results behind the existing caller-bound credential requirement
+- tests cold store reconstruction, pagination, invalid coordinates, corrupt
+  records, authentication, and readback without provider side effects
 
 ## Validation
 
@@ -97,6 +114,9 @@ for both dedicated GitHub Apps, and prove rollback and revocation. Console
 - closure condition: fresh dedicated credentials, exact deployed revisions,
   real repository provisioning, canonical readback, denial, restart, rollback,
   revocation, and restored normal availability all pass
+- maintenance continuation: refresh the Security delta for the reviewed
+  read-contract change, land Console consumption, then repeat the existing
+  fixture-free journey before claiming operating completion
 
 ## Rollback
 

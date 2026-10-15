@@ -4047,6 +4047,30 @@ async function handleRepositoryCustodyProjection({
   }));
 }
 
+async function handleRepositoryCustodyList({ config, repositoryCustodyService, request, response, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository custody reads");
+  if ([...url.searchParams.keys()].some((key) => !["cursor", "limit"].includes(key))) {
+    throw new HttpError(400, "repository_custody_page_invalid", "Unsupported repository custody page filter.");
+  }
+  const result = await repositoryCustodyService.list({
+    callerId: caller.id,
+    cursor: url.searchParams.get("cursor"),
+    limit: Number(url.searchParams.get("limit") ?? 25),
+  });
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: "oos://repository-custody/requests",
+    sourceOwner: "operator-orchestration-service",
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp: result.records.reduce(
+      (latest, record) => {
+        const timestamp = record.receipt?.completed_at ?? record.request.requested_at;
+        return timestamp > latest ? timestamp : latest;
+      }, "",
+    ) || new Date().toISOString(),
+  }));
+}
+
 async function handleRepositoryLifecycleCommand({
   config,
   repositoryLifecycleService,
@@ -6008,6 +6032,18 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/prototype-closures\/requests\/[^/]+\/cancel$/.test(url.pathname)) {
         await handlePrototypeClosure({ action: "cancel", config, prototypeClosureService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/repository-custody/requests"
+      ) {
+        if (!repositoryCustodyService) {
+          throw new HttpError(503, "repository_custody_runtime_not_configured",
+            "The repository custody runtime is not configured.");
+        }
+        await handleRepositoryCustodyList({ config, repositoryCustodyService, request, response, url });
         return;
       }
 
