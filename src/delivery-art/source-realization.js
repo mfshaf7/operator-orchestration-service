@@ -263,7 +263,7 @@ function gatewayRequest({ attempt, operatorId, profileId, projection, source }) 
     caller_identity: {
       caller_id: "operator-orchestration-service/source-realization",
       caller_repo: "operator-orchestration-service",
-      caller_workflow: "delivery-art-source-realization",
+      caller_workflow: "source-realization",
       decision_or_correlation_id: attempt.request_id,
       requested_profile_id: profileId,
     },
@@ -274,7 +274,7 @@ function gatewayRequest({ attempt, operatorId, profileId, projection, source }) 
       version: "1.0",
     },
     provider_output_schema_ref:
-      "operator-orchestration-service/contracts/delivery-art-work-session/source-realization-change-set.schema.json",
+      "platform-engineering/security/schemas/source-realization-change-set.schema.json",
     input: {
       task_instruction:
         "Produce one minimal bounded change set using only the admitted packet. Do not run commands, mutate state, approve, merge, or include secrets.",
