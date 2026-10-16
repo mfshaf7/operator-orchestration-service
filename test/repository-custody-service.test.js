@@ -92,7 +92,7 @@ test("canonical custody listing rereads durable evidence without provider mutati
   }
 });
 
-function provisioningHarness({ create, find, read, decision } = {}) {
+function provisioningHarness({ create, find, read, decision, applyApprovedSettings } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-repository-provisioning-"));
   const calls = [];
   const request = provisionRequest();
@@ -101,6 +101,11 @@ function provisioningHarness({ create, find, read, decision } = {}) {
     audit: { emit(event) { calls.push({ operation: "audit", event }); } },
     clock: TEST_CLOCK,
     providerClient: {
+      async applyApprovedSettings(...args) {
+        calls.push({ operation: "settings", input: args[0] });
+        if (applyApprovedSettings instanceof Error) throw applyApprovedSettings;
+        return applyApprovedSettings?.(...args);
+      },
       async create(input, approvedProvisioning) {
         calls.push({ operation: "create", input, approvedProvisioning });
         if (create instanceof Error) throw create;
@@ -481,5 +486,197 @@ test("repository provisioning rejects changed content under the same request ide
     );
   } finally {
     target.cleanup();
+  }
+});
+
+function incompleteBaseline(input) {
+  return provisionReadback(input, {
+    applied_provisioning: {
+      owner_scope: "organization",
+      initialization_state: "initialized",
+      settings: {
+        ...input.provisioning,
+        merge_policy: { ...input.provisioning.merge_policy, delete_branch_on_merge: false },
+      },
+    },
+  });
+}
+
+function correctionFor(request, overrides = {}) {
+  return provisionRequest({
+    request_id: `${request.request_id}-correction`,
+    workflow: { ...request.workflow, execution_id: `${request.workflow.execution_id}-correction` },
+    authority: {
+      ...request.authority,
+      approval_ref: { uri: "console://approvals/correction", digest: `sha256:${"9".repeat(64)}` },
+    },
+    correlation: { correlation_id: request.correlation.correlation_id, causation_id: request.request_id },
+    idempotency_key: `${request.idempotency_key}-correction`,
+    ...overrides,
+  });
+}
+
+test("partial creation completes exact baseline and separately rereads without another create", async () => {
+  let applied = false;
+  const target = provisioningHarness({
+    read(input) { return applied ? provisionReadback(input) : incompleteBaseline(input); },
+    applyApprovedSettings() { applied = true; },
+  });
+  try {
+    const result = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.provider_operation.attempt_count, 1);
+    assert.deepEqual(target.calls.filter(c => c.operation !== "audit").map(c => c.operation),
+      ["readiness", "find", "create", "read", "settings", "read"]);
+  } finally { target.cleanup(); }
+});
+
+test("reviewed correction preserves immutable failed evidence and uses the acknowledged ID only", async () => {
+  let allowCompletion = false;
+  let applied = false;
+  const target = provisioningHarness({
+    decision: input => provisionDecision(input),
+    read(input) { return applied ? provisionReadback(input) : incompleteBaseline(input); },
+    applyApprovedSettings() { applied = allowCompletion; },
+  });
+  try {
+    const failed = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.retryable, false);
+    const retainedFiles = readdirSync(path.join(target.root, "records"));
+    const originalPath = path.join(target.root, "records", retainedFiles[0]);
+    const originalBytes = readFileSync(originalPath, "utf8");
+    allowCompletion = true;
+    const input = correctionFor(target.request);
+    const result = await target.service.execute({ callerId: "console", input });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.provider_operation.completion_path, "recovered");
+    assert.equal(result.provider_operation.provider_repository_id, "987654321");
+    assert.equal(target.calls.filter(c => c.operation === "create").length, 1);
+    assert.equal(target.calls.filter(c => c.operation === "find").length, 1);
+    assert.equal(readFileSync(originalPath, "utf8"), originalBytes);
+    assert.deepEqual((await target.service.project(target.request.request_id)).receipt_ref, failed.receipt_ref);
+    const count = target.calls.length;
+    assert.equal((await target.service.execute({ callerId: "console", input })).replayed, true);
+    assert.equal(target.calls.length, count);
+    assert.deepEqual((await target.service.list()).records.map(r => r.status).sort(), ["failed", "succeeded"]);
+  } finally { target.cleanup(); }
+});
+
+test("correction rejects missing provenance, changed target, settings, owner and operator before provider access", async () => {
+  const target = provisioningHarness({ read: input => incompleteBaseline(input), decision: provisionDecision });
+  try {
+    await target.service.execute({ callerId: "console", input: target.request });
+    const cases = [
+      { correlation: { correlation_id: "correction", causation_id: "missing" } },
+      { target: { ...target.request.target, name: "unrelated" } },
+      { provisioning: { ...target.request.provisioning, visibility: "public" } },
+      { requested_custody: { ...target.request.requested_custody, workspace_owner_ref: "repo:other" } },
+      { operator_ref: { ...target.request.operator_ref, digest: `sha256:${"4".repeat(64)}` } },
+    ];
+    const count = target.calls.length;
+    for (const overrides of cases) {
+      await assert.rejects(target.service.execute({ callerId: "console", input: correctionFor(target.request, overrides) }),
+        error => error.code === "repository_custody_correction_invalid");
+    }
+    assert.equal(target.calls.length, count);
+  } finally { target.cleanup(); }
+});
+
+test("unrelated name collision is never repaired or adopted", async () => {
+  const target = provisioningHarness({ find: input => incompleteBaseline(input) });
+  try {
+    const result = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(result.failure.code, "repository_provider_name_conflict");
+    assert.equal(target.calls.some(c => ["settings", "create"].includes(c.operation)), false);
+    await assert.rejects(target.service.execute({ callerId: "console", input: correctionFor(target.request) }),
+      error => error.code === "repository_custody_correction_invalid");
+  } finally { target.cleanup(); }
+});
+
+test("settings transport failure retains readback and retries by immutable ID", async () => {
+  let attempts = 0;
+  let applied = false;
+  const target = provisioningHarness({
+    read: input => applied ? provisionReadback(input) : incompleteBaseline(input),
+    applyApprovedSettings() {
+      if (++attempts === 1) throw new HttpError(503, "repository_provider_unavailable", "Settings response lost.");
+      applied = true;
+    },
+  });
+  try {
+    const failed = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(failed.retryable, true);
+    assert.equal(failed.provider_readback.applied_provisioning.settings.merge_policy.delete_branch_on_merge, false);
+    const result = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(result.status, "succeeded");
+    assert.equal(target.calls.filter(c => c.operation === "create").length, 1);
+  } finally { target.cleanup(); }
+});
+
+test("durable applying checkpoint resumes without requiring a fabricated terminal receipt", async () => {
+  const target = provisioningHarness();
+  try {
+    const result = await target.service.execute({ callerId: "console", input: target.request });
+    const file = path.join(target.root, "records", readdirSync(path.join(target.root, "records"))[0]);
+    const checkpoint = {
+      ...result, status: "applying", receipt: null, receipt_ref: null,
+      provider_readback: null, provider_readback_ref: null, next_action: "await-provider",
+      provider_operation: { ...result.provider_operation, state: "provider-acknowledged", completion_path: null },
+    };
+    writeFileSync(file, JSON.stringify(checkpoint));
+    assert.equal((await target.service.project(target.request.request_id)).status, "applying");
+    assert.equal((await target.service.execute({ callerId: "console", input: target.request })).status, "succeeded");
+    assert.equal(target.calls.filter(c => c.operation === "create").length, 1);
+  } finally { target.cleanup(); }
+});
+
+test("lost settings acknowledgement recovers by readback without repeating settings or creation", async () => {
+  let applied = false;
+  const target = provisioningHarness({
+    read: input => applied ? provisionReadback(input) : incompleteBaseline(input),
+    applyApprovedSettings() {
+      applied = true;
+      throw new HttpError(503, "repository_provider_unavailable", "Settings acknowledgement lost.");
+    },
+  });
+  try {
+    assert.equal((await target.service.execute({ callerId: "console", input: target.request })).retryable, true);
+    assert.equal((await target.service.execute({ callerId: "console", input: target.request })).status, "succeeded");
+    assert.equal(target.calls.filter(c => c.operation === "settings").length, 1);
+    assert.equal(target.calls.filter(c => c.operation === "create").length, 1);
+  } finally { target.cleanup(); }
+});
+
+test("unknown create acknowledgement with mismatched coordinates remains read-only", async () => {
+  let finds = 0;
+  const target = provisioningHarness({
+    create: new HttpError(503, "repository_provider_unavailable", "Create acknowledgement lost."),
+    find(input) { return ++finds === 1 ? null : incompleteBaseline(input); },
+  });
+  try {
+    await target.service.execute({ callerId: "console", input: target.request });
+    const result = await target.service.execute({ callerId: "console", input: target.request });
+    assert.equal(result.status, "failed");
+    assert.equal(result.provider_operation.provider_repository_id, null);
+    assert.equal(target.calls.filter(c => c.operation === "settings").length, 0);
+    assert.equal(target.calls.filter(c => c.operation === "create").length, 1);
+    await assert.rejects(target.service.execute({ callerId: "console", input: correctionFor(target.request) }),
+      error => error.code === "repository_custody_correction_invalid");
+  } finally { target.cleanup(); }
+});
+
+test("acknowledged creation cannot succeed or change settings on another immutable identity or archived target", async () => {
+  for (const overrides of [
+    { repository_identity: { provider: "github", provider_repository_id: "111111111" } },
+    { provider_lifecycle_state: "archived" },
+    { canonical_owner: "somewhere-else" },
+  ]) {
+    const target = provisioningHarness({ read: input => provisionReadback(input, overrides) });
+    try {
+      const result = await target.service.execute({ callerId: "console", input: target.request });
+      assert.equal(result.status, "failed");
+      assert.equal(target.calls.some(c => c.operation === "settings"), false);
+    } finally { target.cleanup(); }
   }
 });

@@ -56,6 +56,24 @@ cursors, corrupt state, and unavailable runtime remain visible failures.
 - Retryable provisioning failure: retry the same request. OOS recovers by the
   acknowledged provider ID when present, otherwise by approved coordinates,
   and does not create again unless fresh provider truth proves absence.
+- Partial provisioning: OOS may complete the exact approved mutable baseline
+  only after creation acknowledged an immutable repository ID and fresh
+  readback independently proves that same active organization/name. It does
+  not rename, transfer, archive, delete, initialize, or adopt a name collision.
+  Settings acknowledgement is not success; a separate read must match every
+  approved setting before a successful receipt is issued.
+- Retained nonretryable partial creation: select the failed request in the
+  Console, review its unchanged target and baseline, and approve a correction.
+  A new request identity uses the existing `correlation.causation_id` to bind
+  the retained failed creation. OOS verifies unchanged operator, target,
+  settings, custody and credential-binding identity, evaluates current WGCF
+  readiness, and resumes only by its acknowledged provider ID. It never
+  creates again or replaces the original failed result and receipt.
+- Browser reload or interrupted applying state: select the retained request
+  and use `Resume Approved Request`. The Console server rereads the canonical
+  request and resubmits its exact original approval and digest; browser fields
+  cannot reconstruct, replace or override that authority. Terminal immutable
+  results are inspected rather than silently resumed.
 - Nonretryable identity mismatch or archived repository: correct the source
   request or provider state, then submit a new request identity.
 - Corrupt or concurrently locked state: stop the workflow and preserve the

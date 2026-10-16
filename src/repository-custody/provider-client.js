@@ -72,6 +72,10 @@ function assertSupportedRequest(request) {
 }
 
 function providerFailure(response, { create = false } = {}) {
+  if ([401, 403].includes(response.status)) {
+    return new HttpError(403, "repository_provider_access_denied",
+      "The dedicated repository application is not authorized for the approved provider operation.");
+  }
   if (create && response.status === 422) {
     return new HttpError(
       409,
@@ -241,6 +245,49 @@ export function createGitHubRepositoryProviderClient({
   }
 
   return {
+    async applyApprovedSettings(request, approvedProvisioning, readback) {
+      assertConfigured(request);
+      if (
+        request.action !== "provision-new" ||
+        readback.action !== request.action ||
+        readback.request_ref.digest !== request.request_digest ||
+        readback.repository_identity.provider !== "github" ||
+        readback.provider_lifecycle_state !== "active" ||
+        readback.canonical_owner.toLowerCase() !== approvedProvisioning.owner.toLowerCase() ||
+        readback.canonical_name.toLowerCase() !== approvedProvisioning.name.toLowerCase()
+      ) {
+        throw new HttpError(409, "repository_provider_identity_mismatch",
+          "Baseline completion requires the exact acknowledged provisioning target.");
+      }
+      const settings = approvedProvisioning.settings;
+      const response = await providerRequest(
+        `${baseUrl}/repos/${encodeURIComponent(readback.canonical_owner)}/${encodeURIComponent(readback.canonical_name)}`,
+        {
+          method: "PATCH",
+          headers: providerHeaders(installationToken(request), { json: true }),
+          body: JSON.stringify({
+            description: settings.description,
+            visibility: settings.visibility,
+            has_issues: settings.features.issues,
+            has_projects: settings.features.projects,
+            has_wiki: settings.features.wiki,
+            has_discussions: settings.features.discussions,
+            allow_squash_merge: settings.merge_policy.allow_squash_merge,
+            allow_merge_commit: settings.merge_policy.allow_merge_commit,
+            allow_rebase_merge: settings.merge_policy.allow_rebase_merge,
+            delete_branch_on_merge: settings.merge_policy.delete_branch_on_merge,
+          }),
+        },
+      );
+      if (!response.ok) throw providerFailure(response);
+      // A successful PATCH is only acknowledgement, never custody evidence.
+      const body = await readBoundedJson(response);
+      if (String(body?.id ?? "") !== readback.repository_identity.provider_repository_id) {
+        throw new HttpError(409, "repository_provider_identity_mismatch",
+          "Baseline completion did not acknowledge the immutable provisioning identity.");
+      }
+    },
+
     async create(request, approvedProvisioning) {
       assertConfigured(request);
       const token = installationToken(request);

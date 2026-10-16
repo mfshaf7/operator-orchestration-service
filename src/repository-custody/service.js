@@ -167,11 +167,13 @@ function validateStored(record) {
     (terminal && !record.receipt) ||
     (!terminal && record.receipt !== null) ||
     record.decision_ref?.digest !== decisionDigest ||
-    record.receipt?.request_ref.digest !== request.request_digest ||
-    record.receipt?.decision_ref.digest !== decisionDigest ||
-    record.receipt?.decision_ref.uri !== record.decision_ref?.uri ||
-    record.receipt?.outcome !== record.status ||
-    record.receipt?.workflow_status !== record.status ||
+    (record.receipt && (
+      record.receipt.request_ref.digest !== request.request_digest ||
+      record.receipt.decision_ref.digest !== decisionDigest ||
+      record.receipt.decision_ref.uri !== record.decision_ref?.uri ||
+      record.receipt.outcome !== record.status ||
+      record.receipt.workflow_status !== record.status
+    )) ||
     record.receipt_ref?.digest !== receiptDigest ||
     record.receipt_ref?.uri !== expectedReceiptRef?.uri ||
     record.provider_readback_ref?.digest !== readbackDigest ||
@@ -250,12 +252,14 @@ function assertAllowedDecision(decision, request) {
   }
 }
 
-function readbackMatches(request, readback) {
+function readbackMatches(request, readback, expectedRepositoryId = null) {
   if (
     readback.request_ref.digest !== request.request_digest ||
     readback.action !== request.action ||
     readback.repository_identity.provider !== request.target.provider ||
-    readback.provider_lifecycle_state !== "active"
+    readback.provider_lifecycle_state !== "active" ||
+    (expectedRepositoryId !== null &&
+      readback.repository_identity.provider_repository_id !== expectedRepositoryId)
   ) {
     return false;
   }
@@ -367,6 +371,36 @@ export function createRepositoryCustodyService({
           );
         }
 
+        // Corrections preserve the old terminal result. The existing causation
+        // binding admits only completion of this exact failed creation, never
+        // adoption of a repository that merely happens to share its name.
+        let predecessor = null;
+        if (request.action === "provision-new" && request.correlation.causation_id) {
+          const retained = store.get(request.correlation.causation_id);
+          predecessor = retained ? validateStored(retained) : null;
+          if (
+            request.correlation.causation_id === request.request_id ||
+            !predecessor || predecessor.status !== "failed" || predecessor.retryable ||
+            predecessor.request.action !== "provision-new" ||
+            predecessor.provider_operation.command !== "create-provider" ||
+            predecessor.provider_operation.attempt_count < 1 ||
+            !predecessor.provider_operation.provider_repository_id ||
+            !["provider-acknowledged", "recovery-required"].includes(predecessor.provider_operation.state) ||
+            (predecessor.provider_readback &&
+              predecessor.provider_operation.provider_repository_id !==
+                predecessor.provider_readback.repository_identity.provider_repository_id) ||
+            !exactMatch(predecessor.request.target, request.target) ||
+            !exactMatch(predecessor.request.provisioning, request.provisioning) ||
+            !exactMatch(predecessor.request.requested_custody, request.requested_custody) ||
+            !exactMatch(predecessor.request.operator_ref, request.operator_ref) ||
+            predecessor.request.authority.credential_binding_ref.uri !==
+              request.authority.credential_binding_ref.uri
+          ) {
+            throw new HttpError(409, "repository_custody_correction_invalid",
+              "Provisioning correction requires the exact retained failed creation and unchanged reviewed intent.");
+          }
+        }
+
         const readiness = await readinessClient.evaluate(request);
         let record;
         if (readiness.decision.outcome !== "allowed") {
@@ -405,6 +439,7 @@ export function createRepositoryCustodyService({
                 decision: readiness.decision,
                 decisionRef: readiness.decisionRef,
                 existing,
+                predecessor,
                 providerClient,
                 put,
                 request,
@@ -551,18 +586,20 @@ async function provision({
   decision,
   decisionRef,
   existing,
+  predecessor,
   providerClient,
   put,
   request,
 }) {
+  const recovery = existing ?? predecessor;
   let operation = providerOperation({
-    attemptCount: existing?.provider_operation.attempt_count ?? 0,
+    attemptCount: recovery?.provider_operation.attempt_count ?? 0,
     command: "create-provider",
-    providerRepositoryId: existing?.provider_operation.provider_repository_id ?? null,
-    state: existing ? "recovery-required" : "not-started",
+    providerRepositoryId: recovery?.provider_operation.provider_repository_id ?? null,
+    state: recovery ? "recovery-required" : "not-started",
   });
 
-  if (existing) {
+  if (recovery) {
     put(resultRecord({
       decision,
       decisionRef,
@@ -570,14 +607,18 @@ async function provision({
       request,
       status: "applying",
     }), { replaceMutable: true });
+    let recovered = null;
     try {
-      const recovered = operation.provider_repository_id
+      recovered = operation.provider_repository_id
         ? await providerClient.read(request, {
             providerRepositoryId: operation.provider_repository_id,
           })
         : await providerClient.find(request);
       if (recovered) {
-        if (!readbackMatches(request, recovered)) {
+        recovered = await completeApprovedBaseline({
+          decision, operation, providerClient, readback: recovered, request,
+        });
+        if (!readbackMatches(request, recovered, operation.provider_repository_id)) {
           return providerFailureRecord({
             clock,
             decision,
@@ -589,8 +630,7 @@ async function provision({
             ),
             operation: {
               ...operation,
-              provider_repository_id: recovered.repository_identity.provider_repository_id,
-              state: "provider-acknowledged",
+              state: operation.provider_repository_id ? "provider-acknowledged" : "recovery-required",
             },
             providerReadback: recovered,
             request,
@@ -610,6 +650,10 @@ async function provision({
           request,
         });
       }
+      if (operation.provider_repository_id || predecessor) {
+        throw new HttpError(409, "repository_provider_identity_mismatch",
+          "The acknowledged provisioning repository could not be recovered; creation will not be repeated.");
+      }
     } catch (error) {
       return providerFailureRecord({
         clock,
@@ -617,6 +661,7 @@ async function provision({
         decisionRef,
         error,
         operation,
+        providerReadback: recovered,
         request,
       });
     }
@@ -701,6 +746,9 @@ async function provision({
     readback = await providerClient.read(request, {
       providerRepositoryId: acknowledgement.providerRepositoryId,
     });
+    readback = await completeApprovedBaseline({
+      decision, operation, providerClient, readback, request,
+    });
   } catch (error) {
     return providerFailureRecord({
       clock,
@@ -711,10 +759,11 @@ async function provision({
         ...operation,
         state: error?.statusCode >= 500 ? "recovery-required" : "provider-acknowledged",
       },
+      providerReadback: readback ?? null,
       request,
     });
   }
-  if (!readbackMatches(request, readback)) {
+  if (!readbackMatches(request, readback, operation.provider_repository_id)) {
     return providerFailureRecord({
       clock,
       decision,
@@ -741,6 +790,25 @@ async function provision({
     readback,
     request,
   });
+}
+
+async function completeApprovedBaseline({ decision, operation, providerClient, readback, request }) {
+  if (readbackMatches(request, readback, operation.provider_repository_id)) return readback;
+  // Only an acknowledged create may finish its own mutable settings. Name
+  // collisions and unknown-acknowledgement coordinate recovery stay read-only.
+  if (
+    !operation.provider_repository_id ||
+    readback.repository_identity.provider_repository_id !== operation.provider_repository_id ||
+    readback.repository_identity.provider !== request.target.provider ||
+    readback.request_ref.digest !== request.request_digest ||
+    readback.action !== request.action ||
+    readback.provider_lifecycle_state !== "active" ||
+    readback.canonical_owner.toLowerCase() !== request.target.owner.toLowerCase() ||
+    readback.canonical_name.toLowerCase() !== request.target.name.toLowerCase() ||
+    readback.applied_provisioning?.initialization_state !== "initialized"
+  ) return readback;
+  await providerClient.applyApprovedSettings(request, decision.approved_provisioning, readback);
+  return providerClient.read(request, { providerRepositoryId: operation.provider_repository_id });
 }
 
 function successfulProvision({ clock, decision, decisionRef, operation, readback, request }) {
