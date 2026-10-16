@@ -197,3 +197,81 @@ resolution state.
 - due date or closure condition: before final #1298 acceptance.
 
 Security review boundary: the existing [controlled Console runtime review](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-10-15-governance-console-platform-operation.md) must accept the exact repair sources before activation. This source candidate is not operating acceptance.
+
+## Partial Provisioning Baseline Maintenance — 2026-10-16
+
+### Summary
+
+Complete approved mutable provisioning settings only on a creation acknowledged
+by this workflow, and support a reviewed correction without rewriting a retained
+terminal failure or creating another repository.
+
+### Classification
+
+- Landing Unit: `maintenance-1275-provisioning-baseline-oos`
+- Landing Unit Decision: `child_isolated_landing_unit`; independent OOS owner,
+  review, deployment and rollback boundary from the Console adapter.
+- disposition: extend existing provisioning and partial-success recovery.
+- accepted maintenance scope: the final #1275 / #1298 Console journey; no new ART child.
+
+### Ownership
+
+OOS owns provenance, current WGCF evaluation, exact provider operation and
+terminal receipts. Console owns retained-request selection and review. Platform
+retains the separate provisioning App and token custody. Security retains exact
+composition acceptance. No upstream policy, schema, credential scope, provider,
+caller, destination or downstream authority changes.
+
+### Root Cause
+
+Real GitHub creation succeeded but one approved merge setting was false in
+independent readback. OOS correctly failed custody, but had no baseline
+completion or correlated corrected-request path. The Console then mistook this
+valid failed observation for malformed success evidence. GitHub documents the
+setting on create and update; why creation did not apply it is not proven.
+
+### Source Changes
+
+- Complete only exact approved mutable settings after independently verified
+  acknowledged identity and active coordinates, then require a separate read.
+- Bind a new correction to a retained failed creation through existing causation;
+  reject changed target, settings, custody, operator, or credential-binding identity.
+- Never mutate a name collision or repeat creation when an acknowledged ID exists.
+- Preserve terminal failure bytes and receipt; keep applying checkpoints readable
+  without fabricating a terminal receipt.
+- Map provider authorization denial to bounded nonretryable failure without
+  borrowing another credential.
+
+### Validation
+
+Focused service/client tests cover partial creation, exact-settings completion,
+separate readback, correction provenance, unchanged immutable failed history,
+replay, unknown acknowledgement, cold applying recovery and access denial.
+Full exact-head CI-equivalent evidence remains required before publication.
+
+### Artifact And Deployment Evidence
+
+- source candidate only; no runtime activation or current success claim.
+- exact-head consumers: existing Security complete-runtime decision and Platform
+  private composition bind OOS and Console revisions; both require reacceptance
+  and recommissioning after these owner merges.
+- sequence: OOS, Console, existing Security exact-composition refresh, Platform
+  activation, real browser correction and the same final to-do journey.
+
+### Live Verification
+
+Read-only canonical owner evidence confirms one real repository and one retained
+nonretryable failed receipt. No direct provider correction, new creation, state
+rewrite or deletion was performed. Operating proof remains the real Console.
+
+### Follow-Up
+
+Before #1298 acceptance, prove Console correction, original receipt preservation,
+fresh successful provider readback, reload continuity and the remaining real
+app journey. Owner: OOS and Console, with Security acceptance before activation.
+
+### Rollback
+
+Revert this maintenance source to restore the prior workflow. Disable runtime
+composition if needed, retaining provider repositories, canonical records and
+immutable receipts. No automatic compensation or provider deletion.

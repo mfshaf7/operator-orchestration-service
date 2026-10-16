@@ -8,6 +8,7 @@ import {
   decisionEnvelope,
   provisionDecision,
   provisionRequest,
+  provisionReadback,
   TEST_CLOCK,
 } from "../test-fixtures/repository-custody.js";
 
@@ -161,6 +162,53 @@ test("provider client reports a missing canonical repository without mutation", 
   assert.equal(calls.length, 1);
   assert.match(calls[0].url, /\/repos\/example-organization\/example-repository$/);
   assert.equal(calls[0].options.method, undefined);
+});
+
+test("baseline completion uses only the provisioning identity and exact mutable settings", async () => {
+  const request = provisionRequest();
+  const approved = provisionDecision(request).approved_provisioning;
+  const calls = [];
+  const client = createGitHubRepositoryProviderClient({
+    provisioningInstallationToken: "provisioning-only",
+    readInstallationToken: "read-only-never-used",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify(githubRepositoryBody(request)), { status: 200 });
+    },
+  });
+  await client.applyApprovedSettings(request, approved, provisionReadback(request));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.github.com/repos/example-organization/example-repository");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.equal(calls[0].options.redirect, "error");
+  assert.equal(calls[0].options.headers.Authorization, "Bearer provisioning-only");
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.delete_branch_on_merge, true);
+  assert.equal(body.allow_merge_commit, false);
+  assert.equal(body.allow_rebase_merge, false);
+  assert.equal(body.visibility, "private");
+  assert.equal("name" in body, false);
+  assert.equal("owner" in body, false);
+  assert.equal("auto_init" in body, false);
+  assert.equal("archived" in body, false);
+  await assert.rejects(client.applyApprovedSettings(request, approved,
+    provisionReadback(request, { canonical_owner: "another-owner" })),
+  error => error.code === "repository_provider_identity_mismatch");
+  assert.equal(calls.length, 1);
+});
+
+test("settings access denial is bounded nonretryable failure and never borrows another identity", async () => {
+  const request = provisionRequest();
+  let calls = 0;
+  const client = createGitHubRepositoryProviderClient({
+    provisioningInstallationToken: "provisioning-only",
+    readInstallationToken: "not-a-fallback",
+    fetchImpl: async () => { calls += 1; return new Response("private provider diagnostic", { status: 403 }); },
+  });
+  await assert.rejects(client.applyApprovedSettings(request, provisionDecision(request).approved_provisioning,
+    provisionReadback(request)), error => error.statusCode === 403 &&
+      error.code === "repository_provider_access_denied" && !error.message.includes("private provider diagnostic"));
+  assert.equal(calls, 1);
 });
 
 test("provider client rejects a GraphQL node id substituted for the REST repository id", async () => {

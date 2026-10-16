@@ -53,6 +53,10 @@ credential. Shared-secret fallback cannot invoke this boundary.
    the acknowledged REST repository ID, then perform a separate readback.
 6. Verify owner, name, visibility, features, merge policy, and README
    initialization against the exact WGCF-approved settings.
+   An acknowledged creation with matching immutable ID and active coordinates
+   may finish only its approved mutable settings through the same provisioning
+   App, then independently reread the repository. A coordinate collision or
+   unknown creation acknowledgement grants no settings mutation authority.
 7. Reject mismatched, archived, unavailable, or stale provider truth.
 8. Persist the terminal result and digest-bound receipt atomically.
 9. Replay the same request ID and digest without repeating completed work;
@@ -86,3 +90,12 @@ approved organization/name. Only a fresh absent result permits another create;
 OOS never compensates with provider deletion. This does not introduce a new
 system-of-record database; later composition may replace the storage adapter
 without changing the API contract.
+
+A reviewed correction of a retained nonretryable failed creation uses a new
+request ID and the existing `correlation.causation_id` referencing that failed
+request. The prior terminal result remains immutable. OOS validates creation
+attempt/acknowledged ID, unchanged target, settings, custody, operator and
+credential-binding identity before fresh WGCF evaluation. It reads only by the
+acknowledged ID; missing or changed provider identity never permits another
+create. Applying checkpoints legitimately have no terminal receipt and remain
+readable and resumable after process interruption.
