@@ -3478,6 +3478,18 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
         const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
         const involvedId = filters[0]?.involved?.values?.[0] ?? null;
 
+        if (filters[0].involved.values.length > 1) {
+          const ids = new Set(filters[0].involved.values.map(Number));
+          const relations = [[502, 38, 44], [503, 45, 39], [504, 46, 39], [501, 41, 40]]
+            .filter(([, from, to]) => ids.has(from) || ids.has(to))
+            .map(([id, from, to]) => ({ id, lag: 0, relationType: "follows",
+              description: { raw: "Bounded dependency test fixture." },
+              _links: { from: { href: `/api/v3/work_packages/${from}` }, to: { href: `/api/v3/work_packages/${to}` } } }));
+          return { ok: true, status: 200, text: async () => JSON.stringify({
+            count: relations.length, offset: 1, pageSize: 100, total: relations.length,
+            _embedded: { elements: relations } }) };
+        }
+
         if (involvedId === "38") {
           return {
             ok: true,
@@ -3662,8 +3674,7 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
       ({ url, options }) =>
         options.method === "GET" &&
         new URL(url).pathname === "/api/v3/relations" &&
-        JSON.parse(new URL(url).searchParams.get("filters") ?? "[]")[0]?.involved?.values?.[0] ===
-          "40",
+        JSON.parse(new URL(url).searchParams.get("filters") ?? "[]")[0]?.involved?.values?.includes("40"),
     ),
   );
   assert.equal(
@@ -3700,14 +3711,17 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
         options.method === "GET" &&
         new URL(url).pathname === "/api/v3/relations",
     )
-    .map(({ url }) => {
+    .flatMap(({ url }) => {
       const filters = JSON.parse(new URL(url).searchParams.get("filters") ?? "[]");
-      return filters[0]?.involved?.values?.[0] ?? null;
+      return filters[0]?.involved?.values ?? [];
     });
   assert.deepEqual(
     [...new Set(relationReadIds)].sort((left, right) => Number(left) - Number(right)),
     ["38", "39", "40", "41", "42", "43"],
   );
+  assert.equal(calls.filter(({ url, options }) => options.method === "GET" &&
+    new URL(url).pathname === "/api/v3/relations").length, 1,
+    "one bounded involved-query preserves incoming, outgoing and external dependencies");
 
   const changeSource = await client.getDeliveryChangeSource({ recordId: 38 });
   assert.match(
