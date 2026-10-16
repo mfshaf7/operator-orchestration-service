@@ -129,6 +129,22 @@ async function executeRequest(app, { body, headers = {}, method, url }) {
   };
 }
 
+test("Delivery initiative inventory retains legacy JSON and negotiates canonical owner, digest and ordering", async () => {
+  const record = { workflow_id: "delivery-initiatives", project: { identifier: "workspace-delivery-art" }, summary: { total: 0 }, initiatives: [] };
+  const app = createApp({ config: createBaseConfig(), deliveryService: { listDeliveryInitiatives: async () => record } });
+  const request = { method: "GET", url: "/v1/delivery-initiatives", headers: { "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret" } };
+  const legacy = await executeRequest(app, request);
+  assert.equal(legacy.statusCode, 200);
+  assert.deepEqual(legacy.body, record);
+  const canonical = await executeRequest(app, { ...request, headers: { ...request.headers, accept: "application/vnd.mfshaf7.console-source-projection+json; version=1" } });
+  assert.equal(canonical.statusCode, 200);
+  assert.equal(canonical.body.binding.source_owner, "workspace-delivery-art");
+  assert.equal(canonical.body.binding.record_ref, "openproject://projects/workspace-delivery-art/initiatives");
+  assert.match(canonical.body.revision.source_revision, /^sha256:[0-9a-f]{64}$/);
+  assert.ok(canonical.body.revision.event_sequence > 0);
+  assert.deepEqual(canonical.body.projection, record);
+});
+
 test("health and version endpoints are available without caller auth", async () => {
   const app = createApp({
     config: createBaseConfig(),

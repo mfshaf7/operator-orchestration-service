@@ -148,6 +148,9 @@ test("candidate promotion persists decision, review wait, restart and receipt", 
   assert.equal(JSON.stringify(waiting).includes("content_base64"), false);
 
   const restarted = harness(root);
+  assert.deepEqual(await restarted.service.list({ callerId: caller }), [waiting]);
+  assert.deepEqual(await restarted.service.list({ callerId: "operator:other" }), []);
+  assert.equal(JSON.stringify(await restarted.service.list({ callerId: caller })).includes("content_base64"), false);
   restarted.merge();
   const completed = await restarted.service.advance({
     callerId: caller,

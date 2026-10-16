@@ -4,6 +4,8 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { readPrototypeRecords } from "./records-client.js";
+import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import {
   assertPrototypeLandingArtifact,
   bindPrototypeLanding,
@@ -17,13 +19,14 @@ const execute = promisify(execFile);
 const SHA = /^[0-9a-f]{40}$/;
 const gitEnv = { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
 
-export function createPrototypeLandingSourceClient({ authorityRoot, python = "python3", provider, resolveImportRoot = async () => null, clock = () => new Date() }) {
+export function createPrototypeLandingSourceClient({ authorityRoot, python = "python3", provider, resolveImportRoot = async () => null, clock = () => new Date(), minimumRevision = prototypeLandingManifest.source_authority.minimum_commit }) {
   const git = async (root, ...args) => (await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], { env: gitEnv, maxBuffer: 16 * 1024 * 1024, timeout: 60000 })).stdout.trim();
   const branch = (record) => `prototype-landing/${record.binding_digest.slice(7)}`;
 
   async function sandbox(revision, branchName, operation) {
+    await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
     if (!SHA.test(revision)) throw prototypeLandingError("revision_invalid", "Prototype Landing requires an exact Prototype Studio commit.");
-    await git(authorityRoot, "merge-base", "--is-ancestor", prototypeLandingManifest.source_authority.minimum_commit, revision);
+    await git(authorityRoot, "merge-base", "--is-ancestor", minimumRevision, revision);
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");
     const directory = await mkdtemp(path.join(tmpdir(), "oos-prototype-landing-"));
     const source = path.join(directory, "source");
@@ -158,6 +161,10 @@ export function createPrototypeLandingSourceClient({ authorityRoot, python = "py
 
   return {
     branch,
+    async records() {
+      await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
+      return readPrototypeRecords({ git, authorityRoot, revision: await provider.mainRevision(), minimumRevision });
+    },
     state,
     prepare,
     async openReview(record, assertHeld) {

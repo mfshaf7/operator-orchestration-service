@@ -4,6 +4,7 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import {
   assertPrototypeMaturityArtifact,
   bindPrototypeMaturity,
@@ -41,6 +42,7 @@ export function createPrototypeMaturitySourceClient({
     `prototype-maturity/${record.binding_digest.slice(7)}`;
 
   async function sandbox(revision, branchName, operation, { reset = false } = {}) {
+    await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
     if (!SHA.test(revision)) {
       throw prototypeMaturityError(
         "revision_invalid",

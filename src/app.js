@@ -1629,7 +1629,12 @@ async function handleListDeliveryInitiatives({
     includeInactive,
   });
 
-  sendJson(response, 200, record);
+  sendSourceProjection(response, request, record, () => ({
+    recordRef: "openproject://projects/workspace-delivery-art/initiatives",
+    sourceOwner: "workspace-delivery-art",
+    sourceRevision: sourceRevisionDigest(record),
+    sourceTimestamp: new Date().toISOString(),
+  }));
 }
 
 async function handleDeliveryChangeProjection({
@@ -2028,10 +2033,16 @@ async function handleDeliveryArtSourceRealization({
   const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
   assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
   if (action === "read") {
-    sendJson(response, 200, await deliveryArtWorkSessionService.readRealization({
+    const result = await deliveryArtWorkSessionService.readRealization({
       callerId: caller.id,
       operatorId,
       workItemId,
+    });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `openproject://work_packages/${String(workItemId).replace(/^work-item-/, "")}/source-realization`,
+      sourceOwner: "workspace-delivery-art",
+      sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: result.revision,
     }));
     return;
   }
@@ -3710,11 +3721,32 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
   }
 }
 
-async function handlePrototypeLanding({ action, config, prototypeLandingService, request, response, requestId }) {
+async function handlePrototypeLanding({ action, config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response, requestId }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Prototype Landing");
   if (!prototypeLandingService) {
     throw new HttpError(503, "prototype_landing_not_active", "Prototype Landing is not activated.");
+  }
+  if (action === "records") {
+    const source = await prototypeLandingService.records();
+    const workflows = {};
+    const workflowSources = {};
+    for (const [family, service] of Object.entries({ landing: prototypeLandingService, maturity: prototypeMaturityService, closure: prototypeClosureService })) {
+      workflowSources[family] = typeof service?.list === "function" ? "available" : "unavailable";
+      workflows[family] = typeof service?.list === "function" ? await service.list({ callerId: caller.id }) : [];
+    }
+    const result = { ...source, workflows, workflow_sources: workflowSources };
+    if (Buffer.byteLength(JSON.stringify(result)) > 4 * 1024 * 1024) {
+      throw new HttpError(503, "prototype_records_unavailable", "Canonical Prototype register exceeds its bounded projection limit.");
+    }
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: "repo://workspace-prototype-studio/prototypes",
+      sourceRef: "repo://workspace-prototype-studio@main",
+      sourceOwner: "workspace-prototype-studio",
+      sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: new Date().toISOString(),
+    }));
+    return;
   }
   assertDeliveryMutationAuthority(caller);
   if (action === "prepare") {
@@ -5898,6 +5930,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/prototypes") {
+        await handlePrototypeLanding({ action: "records", config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/prototype-landings/preparations") {
         await handlePrototypeLanding({ action: "prepare", config, prototypeLandingService, request, response });
         return;

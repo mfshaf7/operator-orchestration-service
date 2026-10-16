@@ -389,6 +389,37 @@ test("source realization reconciles one unknown apply through the same accepted 
   assert.equal(getApplyCount(), 2);
 });
 
+test("interrupted accepted-only generation can be explicitly cancelled under the owner lock, without source mutation, then retried with lineage", async () => {
+  const { getApplyCount, objective, service, updateArtifact } = fixture();
+  const identity = { callerId: "governance-operations-console", operatorId: "operator:workspace-owner", workItemId: "work-item-1285" };
+  await service.start({ ...identity, request: {
+    schema_version: 1, request_id: "interrupted-generation", execution_id: "interrupted-generation-execution",
+    expected_session_revision: "2026-10-14T00:59:00.000Z", objective,
+    requested_at: "2026-10-14T00:59:30.000Z", budget_tokens: 3000, retry_of: null,
+  } });
+  updateArtifact((record) => {
+    const attempt = record.attempts.at(-1);
+    attempt.state = "accepted"; attempt.change_set = null; attempt.change_set_digest = null;
+    attempt.context = null; attempt.model = null; attempt.completed_at = null;
+  });
+  const retained = await service.read(identity);
+  assert.equal(retained.state, "accepted");
+  const cancelled = await service.cancel({ ...identity, request: {
+    schema_version: 1, command_id: "cancel-interrupted-generation", expected_revision: retained.revision,
+    requested_at: "2026-10-14T01:00:02.000Z", reason: "Cancel interrupted generation before any source acceptance.",
+  } });
+  assert.equal(cancelled.state, "cancelled");
+  assert.equal(getApplyCount(), 0);
+  const retry = await service.start({ ...identity, request: {
+    schema_version: 1, request_id: "generation-linked-retry", execution_id: "generation-linked-retry-execution",
+    expected_session_revision: "2026-10-14T00:59:00.000Z", objective,
+    requested_at: "2026-10-14T01:00:04.000Z", budget_tokens: 3000, retry_of: "interrupted-generation",
+  } });
+  assert.equal(retry.state, "draft-ready");
+  assert.equal(retry.attempt.retry_of, "interrupted-generation");
+  assert.equal(getApplyCount(), 0);
+});
+
 test("source realization recovers a process crash retained in applying state", async () => {
   const { getApplyCount, objective, service, updateArtifact } = fixture();
   await service.start({

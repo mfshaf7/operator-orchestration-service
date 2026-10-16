@@ -311,6 +311,9 @@ for (const action of Object.keys(eventTypes)) {
     const h = harness(root);
     const input = inputFor(action);
     const waiting = await toReview(h, input);
+    assert.deepEqual(await harness(root).service.list({ callerId: caller }), [waiting]);
+    assert.deepEqual(await h.service.list({ callerId: "operator:other" }), []);
+    assert.equal(JSON.stringify(await h.service.list({ callerId: caller })).includes("content_base64"), false);
     assert.equal(waiting.status, "review-required");
     assert.equal(JSON.stringify(waiting).includes("content_base64"), false);
     assert.equal(waiting.canonical_mutation, false);

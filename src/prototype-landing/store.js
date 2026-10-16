@@ -80,6 +80,12 @@ export function createPrototypeLandingStore({ root }) {
   }
   return {
     transact,
+    async list(callerId) {
+      await initialize();
+      const records = Object.values((await load()).records).filter((record) => record.caller_id === callerId);
+      if (records.length > 512) throw prototypeLandingError("records_unavailable", "Prototype Landing register exceeds its bounded read limit.", 503);
+      return structuredClone(records);
+    },
     async get(requestId) {
       await initialize();
       return structuredClone((await load()).records[key(requestId)] ?? null);
