@@ -4665,8 +4665,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         )
       : workPackages;
     const relationMap = new Map();
-    for (const payload of relationSourceWorkPackages) {
-      const relations = await listWorkPackageRelations(payload.id);
+    // The involved filter covers either relation endpoint. Bound query size
+    // without an N+1 round-trip for every historical work item; the existing
+    // helper retains pagination, authentication and fail-closed errors.
+    for (let offset = 0; offset < relationSourceWorkPackages.length; offset += 100) {
+      const relations = await listWorkPackageRelationsForRecords(
+        relationSourceWorkPackages.slice(offset, offset + 100).map((payload) => payload.id),
+      );
       for (const relation of relations) {
         if (relation?.id !== undefined && relation?.id !== null) {
           relationMap.set(relation.id, relation);
