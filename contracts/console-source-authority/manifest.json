@@ -12,6 +12,8 @@
     "vary_header": "Accept"
   },
   "projection_routes": [
+    { "method": "get", "path": "/v1/prototypes" },
+    { "method": "get", "path": "/v1/delivery-initiatives" },
     { "method": "get", "path": "/v1/orchestration/runs/{run_id}" },
     { "method": "get", "path": "/v1/proposals/{proposal_id}/projection" },
     { "method": "get", "path": "/v1/proposals/{proposal_id}/history" },
@@ -20,6 +22,7 @@
     { "method": "get", "path": "/v1/delivery-refinement/{package_id}/runs/{run_id}" },
     { "method": "get", "path": "/v1/delivery-catalog/projection" },
     { "method": "get", "path": "/v1/delivery-work-items/{work_item_id}/work-session" },
+    { "method": "get", "path": "/v1/delivery-work-items/{work_item_id}/work-session/realization" },
     { "method": "get", "path": "/v1/delivery-initiatives/{delivery_id}/change-control" },
     { "method": "get", "path": "/v1/delivery-initiatives/{delivery_id}/closeout" },
     { "method": "get", "path": "/v1/repository-custody/requests/{request_id}" },

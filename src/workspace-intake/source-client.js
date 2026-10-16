@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import { intakeDigest, intakeError, intakeManifest } from "./contracts.js";
 
 const execute = promisify(execFile);
@@ -15,6 +16,7 @@ const gitEnv = { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GL
 export function createWorkspaceIntakeSourceClient({ authorityRoot, python = "python3", provider, clock = () => new Date() }) {
   const git = async (root, ...args) => (await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], { env: gitEnv, maxBuffer: 4194304, timeout: 60000 })).stdout.trim();
   async function sandbox(revision, operation) {
+    await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-governance", clock });
     if (!SHA.test(revision)) throw intakeError("revision_invalid", "Intake requires an exact authority commit.");
     await git(authorityRoot, "merge-base", "--is-ancestor", intakeManifest.files["workspace-intake.yaml"].commit, revision);
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");

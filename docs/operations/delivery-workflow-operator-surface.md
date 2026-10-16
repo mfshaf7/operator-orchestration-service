@@ -1068,6 +1068,12 @@ must bind `retry_of` to the immediately preceding request. For
 worktree or generate another draft. Recovery replays the same accepted action
 and reconciles its durable receipt or exact digest-bound Git commit.
 
+If generation was interrupted while only `accepted` was persisted, explicitly
+cancel that unapplied attempt with its current revision and a substantive
+reason, then submit a linked retry. Cancellation acquires the same owner lock
+as generation, so it cannot race an active model call. Once applying has begun,
+cancel remains forbidden and exact-action recovery is the only supported path.
+
 Stop and repair the authoritative dependency when the API reports source drift,
 unsafe context, an invalid model binding, missing Security or Platform
 commissioning, identity mismatch, or an unavailable source executor. Never use

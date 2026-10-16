@@ -22,6 +22,42 @@ Prototype Studio source.
 
 ## Procedure
 
+GET `/v1/prototypes` is the primary read-only Prototype register, including
+Proposal captures that have not yet landed. It reads the registry, validated
+capture records and related owner documents from one exact Studio `main`
+revision. The configured provider identity must be current and that revision
+must exist in the deployment-owned trusted Git ref. The reader neither fetches
+Git nor executes source, and missing, malformed, oversized or inconsistent
+records make the entire read unavailable rather than returning partial truth.
+The negotiated Console source envelope binds the Studio owner, exact commit
+and monotonic Git ancestry count. The default JSON response remains available
+to existing engineering clients. A successful empty register is distinct from
+unavailable authority; neither may be populated from fixtures or browser state.
+
+The collection also includes caller-owned Landing, Maturity and Closure progress
+and terminal receipts from their existing durable stores. This restores pending
+reviews after a cold browser restart without guessing request IDs or rebuilding
+receipts from source files. Each family's `workflow_sources` posture explicitly
+distinguishes an unavailable coordinator from a successfully empty history.
+Coordination does not override Studio lifecycle: only validated succeeded owner
+readback may change a projected source state. The collection envelope binds the
+whole read digest and observation ordering; `authority_revision` and
+`authority_sequence` retain the underlying exact Studio commit and Git ordering.
+
+The commissioned complete-runtime lane sets
+`OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED=true` for every Studio and Workspace
+Governance source adapter. Platform supplies a separate private clone rather
+than advancing the reviewed execution checkout. Its non-secret
+`.git/console-record-authority.json` checkpoint binds `schema_version: 1`,
+`owner_repo`, `trusted_ref: refs/remotes/origin/main`, `reviewed_revision`,
+`record_revision`, `observed_at` and `valid_until`. The validity interval is at
+most ten minutes. Missing, expired, future, mismatched, symlinked or malformed
+checkpoints block reads and source preparation before owner command execution.
+Platform owns approved record-only ref advancement and control-code/schema
+equality; OOS performs only checkpoint, ancestry and trusted-ref reads. Existing
+uncommissioned owner-checkout tooling remains compatible without this flag and
+does not constitute the accepted complete-runtime operating path.
+
 1. POST one `prototype_id` to `/v1/prototype-landings/preparations`. Retain the
    exact Studio revision and expected registry state. This read does not create
    workflow state or mutate source.

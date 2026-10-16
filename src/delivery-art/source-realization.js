@@ -712,10 +712,14 @@ export function createDeliveryArtSourceRealizationService({
           { statusCode: 409 },
         );
       }
-      if (attempt.state !== "draft-ready") {
+      // This lock also surrounds generation. An acquired lock with an
+      // accepted-only record means generation was interrupted before a draft
+      // or any accepted source action existed. Cancelling is therefore safe;
+      // applying/apply-unknown must still use exact-action recovery instead.
+      if (!["accepted", "draft-ready"].includes(attempt.state)) {
         throw new DeliveryArtSourceRealizationError(
           "delivery_art_source_realization_cancel_not_allowed",
-          "Only a draft-ready source realization can be cancelled safely.",
+          "Only an unapplied accepted or draft-ready source realization can be cancelled safely.",
           { statusCode: 409 },
         );
       }

@@ -3,6 +3,7 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import {
   assertProposalTargetArtifact,
   createStudioApplication,
@@ -20,6 +21,7 @@ export function createProposalTargetSourceClient({ authorityRoot, provider, pyth
   const branch = (record) => `proposal-target/${record.binding_digest.slice(7)}`;
 
   async function sandbox(revision, branchName, operation) {
+    await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
     if (!SHA.test(revision)) throw proposalTargetError("revision_invalid", "Proposal target application requires an exact Prototype Studio commit.");
     await git(authorityRoot, "merge-base", "--is-ancestor", minimumRevision, revision);
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");

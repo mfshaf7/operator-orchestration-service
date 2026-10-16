@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import { inventoryDigest, inventoryError, inventoryManifest } from "./contracts.js";
 
 const execute = promisify(execFile);
@@ -36,6 +37,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
   })).stdout.trim();
 
   async function sandbox(revision, operation) {
+    await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-governance", clock });
     if (!SHA.test(revision)) throw inventoryError("revision_invalid", "Inventory promotion requires an exact authority commit.");
     await git(authorityRoot, "merge-base", "--is-ancestor", inventoryManifest.files["workspace-active-inventory.yaml"].commit, revision);
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");

@@ -38,6 +38,18 @@ for (const [name, file] of Object.entries(artifactSchemas)) {
 }
 
 const schemas = {
+  PrototypeRecordCollection: object({
+    schema_version: { const: 1 }, workflow_id: { const: "prototype-records" },
+    authority_revision: commit, authority_sequence: { type: "integer", minimum: 1 },
+    registry: { type: "object", required: ["schema_version", "studio", "prototypes"], properties: {
+      schema_version: { const: 1 }, studio: { type: "object" }, prototypes: { type: "array", maxItems: 512, items: { type: "object" } },
+    } },
+    captures: { type: "array", maxItems: 512, items: ref("ProposalRoutedPrototypeCapture") },
+    documents: { type: "object", maxProperties: 512, additionalProperties: { type: "object" } },
+    workflows: object(Object.fromEntries(["landing", "maturity", "closure"].map((name) => [name, { type: "array", maxItems: 512, items: { type: "object" } }]))),
+    workflow_sources: object(Object.fromEntries(["landing", "maturity", "closure"].map((name) => [name, { enum: ["available", "unavailable"] }]))),
+    canonical_mutation: { const: false },
+  }),
   PrototypeLandingPreparationCommand: object({ prototype_id: { type: "string", pattern: "^prototype:[a-z0-9][a-z0-9._-]*$" } }),
   PrototypeLandingPreparation: object({
     schema_version: { const: 1 },
@@ -109,6 +121,15 @@ const common = {
   "x-oos-surface": "prototype-landing", "x-oos-primary-caller": "governance-operations-console", "x-oos-owner": "operator-orchestration-service", "x-oos-workflow-family": "prototype-landing",
 };
 const requestId = { name: "request_id", in: "path", required: true, schema: text };
+source = upsertOpenApiPath(source, "/v1/prototypes", { get: {
+  ...common, operationId: "listCanonicalPrototypes", summary: "Read current canonical Prototype registry and captured entries",
+  description: "Read-only bounded collection from one exact provider main revision already present in the deployment-owned Studio trusted ref. Includes owner registry, validated captures and related owner record documents. No Git fetch, source execution, fixture fallback or mutation.",
+  responses: { "200": { description: "One immutable Studio record snapshot.", content: { "application/json": { schema: ref("PrototypeRecordCollection"), example: {
+    schema_version: 1, workflow_id: "prototype-records", authority_revision: "a".repeat(40), authority_sequence: 1,
+    registry: { schema_version: 1, studio: {}, prototypes: [] }, captures: [], documents: {}, canonical_mutation: false,
+    workflows: { landing: [], maturity: [], closure: [] }, workflow_sources: { landing: "available", maturity: "available", closure: "available" },
+  } } } }, ...errorResponses },
+} });
 const preparationExample = {
   schema_version: 1, workflow_id: "prototype-landing", prototype_id: input.request.prototype.id, authority_revision: input.authority_revision,
   expected_state: input.request.expected_state, canonical_authority: { repo: "workspace-prototype-studio", branch: "main", registry_path: "prototypes.yaml" }, canonical_mutation: false,

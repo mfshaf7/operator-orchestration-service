@@ -495,6 +495,9 @@ export function createPrototypeMaturityService({
 
   return {
     prepare,
+    async list({ callerId }) {
+      return (await store.list(callerId)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
+    },
     submit,
     decide,
     advance,
