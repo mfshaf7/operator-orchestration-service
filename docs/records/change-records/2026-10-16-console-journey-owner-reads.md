@@ -36,6 +36,10 @@ security_evidence:
 
 Expose current Prototype registry/capture truth and the canonical Delivery
 initiative collection to the existing Console source-projection boundary.
+The coordinated commissioning check also aligns source realization with the
+existing gateway's caller-workflow suffix and Platform-owned provider schema.
+OOS retains its stricter source change-set acceptance schema and semantics;
+the model never gains direct source mutation or merge authority.
 
 ## Classification
 

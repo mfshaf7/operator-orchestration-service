@@ -47,6 +47,12 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
     gatewayClient: {
       configured: true,
       async invoke(request) {
+        assert.equal(request.caller_identity.caller_workflow,
+          request.caller_identity.caller_id.split("/")[1]);
+        assert.equal(request.provider_output_schema_ref,
+          "platform-engineering/security/schemas/source-realization-change-set.schema.json");
+        assert.equal(request.task.kind, "source_realization");
+        assert.equal(request.task.contract_ref, "oos.delivery-art.source-realization.v1");
         return gatewayResult ?? {
           policy_decision: "allow",
           policy_status: "active",
