@@ -126,6 +126,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   changeDirectory = (target) => process.chdir(target),
   currentDirectory = () => process.cwd(),
   execFileSyncImpl = execFileSync,
+  worktreeRelativePath = deliveryArtWorktreeRelativePath,
   workspaceRoot,
 } = {}) {
   if (!workspaceRoot) {
@@ -153,7 +154,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function expectedWorktreePath(session) {
-    return path.join(workspaceRoot, deliveryArtWorktreeRelativePath(session));
+    return path.join(workspaceRoot, worktreeRelativePath(session));
   }
 
   function localBranchHead(repoRoot, branch) {
@@ -662,6 +663,13 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     return agentSourceIdentity.inspectRepositoryAdmission({ session });
   }
 
+  async function inspectSourceCredentialBinding(session) {
+    if (typeof agentSourceIdentity?.sourceIntentBinding !== "function") {
+      throw new Error("The admitted source identity metadata adapter is unavailable.");
+    }
+    return agentSourceIdentity.sourceIntentBinding({ session });
+  }
+
   async function inspectConfiguredPath(
     session,
     { conformanceCases = [], requiredEvidenceKinds = [] } = {},
@@ -877,7 +885,13 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   async function captureRealizationContext(session, { requestedPaths = [] } = {}) {
-    const worktree = await ensureWorktree(session);
+    const worktree = await resolveWorktree(session);
+    if (!worktree) {
+      const error = new Error("Prepare or reconstruct the managed worktree through authorized work continuation before capturing source context.");
+      error.code = "delivery_art_source_realization_worktree_missing";
+      throw error;
+    }
+    workspaceRelativePath(worktree);
     const headCommit = command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree);
     const status = command(
       execFileSyncImpl,
@@ -1489,6 +1503,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectConfiguredPath,
     inspectRepositoryAdmission,
+    inspectSourceCredentialBinding,
     inspectResourceOwnership,
     inspectPullRequest,
     inspectAgentSource,

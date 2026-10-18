@@ -2173,6 +2173,83 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
+  function credentialArchitectureScope(architecture, decision) {
+    return architecture ? architectureLandingUnitDecisionFingerprint({
+      architecture, coveredWorkItemIds: decision.covered_work_item_ids,
+      landingUnitId: decision.landing_unit.id,
+    }) : null;
+  }
+
+  function credentialStartDigest({ decision, ownerRepo, baseCommit, architectureScope }) {
+    return canonicalDigest({ decision, owner_repo: ownerRepo, base_commit: baseCommit, architecture_scope_digest: architectureScope });
+  }
+
+  async function sourceCredentialPlan(session, { decision, architectureScope, snapshotDigest, proof }) {
+    if (typeof sourceAdapter.inspectSourceCredentialBinding !== "function") {
+      throw new DeliveryArtWorkSessionError("delivery_art_source_identity_metadata_unavailable", "The admitted source identity metadata adapter is unavailable.");
+    }
+    const identity = await sourceAdapter.inspectSourceCredentialBinding(session);
+    return {
+      subject: { kind: "delivery", work_item_ref: decision.work_item_id, snapshot_digest: snapshotDigest },
+      source_start_digest: credentialStartDigest({ decision, ownerRepo: session.owner_repo, baseCommit: session.landing_unit.base_commit, architectureScope }),
+      repository: identity.repository, repository_id: identity.repository_id, installation_id: identity.installation_id,
+      landing_unit_id: session.landing_unit_id, branch: session.landing_unit.branch,
+      fetched_base: session.landing_unit.base_commit, human_reviewer_id: identity.human_reviewer_id,
+      session_id: session.session_id ?? null,
+      proof: { ...(proof ?? { decision: structuredClone(decision), architecture_scope_digest: architectureScope }),
+        rotate_before_expiry_seconds: identity.rotate_before_expiry_seconds },
+    };
+  }
+
+  async function prepareSourceCredential(workItemIdInput, { callerId, operatorId, decision = null } = {}) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const existing = store.readByAlias(workItemId);
+    if (existing) {
+      const approved = decision ?? store.readDecision(store.decisionPath(workItemId));
+      return verifySourceCredential(workItemId, { callerId, operatorId, decision: approved });
+    }
+    const evaluation = await evaluateConfiguredPath(workItemId, { callerId, decision, operatorId });
+    const blockers = evaluation.configuredPath.blockers.filter(entry => entry.code !== "agent-source-credential-required");
+    if (blockers.length > 0 || !evaluation.decision || !evaluation.source?.base?.fetched_commit) {
+      throw new DeliveryArtWorkSessionError("delivery_art_source_credential_start_blocked", "Resolve the actual source-start prerequisites before preparing credentials.", { blockers });
+    }
+    if (evaluation.decision.caller_id !== callerId || evaluation.decision.operator.id !== operatorId) {
+      throw new DeliveryArtWorkSessionError("delivery_art_source_credential_identity_mismatch", "Source-start decision does not bind the authenticated caller and accountable operator.");
+    }
+    const first = evaluation.contexts[0];
+    return sourceCredentialPlan({
+      owner_repo: targetItem(first).owner_repo, landing_unit_id: evaluation.decision.landing_unit.id,
+      landing_unit: { branch: evaluation.decision.landing_unit.branch, base_commit: evaluation.source.base.fetched_commit },
+    }, {
+      decision: evaluation.decision,
+      architectureScope: credentialArchitectureScope(evaluation.architecture, evaluation.decision),
+      snapshotDigest: canonicalDigest(evaluation.contexts),
+    });
+  }
+
+  async function verifySourceCredential(workItemIdInput, { callerId, operatorId, decision, record = null } = {}) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const session = store.readByAlias(workItemId);
+    if (!session) return prepareSourceCredential(workItemId, { callerId, operatorId, decision });
+    const current = await continuation(workItemId);
+    assertOpenTarget(targetItem(current), workItemId, { allowDependencyBlocked: true });
+    const binding = await architectureBinding(session);
+    if (binding.mode === "superseded") throw new DeliveryArtWorkSessionError("delivery_art_source_credential_start_superseded", "The source session architecture has been superseded.");
+    const validation = validateDeliveryArtWorkSessionDecision(decision);
+    const same = validation.valid && session.caller_id === callerId && session.operator.id === operatorId &&
+      decision.caller_id === callerId && decision.operator.id === operatorId &&
+      decision.work_item_id === workItemId && decision.landing_unit.id === session.landing_unit_id &&
+      targetItem(current).owner_repo === session.owner_repo &&
+      canonicalDigest([...decision.covered_work_item_ids].sort()) === canonicalDigest([...session.covered_work_item_ids].sort()) &&
+      ["base_ref", "branch", "decision", "split_reason", "rollback_boundary"].every(key => decision.landing_unit[key] === session.landing_unit[key]);
+    if (!same) throw new DeliveryArtWorkSessionError("delivery_art_source_credential_session_mismatch", "Source credential intent does not match the actual canonical work session.");
+    return sourceCredentialPlan(session, {
+      decision, architectureScope: credentialArchitectureScope(binding.artifact, decision),
+      snapshotDigest: record?.source_intent.subject.snapshot_digest ?? canonicalDigest(current),
+      proof: record?.proof,
+    });
+  }
+
   async function status(workItemIdInput) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const session = store.readByAlias(workItemId);
@@ -2818,6 +2895,8 @@ export function createDeliveryArtWorkSessionController({
     continue: continueWork,
     merge,
     preflight,
+    prepareSourceCredential,
+    verifySourceCredential,
     reconstruct,
     recover,
     start,

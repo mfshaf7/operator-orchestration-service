@@ -18,6 +18,7 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Prototype
 
+- [Prototype Source Authoring](prototype-source-authoring-operator-surface.md)
 - [Prototype Landing](prototype-landing-operator-surface.md)
 - [Prototype Maturity](prototype-maturity-operator-surface.md)
 - [Prototype Delivery Application](prototype-delivery-application.md)
@@ -37,6 +38,7 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Shared Runtime Controls
 
+- [Platform Operations And Source Authorization](platform-operation-adapter.md)
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
 - [Agent Console Orchestration](agent-console-operator-surface.md)
 - [Agent Action Enforcement](agent-action-enforcement.md)

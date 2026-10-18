@@ -1,17 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { createPrivateFileTransactions } from "../persistence/private-file-transactions.js";
 
 export class PlatformOperationStoreError extends Error {
   constructor(code, message) {
@@ -23,28 +14,6 @@ export class PlatformOperationStoreError extends Error {
 
 const key = (value) => createHash("sha256").update(value).digest("hex");
 
-function atomicWrite(filePath, value) {
-  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    renameSync(temporary, filePath);
-  } finally {
-    if (existsSync(temporary)) unlinkSync(temporary);
-  }
-}
-
-function processAlive(pid) {
-  if (!Number.isSafeInteger(pid) || pid < 1) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code === "EPERM";
-  }
-}
 
 export function platformOperationStateRoot(env = process.env) {
   if (env.OOS_PLATFORM_OPERATION_STATE_ROOT?.trim()) {
@@ -60,64 +29,42 @@ export function createPlatformOperationStore({ root = platformOperationStateRoot
   const records = path.join(root, "records");
   const idempotency = path.join(root, "idempotency");
   const locks = path.join(root, "locks");
-  for (const directory of [records, idempotency, locks]) {
+  const sourcePreparations = path.join(root, "source-preparations");
+  for (const directory of [records, idempotency, locks, sourcePreparations]) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
   }
 
   const recordPath = (operationId) => path.join(records, `${key(operationId)}.json`);
   const idempotencyPath = (idempotencyKey) => path.join(idempotency, `${key(idempotencyKey)}.json`);
 
-  function read(filePath, label) {
-    if (!existsSync(filePath)) return null;
-    try {
-      return JSON.parse(readFileSync(filePath, "utf8"));
-    } catch (error) {
-      throw new PlatformOperationStoreError(
-        "platform_operation_state_corrupt",
-        `${label} could not be read: ${error.message}`,
-      );
-    }
-  }
-
-  function withLock(lockKey, operation) {
-    const lockPath = path.join(locks, `${key(lockKey)}.lock`);
-    if (existsSync(lockPath)) {
-      let holder = {};
-      try { holder = JSON.parse(readFileSync(lockPath, "utf8")); } catch {}
-      if (processAlive(holder.pid)) {
-        throw new PlatformOperationStoreError(
-          "platform_operation_state_busy",
-          "Platform operation state is being updated concurrently.",
-        );
-      }
-      unlinkSync(lockPath);
-    }
-    const token = randomUUID();
-    let descriptor = null;
-    const release = () => {
-      if (descriptor !== null) closeSync(descriptor);
-      descriptor = null;
-      if (!existsSync(lockPath)) return;
-      let holder = {};
-      try { holder = JSON.parse(readFileSync(lockPath, "utf8")); } catch {}
-      if (holder.token === token) unlinkSync(lockPath);
-    };
-    try {
-      descriptor = openSync(lockPath, "wx", 0o600);
-      writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, token })}\n`);
-      closeSync(descriptor);
-      descriptor = null;
-      const result = operation();
-      if (result && typeof result.then === "function") return result.finally(release);
-      release();
-      return result;
-    } catch (error) {
-      release();
-      throw error;
-    }
-  }
+  const { read, withLock, write: atomicWrite } = createPrivateFileTransactions({
+    root, failure: (code, message) => new PlatformOperationStoreError(`platform_operation_${code}`, message),
+  });
 
   return {
+    sourcePreparation(intentId) {
+      return read(path.join(sourcePreparations, `${key(intentId)}.json`), "Source credential preparation");
+    },
+    listSourcePreparations({ limit = 100 } = {}) {
+      return readdirSync(sourcePreparations, { withFileTypes: true })
+        .filter(entry => entry.isFile() && entry.name.endsWith(".json"))
+        .map(entry => read(path.join(sourcePreparations, entry.name), "Source credential preparation"))
+        .filter(Boolean).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+    },
+    transactSourcePreparation(intentId, operation) {
+      return withLock(`source-intent:${intentId}`, async () => {
+        const target = path.join(sourcePreparations, `${key(intentId)}.json`);
+        const current = read(target, "Source credential preparation");
+        return operation({ current, put(value) {
+          if (value.source_intent?.intent_id !== intentId ||
+              (current && (current.request_digest !== value.request_digest || current.source_intent_digest !== value.source_intent_digest))) {
+            throw new PlatformOperationStoreError("platform_source_preparation_conflict", "Source preparation identity is immutable.");
+          }
+          atomicWrite(target, value);
+          return value;
+        } });
+      });
+    },
     get(operationId) {
       return read(recordPath(operationId), "Platform operation record");
     },

@@ -58,6 +58,7 @@ import {
   createOrchestrationActivitySource,
 } from "./workflow-activity/sources.js";
 import { createAgentConsoleRuntime } from "./agent-console/runtime.js";
+import { createPrototypeAuthoringRuntime } from "./source-authoring/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -205,6 +206,10 @@ export function createRuntime({
     deliveryService,
     env,
     store: deliveryArtWorkSessionStore,
+    sourceCredentials: Object.fromEntries(["ensureSourceCredential", "withSourceLease", "stopSourceCredential"].map(method => [method, args => {
+      if (!platformOperationService) throw new HttpError(503, "platform_source_authority_unavailable", "The admitted Platform source authorization workflow is unavailable.");
+      return platformOperationService[method](args);
+    }])),
   });
   const workDesignService = createWorkDesignService({
     audit,
@@ -295,10 +300,25 @@ export function createRuntime({
     config: config.productPublication,
     fetchImpl,
   });
+  const prototypeAuthoringService = createPrototypeAuthoringRuntime({
+    config: config.deliveryArt.workSession, profile: config.prototypeLanding.profile, env,
+    recordsReader: prototypeLandingService ? () => prototypeLandingService.records() : null,
+    platformOperations: () => platformOperationService, fetchImpl,
+  });
   const platformOperationService = createPlatformOperationRuntime({
     audit,
     config: config.platformOperation,
     fetchImpl,
+    sourceCredentialResolvers: {
+      prototype: prototypeAuthoringService ? {
+        prepare: args => prototypeAuthoringService.prepareSourceCredential(args),
+        verify: args => prototypeAuthoringService.verifySourceCredential(args),
+      } : null,
+      delivery: deliveryArtWorkSessionService ? {
+        prepare: args => deliveryArtWorkSessionService.prepareSourceCredential(args),
+        verify: args => deliveryArtWorkSessionService.verifySourceCredential({ ...args, subject: args.record.request.subject }),
+      } : null,
+    },
   });
   const prototypeMaturityService = createPrototypeMaturityRuntime({
     audit,
@@ -361,6 +381,7 @@ export function createRuntime({
     proposalTargetApplicationService,
     productPublicationService,
     platformOperationService,
+    prototypeAuthoringService,
     prototypeLandingService,
     prototypeMaturityService,
     prototypeClosureService,
@@ -392,6 +413,7 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     platformOperationService,
+    prototypeAuthoringService,
     productPublicationService,
     prototypeLandingService,
     prototypeMaturityService,

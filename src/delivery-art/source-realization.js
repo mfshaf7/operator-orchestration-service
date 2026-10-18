@@ -6,6 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
+import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "../source-authoring/bounded-actions.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
 const CONTRACT_ROOT = fileURLToPath(
@@ -22,8 +23,6 @@ addFormats(ajv);
 const validateChangeSetSchema = ajv.compile(changeSetSchema);
 const validateStartSchema = ajv.compile(startSchema);
 const ARTIFACT_FILE = "source-realization.json";
-const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
-const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const TERMINAL_ATTEMPTS = new Set(["cancelled", "failed", "source-created"]);
 
 export class DeliveryArtSourceRealizationError extends Error {
@@ -89,36 +88,8 @@ function assertChangeSet(value, { baseCommit, objectiveDigest, sessionId }) {
 }
 
 function assertCommand(value, action) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new DeliveryArtSourceRealizationError(
-      "delivery_art_source_realization_command_invalid",
-      "Source realization command must be an object.",
-    );
-  }
-  const allowed = action === "continue"
-    ? ["schema_version", "command_id", "expected_revision", "accepted_change_set_digest", "requested_at"]
-    : action === "cancel"
-      ? ["schema_version", "command_id", "expected_revision", "reason", "requested_at"]
-      : ["schema_version", "command_id", "expected_revision", "requested_at"];
-  const unexpected = Object.keys(value).filter((key) => !allowed.includes(key));
-  if (
-    unexpected.length > 0 ||
-    value.schema_version !== 1 ||
-    !STABLE_ID.test(value.command_id ?? "") ||
-    typeof value.expected_revision !== "string" ||
-    !Number.isFinite(Date.parse(value.expected_revision)) ||
-    typeof value.requested_at !== "string" ||
-    !Number.isFinite(Date.parse(value.requested_at)) ||
-    (action === "continue" && !DIGEST.test(value.accepted_change_set_digest ?? "")) ||
-    (action === "cancel" && (typeof value.reason !== "string" || value.reason.trim().length < 20))
-  ) {
-    throw new DeliveryArtSourceRealizationError(
-      "delivery_art_source_realization_command_invalid",
-      `Source realization ${action} command is invalid.`,
-      { details: { unexpected } },
-    );
-  }
-  return structuredClone(value);
+  return normalizeBoundedSourceCommand(value, action, (code, message, options) =>
+    new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options));
 }
 
 function attemptProjection(attempt) {
@@ -425,6 +396,9 @@ export function createDeliveryArtSourceRealizationService({
     }, configured);
   }
 
+  // Historical acknowledgements are reads, not fresh source authority. A lost
+  // successful response must remain recoverable after approval expires/stops.
+
   async function start({ callerId, operatorId, request: input, signal = null, workItemId }) {
     if (!configured) {
       throw new DeliveryArtSourceRealizationError(
@@ -600,197 +574,13 @@ export function createDeliveryArtSourceRealizationService({
     });
   }
 
-  async function continueRealization({ callerId, operatorId, request: input, workItemId }) {
-    const command = assertCommand(input, "continue");
-    const commandDigest = canonicalDigest(command);
-    const session = sessionFor(workItemId);
-    assertIdentity(session, callerId, operatorId);
-    return store.withLock(`source-realization:${session.session_id}`, async () => {
-      const record = readRecord(session);
-      const attempt = record?.attempts?.at(-1) ?? null;
-      if (attempt?.apply_command_id === command.command_id) {
-        if (attempt.apply_command_digest !== commandDigest) {
-          throw new DeliveryArtSourceRealizationError(
-            "delivery_art_source_realization_replay_conflict",
-            "Source realization command_id is bound to different acceptance input.",
-            { statusCode: 409 },
-          );
-        }
-        if (attempt.state === "source-created") return project(record, configured, true);
-      }
-      if (!attempt || record.revision !== command.expected_revision) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_revision_stale",
-          "Source realization command was authored against a stale revision.",
-          { statusCode: 409 },
-        );
-      }
-      const acceptedAt = revision();
-      if (
-        Date.parse(command.requested_at) < Date.parse(attempt.requested_at) ||
-        Date.parse(command.requested_at) > Date.parse(acceptedAt)
-      ) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_timeline_invalid",
-          "Source realization acceptance time is outside the attempt timeline.",
-          { statusCode: 409 },
-        );
-      }
-      if (attempt.state !== "draft-ready") {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_not_ready",
-          "Only a draft-ready source realization can be accepted.",
-          { statusCode: 409 },
-        );
-      }
-      if (attempt.change_set_digest !== command.accepted_change_set_digest) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_acceptance_mismatch",
-          "Operator acceptance does not bind the current change set.",
-          { statusCode: 409 },
-        );
-      }
-      attempt.apply_command_id = command.command_id;
-      attempt.apply_command_digest = commandDigest;
-      attempt.state = "applying";
-      record.revision = revision();
-      writeRecord(session, record);
-      try {
-        attempt.source_receipt = await sourceAdapter.applySourceRealization(
-          session,
-          attempt.change_set,
-        );
-        attempt.state = "source-created";
-        attempt.completed_at = revision();
-        record.revision = attempt.completed_at;
-        writeRecord(session, record);
-        return project(record, configured);
-      } catch (error) {
-        attempt.state = "apply-unknown";
-        attempt.failure = boundedFailure(error);
-        attempt.completed_at = revision();
-        record.revision = attempt.completed_at;
-        writeRecord(session, record);
-        throw error;
-      }
-    });
-  }
 
-  async function cancel({ callerId, operatorId, request: input, workItemId }) {
-    const command = assertCommand(input, "cancel");
-    const commandDigest = canonicalDigest(command);
-    const session = sessionFor(workItemId);
-    assertIdentity(session, callerId, operatorId);
-    return store.withLock(`source-realization:${session.session_id}`, async () => {
-      const record = readRecord(session);
-      const attempt = record?.attempts?.at(-1) ?? null;
-      if (attempt?.cancel_command_id === command.command_id) {
-        if (attempt.cancel_command_digest !== commandDigest) {
-          throw new DeliveryArtSourceRealizationError(
-            "delivery_art_source_realization_replay_conflict",
-            "Source realization command_id is bound to different cancellation input.",
-            { statusCode: 409 },
-          );
-        }
-        if (attempt.state === "cancelled") return project(record, configured, true);
-      }
-      if (!attempt || record.revision !== command.expected_revision) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_revision_stale",
-          "Source realization command was authored against a stale revision.",
-          { statusCode: 409 },
-        );
-      }
-      const acceptedAt = revision();
-      if (
-        Date.parse(command.requested_at) < Date.parse(attempt.requested_at) ||
-        Date.parse(command.requested_at) > Date.parse(acceptedAt)
-      ) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_timeline_invalid",
-          "Source realization cancellation time is outside the attempt timeline.",
-          { statusCode: 409 },
-        );
-      }
-      // This lock also surrounds generation. An acquired lock with an
-      // accepted-only record means generation was interrupted before a draft
-      // or any accepted source action existed. Cancelling is therefore safe;
-      // applying/apply-unknown must still use exact-action recovery instead.
-      if (!["accepted", "draft-ready"].includes(attempt.state)) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_cancel_not_allowed",
-          "Only an unapplied accepted or draft-ready source realization can be cancelled safely.",
-          { statusCode: 409 },
-        );
-      }
-      attempt.cancel_command_id = command.command_id;
-      attempt.cancel_command_digest = commandDigest;
-      attempt.cancel_reason = command.reason.trim();
-      attempt.state = "cancelled";
-      attempt.completed_at = revision();
-      record.revision = attempt.completed_at;
-      writeRecord(session, record);
-      return project(record, configured);
-    });
-  }
-
-  async function recover({ callerId, operatorId, request: input, workItemId }) {
-    const command = assertCommand(input, "recover");
-    const commandDigest = canonicalDigest(command);
-    const session = sessionFor(workItemId);
-    assertIdentity(session, callerId, operatorId);
-    return store.withLock(`source-realization:${session.session_id}`, async () => {
-      const record = readRecord(session);
-      const attempt = record?.attempts?.at(-1) ?? null;
-      if (attempt?.recovery_command_id === command.command_id) {
-        if (attempt.recovery_command_digest !== commandDigest) {
-          throw new DeliveryArtSourceRealizationError(
-            "delivery_art_source_realization_replay_conflict",
-            "Source realization command_id is bound to different recovery input.",
-            { statusCode: 409 },
-          );
-        }
-        if (attempt.state === "source-created") return project(record, configured, true);
-      }
-      if (!attempt || record.revision !== command.expected_revision) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_revision_stale",
-          "Source realization recovery was authored against a stale revision.",
-          { statusCode: 409 },
-        );
-      }
-      const acceptedAt = revision();
-      if (
-        Date.parse(command.requested_at) < Date.parse(attempt.requested_at) ||
-        Date.parse(command.requested_at) > Date.parse(acceptedAt)
-      ) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_timeline_invalid",
-          "Source realization recovery time is outside the attempt timeline.",
-          { statusCode: 409 },
-        );
-      }
-      if (!["applying", "apply-unknown"].includes(attempt.state) || !attempt.apply_command_id) {
-        throw new DeliveryArtSourceRealizationError(
-          "delivery_art_source_realization_recovery_not_required",
-          "This source realization does not require apply reconciliation.",
-          { statusCode: 409 },
-        );
-      }
-      attempt.source_receipt = await sourceAdapter.applySourceRealization(
-        session,
-        attempt.change_set,
-      );
-      attempt.recovery_command_id = command.command_id;
-      attempt.recovery_command_digest = commandDigest;
-      attempt.failure = null;
-      attempt.state = "source-created";
-      attempt.completed_at = revision();
-      record.revision = attempt.completed_at;
-      writeRecord(session, record);
-      return project(record, configured);
-    });
-  }
-
-  return { cancel, configured, continue: continueRealization, read, recover, start };
+  const actions = createBoundedSourceActions({
+    assertCommand, assertIdentity, boundedFailure, configured, project, readRecord,
+    revision, sessionFor, sourceAdapter, store, writeRecord,
+    error: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
+  });
+  const bind = action => args => actions[action]({ ...args, subjectRef: args.workItemId });
+  return { configured, read, start, cancel: bind("cancel"), continue: bind("continue"),
+    recover: bind("recover"), readCompletedCommand: bind("readCompletedCommand") };
 }

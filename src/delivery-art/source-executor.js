@@ -6,7 +6,35 @@ import { createSourceActionResultStore } from "./source-action-result-store.js";
 
 const REQUEST_PATH = "/v1/source-actions";
 const MAX_BODY_BYTES = 1024 * 1024;
+const AGENT_SOURCE_EFFECTS = new Set([
+  "work.ensure-owned-worktree", "work.ensure-worktree", "work.apply-source-realization",
+  "work.prepare-agent-source", "work.publish-agent-source",
+  "prototype.ensure-owned-worktree", "prototype.apply-source-realization", "prototype.publish-agent-source",
+]);
 const ACTIONS = Object.freeze({
+  "prototype.ensure-owned-worktree": ({ prototypeSource }, input) => prototypeSource.ensureOwnedWorktree(input),
+  "prototype.capture-source-context": ({ prototypeSource }, input) => prototypeSource.captureRealizationContext(input),
+  "prototype.prepare-owner": ({ prototypeSource }, input) => prototypeSource.prepareOwner(input),
+  "prototype.apply-source-realization": ({ prototypeSource }, input) => prototypeSource.applySourceRealization(input),
+  "prototype.inspect-agent-source": ({ prototypeSource }, input) => prototypeSource.inspectAgentSource(input),
+  "prototype.inspect-pull-request": ({ prototypeSource }, input) => prototypeSource.inspectPullRequest(input),
+  "prototype.publish-agent-source": ({ prototypeSource }, input) => prototypeSource.publishAgentSource(input),
+  "prototype.validate-source": ({ prototypeSource }, input) => prototypeSource.validateSource(input),
+  "prototype.approve-pull-request": ({ prototypeSource }, input) => prototypeSource.approvePullRequest(input),
+  "prototype.merge-pull-request": ({ prototypeSource }, input) => prototypeSource.mergePullRequest(input),
+  "prototype.retire-source-resources": ({ prototypeSource }, input) => prototypeSource.retireSourceResources(input),
+  "prototype.inspect-committed-source": ({ prototypeSource }, input) => {
+    if (typeof prototypeSource?.inspectCommittedSource !== "function") {
+      throw new DeliveryArtSourceExecutorError("prototype_source_executor_unavailable", "The commissioned Prototype source adapter is unavailable.", { statusCode: 503 });
+    }
+    return prototypeSource.inspectCommittedSource(input);
+  },
+  "prototype.inspect-source-identity": ({ prototypeSource }, input) => {
+    if (typeof prototypeSource?.inspectSourceCredentialBinding !== "function") {
+      throw new DeliveryArtSourceExecutorError("prototype_source_executor_unavailable", "The commissioned Prototype identity adapter is unavailable.", { statusCode: 503 });
+    }
+    return prototypeSource.inspectSourceCredentialBinding(input);
+  },
   "lifecycle.acquire-evidence": ({ lifecycleSource }, input) =>
     lifecycleSource.acquireEvidence(input),
   "lifecycle.inspect-pull-request": ({ lifecycleSource }, input) =>
@@ -30,6 +58,8 @@ const ACTIONS = Object.freeze({
     }),
   "work.inspect-repository-admission": ({ workSource }, input) =>
     workSource.inspectRepositoryAdmission(input.session),
+  "work.inspect-source-credential-binding": ({ workSource }, input) =>
+    workSource.inspectSourceCredentialBinding(input.session),
   "work.inspect-agent-source": ({ workSource }, input) =>
     workSource.inspectAgentSource(input.session),
   "work.inspect-pull-request": ({ workSource }, input) =>
@@ -110,12 +140,23 @@ async function readJson(request) {
   }
 }
 
-function assertContext(context) {
+function assertContext(context, action) {
+  if (action?.startsWith("prototype.")) {
+    if (!context || typeof context !== "object" || Array.isArray(context) ||
+        typeof context.caller_id !== "string" || !context.caller_id || typeof context.operator_id !== "string" || !context.operator_id ||
+        !/^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(context.prototype_id ?? "") || context.prototype_id.length > 256 ||
+        !/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/.test(context.source_request_id ?? "") ||
+        Object.hasOwn(context, "work_item_id") || Object.hasOwn(context, "delivery_id")) {
+      throw new DeliveryArtSourceExecutorError("prototype_source_executor_context_invalid", "Prototype actions require their actual Prototype/request identity, not a Delivery work item.", { statusCode: 400 });
+    }
+    return;
+  }
   const required = ["caller_id", "operator_id", "work_item_id"];
   if (
     !context ||
     typeof context !== "object" ||
     Array.isArray(context) ||
+    Object.hasOwn(context, "prototype_id") || Object.hasOwn(context, "source_request_id") ||
     required.some((field) => typeof context[field] !== "string" || !context[field])
   ) {
     throw new DeliveryArtSourceExecutorError(
@@ -124,6 +165,12 @@ function assertContext(context) {
       { statusCode: 400 },
     );
   }
+}
+
+function subjectAudit(context) {
+  return context?.prototype_id
+    ? { prototype_id: context.prototype_id, source_request_id: context.source_request_id }
+    : { work_item_id: context?.work_item_id ?? null };
 }
 
 function boundedError(error) {
@@ -197,7 +244,18 @@ export function createDeliveryArtSourceExecutorServer({
           { statusCode: 400 },
         );
       }
-      assertContext(envelope.context);
+      assertContext(envelope.context, envelope.action);
+      if (envelope.action.startsWith("prototype.") && envelope.input.prototype_id !== envelope.context.prototype_id) {
+        throw new DeliveryArtSourceExecutorError("prototype_source_executor_subject_mismatch", "Source action and actual Prototype context do not match.", { statusCode: 409 });
+      }
+      if (envelope.action.startsWith("prototype.") && envelope.input.session &&
+          (envelope.input.session.prototype_id !== envelope.context.prototype_id ||
+           envelope.input.session.source_request_id !== envelope.context.source_request_id ||
+           envelope.input.session.session_id !== envelope.context.session_id ||
+           envelope.input.session.caller_id !== envelope.context.caller_id ||
+           envelope.input.session.operator?.id !== envelope.context.operator_id)) {
+        throw new DeliveryArtSourceExecutorError("prototype_source_executor_session_mismatch", "Prototype source action must retain its actual caller, operator, request and session bindings.", { statusCode: 409 });
+      }
       const action = ACTIONS[envelope.action];
       if (!action) {
         throw new DeliveryArtSourceExecutorError(
@@ -220,7 +278,7 @@ export function createDeliveryArtSourceExecutorServer({
           operator_id: envelope.context.operator_id,
           outcome: "replayed",
           session_id: envelope.context.session_id ?? null,
-          work_item_id: envelope.context.work_item_id,
+          ...subjectAudit(envelope.context),
         });
         jsonResponse(response, 200, { ok: true, result: replayed });
         return;
@@ -240,7 +298,7 @@ export function createDeliveryArtSourceExecutorServer({
         operator_id: envelope.context.operator_id,
         outcome: "completed",
         session_id: envelope.context.session_id ?? null,
-        work_item_id: envelope.context.work_item_id,
+        ...subjectAudit(envelope.context),
       });
       jsonResponse(response, 200, { ok: true, result });
     } catch (error) {
@@ -254,7 +312,7 @@ export function createDeliveryArtSourceExecutorServer({
         operator_id: envelope?.context?.operator_id ?? null,
         outcome: "failed",
         session_id: envelope?.context?.session_id ?? null,
-        work_item_id: envelope?.context?.work_item_id ?? null,
+        ...subjectAudit(envelope?.context),
       });
       jsonResponse(response, bounded.statusCode, {
         error: bounded.code,
@@ -321,6 +379,7 @@ export function createDeliveryArtSourceExecutorClient({
   executorId,
   secret,
   socketPath,
+  requireSourceLease = false,
 } = {}) {
   if (!executorId || !secret || !socketPath) {
     throw new Error("executorId, secret, and socketPath are required");
@@ -329,9 +388,16 @@ export function createDeliveryArtSourceExecutorClient({
 
   async function invoke(action, input) {
     const context = contextStorage.getStore();
-    assertContext(context);
+    assertContext(context, action);
+    if (AGENT_SOURCE_EFFECTS.has(action)) {
+      if (requireSourceLease && typeof context.assert_source_lease !== "function") {
+        throw new DeliveryArtSourceExecutorError("delivery_art_source_lease_required", "Normal source writes require a live approved source lease.", { statusCode: 409 });
+      }
+      context.assert_source_lease?.(input.session);
+    }
+    const { assert_source_lease: _localGuard, ...wireContext } = context;
     const response = await socketRequest({
-      body: { action, context, input, schema_version: 1 },
+      body: { action, context: wireContext, input, schema_version: 1 },
       executorId,
       path: REQUEST_PATH,
       secret,
@@ -374,6 +440,8 @@ export function createDeliveryArtSourceExecutorClient({
     }),
     inspectRepositoryAdmission: (session) =>
       invoke("work.inspect-repository-admission", { session }),
+    inspectSourceCredentialBinding: (session) =>
+      invoke("work.inspect-source-credential-binding", { session }),
     inspectAgentSource: (session) => invoke("work.inspect-agent-source", { session }),
     inspectPullRequest: (session) => invoke("work.inspect-pull-request", { session }),
     inspectPristineSession: (session) =>
@@ -399,6 +467,21 @@ export function createDeliveryArtSourceExecutorClient({
   };
 
   return {
+    prototypeSource: {
+      ensureOwnedWorktree: input => invoke("prototype.ensure-owned-worktree", input),
+      captureRealizationContext: input => invoke("prototype.capture-source-context", input),
+      prepareOwner: input => invoke("prototype.prepare-owner", input),
+      applySourceRealization: input => invoke("prototype.apply-source-realization", input),
+      inspectAgentSource: input => invoke("prototype.inspect-agent-source", input),
+      inspectPullRequest: input => invoke("prototype.inspect-pull-request", input),
+      publishAgentSource: input => invoke("prototype.publish-agent-source", input),
+      validateSource: input => invoke("prototype.validate-source", input),
+      approvePullRequest: input => invoke("prototype.approve-pull-request", input),
+      mergePullRequest: input => invoke("prototype.merge-pull-request", input),
+      retireSourceResources: input => invoke("prototype.retire-source-resources", input),
+      inspectCommittedSource: input => invoke("prototype.inspect-committed-source", input),
+      inspectSourceCredentialBinding: input => invoke("prototype.inspect-source-identity", input),
+    },
     executor: {
       available: true,
       async assertAvailable() {
@@ -412,7 +495,12 @@ export function createDeliveryArtSourceExecutorClient({
       },
       id: executorId,
       run(context, operation) {
-        return contextStorage.run(context, operation);
+        return contextStorage.run({ ...context, ...(contextStorage.getStore()?.assert_source_lease
+          ? { assert_source_lease: contextStorage.getStore().assert_source_lease } : {}) }, operation);
+      },
+      withSourceLeaseGuard(assertLease, operation) {
+        if (typeof assertLease !== "function") throw new TypeError("The private source lease guard is required.");
+        return contextStorage.run({ ...(contextStorage.getStore() ?? {}), assert_source_lease: assertLease }, operation);
       },
     },
     lifecycleSource,

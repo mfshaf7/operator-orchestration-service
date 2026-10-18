@@ -10,6 +10,8 @@ const COMMAND_ACTIONS = new Set([
   "close",
 ]);
 const COMMAND_ID_PATTERN = /^work-session-command:[A-Za-z0-9._:-]+$/;
+const SOURCE_INTENT_PATTERN = /^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,241}$/;
+const SOURCE_AUTHORIZATION_FILE = "artifacts/source-intent.json";
 
 export class DeliveryArtWorkSessionServiceError extends Error {
   constructor(code, message, { details = null, statusCode = 400 } = {}) {
@@ -51,6 +53,7 @@ function normalizeCommand(action, value) {
     "decision",
     "recovery",
     "expected_session_revision",
+    "source_intent_ref",
   ]);
   const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
   if (unexpected.length > 0) {
@@ -70,6 +73,10 @@ function normalizeCommand(action, value) {
     );
   }
   const expectedRevision = value.expected_session_revision ?? null;
+  if (Object.hasOwn(value, "source_intent_ref") &&
+      (typeof value.source_intent_ref !== "string" || !SOURCE_INTENT_PATTERN.test(value.source_intent_ref))) {
+    throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_invalid", "source_intent_ref must identify an immutable canonical source preparation.");
+  }
   if (
     expectedRevision !== null &&
     (typeof expectedRevision !== "string" || !expectedRevision.trim())
@@ -162,6 +169,7 @@ function normalizeCommand(action, value) {
   return {
     command_id: value.command_id,
     expected_session_revision: expectedRevision,
+    ...(value.source_intent_ref !== undefined ? { source_intent_ref: value.source_intent_ref } : {}),
     ...(value.decision !== undefined
       ? { decision: structuredClone(value.decision) }
       : {}),
@@ -227,7 +235,8 @@ function boundedExecutionError(error) {
     error instanceof Error ? error.message : String(error),
     {
       details: error?.details ?? null,
-      statusCode: clientError ? 400 : conflict ? 409 : 502,
+      statusCode: Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+        ? error.statusCode : clientError ? 400 : conflict ? 409 : 502,
     },
   );
 }
@@ -296,6 +305,7 @@ export function createDeliveryArtWorkSessionService({
   executor = { available: true, id: "local-engineering-source-executor" },
   lifecycleContext = null,
   sourceRealization = null,
+  sourceCredentials = null,
   store,
 } = {}) {
   for (const method of [
@@ -336,6 +346,67 @@ export function createDeliveryArtWorkSessionService({
     )
   ) {
     throw new Error("sourceRealization requires start, continue, cancel, recover, and read methods");
+  }
+  if (sourceCredentials && ["ensureSourceCredential", "withSourceLease", "stopSourceCredential"].some(method => typeof sourceCredentials[method] !== "function")) {
+    throw new Error("Source authorization requires the existing Platform-operation ensure, lease, and stop methods.");
+  }
+
+  function sourceReference(session, explicit = null, allowSuccessor = false) {
+    const binding = session ? store.readArtifact(session, SOURCE_AUTHORIZATION_FILE) : null;
+    if (binding && (binding.schema_version !== 1 || binding.artifact_type !== "delivery-art-source-intent-binding" ||
+        binding.session_id !== session.session_id || !SOURCE_INTENT_PATTERN.test(binding.source_intent_ref ?? ""))) {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_binding_invalid", "The retained source authorization binding is invalid.", { statusCode: 503 });
+    }
+    if (binding && explicit && binding.source_intent_ref !== explicit) {
+      if (allowSuccessor) return explicit;
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_mismatch", "An active session cannot silently replace its source authorization.", { statusCode: 409 });
+    }
+    return binding?.source_intent_ref ?? explicit;
+  }
+
+  function withSourceReference(result, session) {
+    const reference = session ? sourceReference(session) : null;
+    const binding = reference ? store.readArtifact(session, SOURCE_AUTHORIZATION_FILE) : null;
+    return reference ? { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id,
+      revision: binding.updated_at ?? session.updated_at } } : result;
+  }
+
+  function retainSourceReference(session, reference) {
+    const previous = store.readArtifact(session, SOURCE_AUTHORIZATION_FILE);
+    if (previous?.source_intent_ref === reference && previous.updated_at) return;
+    const floor = Math.max(Date.parse(session.updated_at) || 0, Date.parse(previous?.updated_at) || 0);
+    store.writeArtifact(session, SOURCE_AUTHORIZATION_FILE, { schema_version: 1,
+      artifact_type: "delivery-art-source-intent-binding", session_id: session.session_id, source_intent_ref: reference,
+      updated_at: new Date(Math.max(clock().getTime(), floor + 1)).toISOString() });
+  }
+
+  async function authorizedSourceEffect({ callerId, operatorId, workItemId, session, command = {}, requestedStartDigest = null, operation }) {
+    if (!sourceCredentials) return operation();
+    const previous = session ? sourceReference(session) : null;
+    const reference = sourceReference(session, command.source_intent_ref ?? null, true);
+    if (!reference) {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_required", "Prepare and explicitly authorize source access through Platform operations before this source command.", {
+        statusCode: 409, details: { subject: { kind: "delivery", work_item_ref: session?.work_item_id ?? workItemId }, preparation_path: "/v1/platform-operations/source-preparations" },
+      });
+    }
+    const scope = { callerId, operatorId, intentId: reference, sessionId: session?.session_id ?? null,
+      workItemId: session?.work_item_id ?? session?.covered_work_item_ids?.[0] ?? workItemId, requestedStartDigest,
+      previousIntentId: previous && previous !== reference ? previous : null };
+    // Pending owner credentials must not poison the source command journal.
+    await sourceCredentials.ensureSourceCredential(scope);
+    return sourceCredentials.withSourceLease({ ...scope, operation: async (assertLease) => {
+      const execute = async () => {
+        if (session) retainSourceReference(session, reference);
+        const result = await operation(reference);
+        const actual = store.readByAlias(workItemId);
+        if (actual && (!session || actual.session_id === session.session_id)) {
+          retainSourceReference(actual, reference);
+          return withSourceReference(result, actual);
+        }
+        return result;
+      };
+      return typeof executor.withSourceLeaseGuard === "function" ? executor.withSourceLeaseGuard(assertLease, execute) : execute();
+    } });
   }
 
   function withLifecycleContext(result, session) {
@@ -420,10 +491,10 @@ export function createDeliveryArtWorkSessionService({
       operator_id: operatorId,
       session_id: session?.session_id ?? null,
       work_item_id: workItemId,
-    }, async () => withLifecycleContext(
+    }, async () => withSourceReference(withLifecycleContext(
       projectDeliveryArtWorkSessionResult(await status(workItemId)),
       store.readByAlias(workItemId),
-    ));
+    ), store.readByAlias(workItemId)));
   }
 
   async function inspect({ callerId, decision = null, operatorId, workItemId: workItemIdInput }) {
@@ -454,6 +525,22 @@ export function createDeliveryArtWorkSessionService({
       })),
       store.readByAlias(workItemId),
     ));
+  }
+
+  async function sourceCredentialPlan({ callerId, operatorId, subject, decision = null, record = null }) {
+    await assertExecutorAvailable();
+    const workItemId = normalizeWorkItemId(subject.work_item_ref);
+    const session = store.readByAlias(workItemId);
+    const approvedDecision = record?.proof?.decision ?? decision;
+    assertIdentityBinding({ callerId, operatorId, command: { decision: approvedDecision }, session });
+    const method = record ? "verifySourceCredential" : "prepareSourceCredential";
+    if (typeof controller[method] !== "function") {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_credential_authority_unavailable", "Canonical source-intent preparation is unavailable.", { statusCode: 503 });
+    }
+    return runWithExecutorContext({
+      caller_id: callerId, operator_id: operatorId, command_id: null,
+      session_id: session?.session_id ?? null, work_item_id: workItemId,
+    }, () => controller[method](workItemId, { callerId, operatorId, decision: approvedDecision, record }));
   }
 
   async function projectContext({
@@ -516,9 +603,13 @@ export function createDeliveryArtWorkSessionService({
     operatorId,
     request,
     signal = null,
+    sourceIntentRef = null,
     workItemId: workItemIdInput,
   }) {
     await assertExecutorAvailable();
+    if (sourceIntentRef !== null && (typeof sourceIntentRef !== "string" || !SOURCE_INTENT_PATTERN.test(sourceIntentRef))) {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_invalid", "Source realization requires an exact source-intent reference.", { statusCode: 400 });
+    }
     if (!sourceRealization || !["start", "continue", "cancel", "recover"].includes(action)) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_source_realization_unavailable",
@@ -530,13 +621,21 @@ export function createDeliveryArtWorkSessionService({
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const session = store.readByAlias(workItemId);
     assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    if (sourceCredentials && typeof sourceRealization.readCompletedCommand === "function") {
+      const replay = await sourceRealization.readCompletedCommand({ action, callerId, operatorId, request, workItemId });
+      if (replay) return replay;
+    }
     return runWithExecutorContext({
       caller_id: callerId,
       command_id: request?.command_id ?? request?.request_id ?? null,
       operator_id: operatorId,
       session_id: session?.session_id ?? null,
       work_item_id: workItemId,
-    }, () => sourceRealization[action]({
+    }, () => ["continue", "recover"].includes(action) ? authorizedSourceEffect({
+      callerId, operatorId, workItemId, session,
+      command: { source_intent_ref: sourceIntentRef },
+      operation: () => sourceRealization[action]({ callerId, operatorId, request, signal, workItemId }),
+    }) : sourceRealization[action]({
       callerId,
       operatorId,
       request,
@@ -610,82 +709,118 @@ export function createDeliveryArtWorkSessionService({
             : session;
           assertIdentityBinding({ callerId, command, operatorId, session: identitySession });
           assertRevision({ action, command, recoveryReceipt, session });
-          const startedAt = clock().toISOString();
-          const pending = {
-            schema_version: 1,
-            artifact_type: "delivery_art_work_session_command_record",
-            action,
-            caller_id: callerId,
-            command_id: command.command_id,
-            executor_id: executor.id,
-            operator_id: operatorId,
-            request_digest: requestDigest,
-            state: "pending",
-            work_item_id: workItemId,
-            started_at: startedAt,
-          };
-          store.writeCommandRecord(command.command_id, pending);
-
-          try {
-            const raw = await runWithExecutorContext({
+          const terminalSourceReference = sourceCredentials && session && ["close", "recover", "reconstruct"].includes(action)
+            ? sourceReference(session, command.source_intent_ref ?? null) : null;
+          const executeCommand = async (sourceIntentRef = null) => {
+            const startedAt = clock().toISOString();
+            const pending = {
+              schema_version: 1,
+              artifact_type: "delivery_art_work_session_command_record",
+              action,
               caller_id: callerId,
               command_id: command.command_id,
-              operator_id: operatorId,
-              session_id: session?.session_id ?? null,
-              work_item_id: workItemId,
-            }, async () => action === "start"
-              ? start(workItemId, {
-                  ...(command.decision ? { decision: command.decision } : {}),
-                  callerId,
-                  operatorId,
-                })
-              : action === "continue"
-                ? continueWork(workItemId)
-                : action === "reconstruct"
-                  ? reconstruct(workItemId)
-                : action === "recover"
-                  ? controller.recover(workItemId, { operatorId, recovery: command.recovery })
-                : action === "merge"
-                  ? merge(workItemId)
-                  : close(workItemId));
-            const result = withLifecycleContext(
-              projectDeliveryArtWorkSessionResult(raw),
-              store.readByAlias(workItemId),
-            );
-            const completedAt = clock().toISOString();
-            const receiptBody = {
-              caller_id: callerId,
-              command_id: command.command_id,
-              completed_at: completedAt,
               executor_id: executor.id,
               operator_id: operatorId,
               request_digest: requestDigest,
-              result_state: result.state,
+              state: "pending",
               work_item_id: workItemId,
+              started_at: startedAt,
             };
-            const receipt = {
-              ...receiptBody,
-              digest: canonicalDigest(receiptBody),
-              ref: `oos://delivery-art/work-session-command-receipts/${encodeURIComponent(command.command_id)}`,
-            };
-            store.writeCommandRecord(command.command_id, {
-              ...pending,
-              completed_at: completedAt,
-              receipt,
-              result,
-              state: "completed",
-            });
-            return { ...result, command_receipt: receipt, replayed: false };
-          } catch (error) {
-            const bounded = boundedExecutionError(error);
-            store.writeCommandRecord(command.command_id, {
-              ...pending,
-              completed_at: clock().toISOString(),
-              error: storedError(bounded),
-              state: "failed",
-            });
-            throw bounded;
+            store.writeCommandRecord(command.command_id, pending);
+
+            try {
+              const raw = await runWithExecutorContext({
+                caller_id: callerId,
+                command_id: command.command_id,
+                operator_id: operatorId,
+                session_id: session?.session_id ?? null,
+                work_item_id: workItemId,
+              }, async () => action === "start"
+                ? start(workItemId, {
+                    ...(command.decision ? { decision: command.decision } : {}),
+                    callerId,
+                    operatorId,
+                  })
+                : action === "continue"
+                  ? continueWork(workItemId)
+                  : action === "reconstruct"
+                    ? reconstruct(workItemId)
+                  : action === "recover"
+                    ? controller.recover(workItemId, { operatorId, recovery: command.recovery })
+                  : action === "merge"
+                    ? merge(workItemId)
+                    : close(workItemId));
+              let result = withLifecycleContext(
+                projectDeliveryArtWorkSessionResult(raw),
+                store.readByAlias(workItemId),
+              );
+              const actualSession = store.readByAlias(workItemId);
+              if (sourceIntentRef && actualSession && (!session || actualSession.session_id === session.session_id)) {
+                retainSourceReference(actualSession, sourceIntentRef);
+                result = withSourceReference(result, actualSession);
+              }
+              const retired = session && ["recover", "reconstruct"].includes(action) &&
+                store.readByAlias(workItemId)?.session_id !== session.session_id;
+              if (sourceCredentials && session && (retired || (action === "close" && ["closed", "cleanup-required", "cleanup-blocked"].includes(result.state)))) {
+                const reference = terminalSourceReference;
+                if (reference) {
+                  try {
+                    const stopped = await sourceCredentials.stopSourceCredential({ callerId, operatorId, intentId: reference, sessionId: session.session_id });
+                    result = { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id,
+                      state: stopped.state === "succeeded" ? "revoked" : "revocation-pending", operation_ref: stopped.operation_id } };
+                    if (stopped.state !== "succeeded") result.next_action = { code: "source-revocation-pending", authority: "platform-engineering", reason: "Follow the retained Platform operation to confirm exact credential revocation." };
+                  } catch (error) {
+                    result = { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id, state: "revocation-required", operation_ref: null },
+                      next_action: { code: "source-revocation-required", authority: "platform-engineering", reason: "Source authorization closure is not confirmed; use the same source-intent Platform revocation action." } };
+                    if (!error?.code) throw error;
+                  }
+                }
+              }
+              const completedAt = clock().toISOString();
+              const receiptBody = {
+                caller_id: callerId,
+                command_id: command.command_id,
+                completed_at: completedAt,
+                executor_id: executor.id,
+                operator_id: operatorId,
+                request_digest: requestDigest,
+                result_state: result.state,
+                work_item_id: workItemId,
+              };
+              const receipt = {
+                ...receiptBody,
+                digest: canonicalDigest(receiptBody),
+                ref: `oos://delivery-art/work-session-command-receipts/${encodeURIComponent(command.command_id)}`,
+              };
+              store.writeCommandRecord(command.command_id, {
+                ...pending,
+                completed_at: completedAt,
+                receipt,
+                result,
+                state: "completed",
+              });
+              return { ...result, command_receipt: receipt, replayed: false };
+            } catch (error) {
+              const bounded = boundedExecutionError(error);
+              store.writeCommandRecord(command.command_id, {
+                ...pending,
+                completed_at: clock().toISOString(),
+                error: storedError(bounded),
+                state: "failed",
+              });
+              throw bounded;
+            }
+          };
+          if (sourceCredentials && (action === "continue" || (action === "start" && !session && command.decision))) {
+            let requestedStartDigest = null;
+            if (action === "start") {
+              const prospective = await sourceCredentialPlan({ callerId, operatorId,
+                subject: { kind: "delivery", work_item_ref: workItemId }, decision: command.decision });
+              requestedStartDigest = prospective.source_start_digest;
+            }
+            return authorizedSourceEffect({ callerId, operatorId, workItemId, session, command, requestedStartDigest, operation: executeCommand });
           }
+          return executeCommand();
         });
       });
     } catch (error) {
@@ -699,6 +834,8 @@ export function createDeliveryArtWorkSessionService({
     execute,
     executeRealization,
     inspect,
+    prepareSourceCredential: sourceCredentialPlan,
+    verifySourceCredential: sourceCredentialPlan,
     merge,
     preflight,
     projectContext,

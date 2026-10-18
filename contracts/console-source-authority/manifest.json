@@ -13,6 +13,9 @@
   },
   "projection_routes": [
     { "method": "get", "path": "/v1/prototypes" },
+    { "method": "get", "path": "/v1/prototype-source-requests" },
+    { "method": "get", "path": "/v1/prototype-source-requests/{request_id}" },
+    { "method": "get", "path": "/v1/prototype-source-requests/{request_id}/draft" },
     { "method": "get", "path": "/v1/delivery-initiatives" },
     { "method": "get", "path": "/v1/orchestration/runs/{run_id}" },
     { "method": "get", "path": "/v1/proposals/{proposal_id}/projection" },

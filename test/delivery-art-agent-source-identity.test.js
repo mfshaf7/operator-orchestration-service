@@ -202,6 +202,21 @@ test("Agent source preflight proves identity and provider without exposing crede
   assert.equal(JSON.stringify(projection).includes(TOKEN), false);
 });
 
+test("source-intent metadata uses the admitted owner policy without reading tokens or changing real Git authorship", t => {
+  const fixture = setup(); t.after(fixture.cleanup);
+  const providerFixture = provider(); const adapter = testAdapter(fixture, providerFixture);
+  rmSync(fixture.credentialPath);
+  const before = git(fixture.repoRoot, "config", "user.name");
+  const binding = adapter.sourceIntentBinding({ session: fixture.session });
+  assert.equal(binding.repository_id, fixture.credential.repository_id);
+  assert.equal(binding.rotate_before_expiry_seconds, CONTRACT.runtime.rotate_before_expiry_seconds);
+  assert.equal(binding.authorization_expires_at, null);
+  assert.equal(git(fixture.repoRoot, "config", "user.name"), before);
+  assert.equal(providerFixture.calls.length, 0);
+  assert.equal(JSON.stringify(binding).includes(TOKEN), false);
+  assert.throws(() => adapter.sourceIntentBinding({ session: { ...fixture.session, owner_repo: "unadmitted-client" } }), { code: "agent_source_repository_not_admitted" });
+});
+
 test("Agent source admits exactly the active Platform-selected owner repositories", async () => {
   assert.deepEqual(
     CONTRACT.repositories.map((entry) => entry.full_name),

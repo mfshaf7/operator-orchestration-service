@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
+import { PLATFORM_OPERATION_ACTIONS } from "../src/platform-operation/contracts.js";
+import { SOURCE_CREDENTIAL_ACTIONS } from "../src/platform-operation/source-credentials.js";
+import { sourceCredentialSchemas, sourcePreparationExample, sourcePreparationRequestExample } from "./source_credential_openapi_schemas.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
@@ -28,18 +31,7 @@ const errors = {
     },
   },
 };
-const actions = [
-  "dev-integration.request-profile",
-  "dev-integration.start",
-  "dev-integration.status",
-  "dev-integration.access",
-  "dev-integration.smoke",
-  "dev-integration.stop",
-  "dev-integration.reset",
-  "dev-integration.promote-check",
-  "governed-release.execute-step",
-  "governed-release.change-runtime-lifecycle",
-];
+const actions = PLATFORM_OPERATION_ACTIONS;
 const identifier = { type: "string", minLength: 1, maxLength: 256 };
 
 const commandExample = {
@@ -145,10 +137,13 @@ const catalogExample = {
 };
 
 const schemas = {
+  ...sourceCredentialSchemas,
   PlatformOperationCommand: {
     type: "object",
     additionalProperties: false,
     required: ["schema_version", "command_id", "idempotency_key", "correlation_id", "causation_id", "actor_ref", "subject", "capability_id", "action", "input", "requested_at", "intent_digest", "approval"],
+    allOf: [{ if: { properties: { action: { enum: SOURCE_CREDENTIAL_ACTIONS } }, required: ["action"] },
+      then: { properties: { input: ref("SourceCredentialInput"), subject: { properties: { kind: { const: "dev-integration-profile" } } } } } }],
     properties: {
       schema_version: { const: 1 },
       command_id: identifier,
@@ -247,6 +242,19 @@ const success = (description, schema, example, status = "200") => ({
   ...errors,
 });
 const paths = {
+  "/v1/platform-operations/source-preparations": {
+    get: { ...meta, tags: ["Platform Operations"], summary: "List caller-owned source credential preparations", operationId: "listSourceCredentialPreparations",
+      description: "Reads bounded canonical source preparations and retained secret-free authorization metadata. It never issues or renews credentials.",
+      parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } }],
+      responses: success("Caller-owned source preparations.", ref("SourceCredentialPreparationList"), { workflow_id: "source-credential-preparation-list", preparations: [sourcePreparationExample] }) },
+    post: { ...meta, tags: ["Platform Operations"], summary: "Prepare canonical source scope before explicit issue approval", operationId: "prepareSourceCredential",
+      description: "Derives immutable source coordinates from an actual Delivery work-start decision or admitted Prototype source request. Preparation is read-only with respect to source repositories and provider credentials; it is not approval or issuance.",
+      requestBody: { required: true, description: "Stable preparation identity and canonical workflow selector; repository/provider coordinates cannot be supplied by the browser.", content: { "application/json": { schema: ref("SourceCredentialPreparationRequest"), example: sourcePreparationRequestExample } } },
+      responses: success("Immutable preparation with current secret-free authorization state.", ref("SourceCredentialPreparation"), sourcePreparationExample, "201") },
+  },
+  "/v1/platform-operations/source-preparations/{intent_id}": { get: { ...meta, tags: ["Platform Operations"], summary: "Recover one caller-owned canonical source preparation", operationId: "getSourceCredentialPreparation",
+    description: "Reads the original immutable scope and retained approval/receipt metadata without issuing, renewing or altering source state.", parameters: [{ name: "intent_id", in: "path", required: true, schema: identifier }],
+    responses: { ...success("Retained canonical source preparation.", ref("SourceCredentialPreparation"), sourcePreparationExample), "404": { $ref: "#/components/responses/NotFoundError" } } } },
   "/v1/platform-operations/catalog": { get: { ...meta, tags: ["Platform Operations"], summary: "Read current Platform operation capabilities", description: "Returns the bounded Platform-owned capability projection used to bind commands to exact subjects and source versions. Stale or unavailable truth is visible but cannot admit a command.", operationId: "getPlatformOperationCatalog", responses: success("Current Platform capability projection.", ref("PlatformOperationCatalog"), catalogExample) } },
   "/v1/platform-operations/commands": { post: { ...meta, tags: ["Platform Operations"], summary: "Submit one approved Platform operation", description: "Persists one exact operator-approved command before dispatch to the Platform owner. Replays return the retained record; conflicts fail closed.", operationId: "submitPlatformOperation", requestBody: { required: true, description: "Exact command, canonical intent digest, idempotency binding, and operator approval.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["command"], properties: { command: ref("PlatformOperationCommand") } }, example: { command: commandExample } } } }, responses: success("Accepted durable operation record.", ref("PlatformOperationRecord"), recordExample, "202") } },
   "/v1/platform-operations": { get: { ...meta, tags: ["Platform Operations"], summary: "List durable Platform operations", description: "Returns bounded OOS-retained operations and exact next actions without exposing provider credentials or raw logs.", operationId: "listPlatformOperations", parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } }], responses: success("Bounded operation list.", ref("PlatformOperationList"), { workflow_id: "platform-operation-list", operations: [recordExample] }) } },

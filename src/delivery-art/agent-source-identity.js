@@ -804,7 +804,7 @@ export function createAgentSourceIdentityAdapter({
                 head: session.landing_unit.branch,
                 base: session.landing_unit.base_ref.replace(/^origin\//, ""),
                 body:
-                  `Implements ${session.covered_work_item_ids.join(", ")} through Landing Unit ` +
+                  `Implements ${session.subject?.kind === "prototype" ? session.subject.prototype_id : session.covered_work_item_ids.join(", ")} through Landing Unit ` +
                   `\`${session.landing_unit_id}\`. Human review and merge are required.`,
                 draft: false,
               },
@@ -887,6 +887,14 @@ export function createAgentSourceIdentityAdapter({
 
   return {
     assertHumanMergeAuthority,
+    sourceIntentBinding({ session }) {
+      const contract = currentContract();
+      if (!enabled) fail("agent_source_identity_inactive", "Agent source identity is not active.");
+      assertSession(contract, session);
+      // Metadata-only: obtaining an approved prospective intent must not depend
+      // on reading an already-existing token, configuring Git or minting one.
+      return { ...safeIdentityProjection(contract, session), rotate_before_expiry_seconds: contract.runtime.rotate_before_expiry_seconds };
+    },
     reviewPolicy,
     inspect,
     inspectRepositoryAdmission,

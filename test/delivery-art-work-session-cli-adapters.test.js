@@ -60,6 +60,11 @@ test("source realization captures bounded context and commits an exact Agent Gar
     },
   };
 
+  const beforeCapture = git(repoRoot, ["worktree", "list", "--porcelain"]);
+  await assert.rejects(adapter.captureRealizationContext(session), { code: "delivery_art_source_realization_worktree_missing" });
+  assert.equal(git(repoRoot, ["worktree", "list", "--porcelain"]), beforeCapture);
+  assert.throws(() => git(repoRoot, ["show-ref", "--verify", `refs/heads/${session.landing_unit.branch}`]));
+  await adapter.ensureOwnedWorktree(session);
   const context = await adapter.captureRealizationContext(session);
   assert.equal(context.clean, true);
   assert.equal(context.head_commit, baseCommit);

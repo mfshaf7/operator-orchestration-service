@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
+import { assertLifecycleContextResult, sourceSummary, textDigest } from "../source-authoring/context-contract.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
 const CONTRACT_ROOT = fileURLToPath(
@@ -193,102 +193,9 @@ export function buildDeliveryArtLifecycleSources(
   return [art, repository, validation, runtime];
 }
 
-function sourceSummary(sources) {
-  const available = sources.filter((source) => source.availability === "available").length;
-  return {
-    total: sources.length,
-    available,
-    unavailable: sources.length - available,
-    classes: sources.map((source) => source.source_class).sort(),
-  };
-}
-
-function textDigest(value) {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
-function safeSourceBindings(sources) {
-  return sources.map(({ content: _content, ...source }) => source);
-}
-
-function expectedCggBinding(request, callerId) {
-  return {
-    request_id: request.request_id,
-    correlation_id: request.correlation_id,
-    idempotency_key: request.idempotency_key,
-    workflow_session_id: request.workflow_session_id,
-    execution_id: request.execution_id,
-    delivery_id: request.delivery_id,
-    work_item_ref: request.work_item_ref,
-    landing_unit_id: request.landing_unit_id,
-    caller_id: callerId,
-    operator_id: request.operator.id,
-    lifecycle: request.lifecycle,
-    requested_at: request.requested_at,
-    sources_digest: request.sources_digest,
-    budget_tokens: request.budget_tokens,
-  };
-}
-
 function assertCggResult(result, request, callerId) {
-  const expectedBinding = expectedCggBinding(request, callerId);
-  const expectedSources = safeSourceBindings(request.sources);
-  const expectedSummary = sourceSummary(request.sources);
-  const deniedAuthority = result?.authority?.may_select_or_invoke_model === false &&
-    result?.authority?.may_approve_suggestion === false &&
-    result?.authority?.may_mutate_delivery === false &&
-    result?.lifecycle_authority?.may_choose_action === false &&
-    result?.lifecycle_authority?.may_mutate_art === false &&
-    result?.lifecycle_authority?.may_mutate_source === false &&
-    result?.lifecycle_authority?.may_invoke_model === false &&
-    result?.lifecycle_authority?.may_choose_raw_fallback === false;
-  const binding = result?.binding;
-  if (
-    result?.schema_version !== 1 ||
-    result?.status !== "ready" ||
-    result?.request_id !== request.request_id ||
-    result?.correlation_id !== request.correlation_id ||
-    result?.idempotency_key !== request.idempotency_key ||
-    result?.request_digest !== canonicalDigest({
-      binding: expectedBinding,
-      lifecycle_sources: request.sources,
-    }) ||
-    !STABLE_ID.test(result?.artifact_id ?? "") ||
-    !SHA256.test(result?.artifact_digest ?? "") ||
-    !PACKET_REF.test(result?.packet_ref ?? "") ||
-    !REDACTION_RECEIPT_REF.test(result?.redaction_receipt_ref ?? "") ||
-    !PROJECTION_RECEIPT_REF.test(result?.projection_receipt_ref ?? "") ||
-    typeof result?.content !== "string" || !result.content ||
-    result?.admission_decision?.profile !== "developer" ||
-    !["not_requested", "denied"].includes(result?.admission_decision?.raw_projection) ||
-    result?.admission_decision?.redaction_safe !== true ||
-    result?.timeline?.requested_at !== request.requested_at ||
-    Number.isNaN(Date.parse(result?.timeline?.projected_at ?? "")) ||
-    result?.projection_safety?.raw_context_exposed !== false ||
-    typeof result?.projection_safety?.redaction_applied !== "boolean" ||
-    result?.projection_safety?.custody_bound !== true ||
-    !deniedAuthority ||
-    canonicalStringify(binding) !== canonicalStringify(expectedBinding) ||
-    canonicalStringify(result.lifecycle_context) !== canonicalStringify(request.lifecycle) ||
-    canonicalStringify(result.source_bindings) !== canonicalStringify(expectedSources) ||
-    canonicalStringify(result.source_summary) !== canonicalStringify(expectedSummary) ||
-    result?.classification?.context_type !== "lifecycle" ||
-    canonicalStringify(result?.classification?.source_classes) !==
-      canonicalStringify(expectedSummary.classes) ||
-    !Array.isArray(result?.classification?.signal_ids) ||
-    result.classification.signal_ids.some((value) => typeof value !== "string") ||
-    result?.budget?.requested_tokens !== request.budget_tokens ||
-    !Number.isInteger(result?.budget?.estimated_tokens) ||
-    result.budget.estimated_tokens < 0 ||
-    typeof result?.budget?.truncated !== "boolean"
-  ) {
-    throw new DeliveryArtLifecycleContextError(
-      "delivery_art_lifecycle_context_response_invalid",
-      "CGG lifecycle projection did not preserve the OOS session, source, safety, and authority bindings.",
-      { statusCode: 502 },
-    );
-  }
-  return result;
+  return assertLifecycleContextResult(result, request, callerId, message =>
+    new DeliveryArtLifecycleContextError("delivery_art_lifecycle_context_response_invalid", message, { statusCode: 502 }));
 }
 
 function emptyLedger(session, now) {
