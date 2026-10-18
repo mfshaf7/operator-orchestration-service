@@ -257,7 +257,7 @@ function assertSession(contract, session) {
   return expectedRepository(contract, session.owner_repo);
 }
 
-function readCredential({ clock, contract, credentialRoot, session }) {
+function readCredential({ clock, contract, credentialRoot, session, credentialPurpose = null }) {
   assertPrivatePath(credentialRoot, "runtime_root", 0o700);
   if (existsSync(path.join(credentialRoot, contract.runtime.suspension_filename))) {
     fail("agent_source_identity_suspended", "Agent source identity is suspended.");
@@ -272,11 +272,17 @@ function readCredential({ clock, contract, credentialRoot, session }) {
   } catch {
     fail("agent_source_credential_invalid", "Agent source credential is invalid.");
   }
+  const expectedFields = new Set(CREDENTIAL_FIELDS);
+  if (credentialPurpose) {
+    expectedFields.add("purpose");
+    expectedFields.add("approval_ref");
+  }
   if (
     !credential ||
     Array.isArray(credential) ||
-    new Set(Object.keys(credential)).size !== CREDENTIAL_FIELDS.size ||
-    [...CREDENTIAL_FIELDS].some((field) => !Object.hasOwn(credential, field)) ||
+    new Set(Object.keys(credential)).size !== expectedFields.size ||
+    [...expectedFields].some((field) => !Object.hasOwn(credential, field)) ||
+    (credentialPurpose && (credential.purpose !== credentialPurpose.purpose || credential.approval_ref !== credentialPurpose.approval_ref)) ||
     typeof credential.token !== "string" ||
     !credential.token
   ) {
@@ -560,7 +566,14 @@ export function createAgentSourceIdentityAdapter({
   fetchImpl = globalThis.fetch,
   lock = withProjectionLock,
   wait = delay,
+  credentialPurpose = null,
 } = {}) {
+  if (credentialPurpose !== null && (
+    credentialPurpose?.purpose !== "workflow-maintenance" ||
+    typeof credentialPurpose.approval_ref !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9:/._#-]{2,255}$/.test(credentialPurpose.approval_ref) ||
+    Object.keys(credentialPurpose).length !== 2
+  )) throw new Error("Workflow maintenance requires its exact operator approval reference.");
   if (enabled && (!credentialRoot || !path.isAbsolute(credentialRoot))) {
     throw new Error("An absolute Agent source credential root is required when enabled.");
   }
@@ -608,7 +621,7 @@ export function createAgentSourceIdentityAdapter({
     try {
       const value = await lock(
         path.join(credentialRoot, contract.runtime.lock_filename),
-        async () => readCredential({ clock, contract, credentialRoot, session }),
+        async () => readCredential({ clock, contract, credentialRoot, session, credentialPurpose }),
       );
       return {
         ...projection,
@@ -665,7 +678,7 @@ export function createAgentSourceIdentityAdapter({
     try {
       const value = await lock(
         path.join(credentialRoot, contract.runtime.lock_filename),
-        async () => readCredential({ clock, contract, credentialRoot, session }),
+        async () => readCredential({ clock, contract, credentialRoot, session, credentialPurpose }),
       );
       await assertProviderScope(fetchImpl, value.credential, value.repository);
       return {
@@ -735,6 +748,7 @@ export function createAgentSourceIdentityAdapter({
           contract,
           credentialRoot,
           session,
+          credentialPurpose,
         });
         await assertProviderScope(fetchImpl, credential, repository);
         const environment = {
@@ -855,6 +869,7 @@ export function createAgentSourceIdentityAdapter({
         }
         const body = {
           ...safeIdentityProjection(contract, session, credential),
+          ...(credentialPurpose ?? {}),
           action: "publish-exact-source",
           outcome: "published-for-human-review",
           pushed_head: source.head,

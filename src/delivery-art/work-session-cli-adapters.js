@@ -1524,12 +1524,14 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
 export function createConfiguredAgentSourceIdentityAdapter({
   env = process.env,
+  credentialPurpose = null,
 } = {}) {
   const enabled = ["1", "true", "yes", "on"].includes(
     String(env.OOS_AGENT_SOURCE_IDENTITY_ENABLED ?? "").trim().toLowerCase(),
   );
   return createAgentSourceIdentityAdapter({
     enabled,
+    credentialPurpose,
     credentialRoot: resolveAgentSourceCredentialRoot(env),
     ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
       ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }

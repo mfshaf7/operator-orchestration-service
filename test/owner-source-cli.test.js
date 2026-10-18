@@ -120,3 +120,14 @@ test("owner source refuses publication when exact identity is unavailable", asyn
   );
   assert.equal(published, false);
 });
+
+test("maintenance rejects workflow permission without its explicit exact approval reference", async () => {
+  let called = false;
+  for (const extra of [ ["--purpose", "workflow-maintenance"], ["--purpose", "ordinary-source", "--approval-ref", "operator:other"] ]) {
+    await assert.rejects(runOwnerSourceCommand({
+      argv: [...ARGV, ...extra], execFileSyncImpl: gitFixture,
+      agentSourceIdentity: { async preflight() { called = true; } }, stdout: { write() {} },
+    }));
+  }
+  assert.equal(called, false);
+});

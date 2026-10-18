@@ -5,10 +5,21 @@ import { createConfiguredAgentSourceIdentityAdapter } from "./delivery-art/work-
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
+function maintenancePurpose(argv) {
+  if (!argv.includes("--purpose") && !argv.includes("--approval-ref")) return null;
+  const purpose = option(argv, "--purpose");
+  const approval_ref = option(argv, "--approval-ref");
+  if (purpose !== "workflow-maintenance" || !/^[A-Za-z0-9][A-Za-z0-9:/._#-]{2,255}$/.test(approval_ref)) {
+    throw new Error("Workflow maintenance requires its exact operator approval reference.");
+  }
+  return { purpose, approval_ref };
+}
+
 export const OWNER_SOURCE_USAGE = `usage:
   npm run source -- maintenance status --repo-root <path> --landing-unit-id <id> --base-commit <sha> --tracking-ref <ref>
   npm run source -- maintenance prepare --repo-root <path> --landing-unit-id <id> --base-commit <sha> --tracking-ref <ref>
   npm run source -- maintenance publish --repo-root <path> --landing-unit-id <id> --base-commit <sha> --tracking-ref <ref>
+  Workflow-file changes additionally require --purpose workflow-maintenance --approval-ref <operator-approval-ref> on each maintenance command.
 `;
 
 function git(execFileSyncImpl, repoRoot, args) {
@@ -109,8 +120,10 @@ export async function runOwnerSourceCommand({
   stdout = process.stdout,
 } = {}) {
   const input = buildOwnerSourceSession({ argv, execFileSyncImpl });
+  const credentialPurpose = maintenancePurpose(argv);
   const adapter = agentSourceIdentity ?? createConfiguredAgentSourceIdentityAdapter({
     env: { ...env, OOS_AGENT_SOURCE_IDENTITY_ENABLED: "true" },
+    credentialPurpose,
   });
   const preflight = await adapter.preflight({ session: input.session });
   if (input.action === "status") {

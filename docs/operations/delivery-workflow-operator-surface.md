@@ -888,6 +888,17 @@ verify the exact repository, branch, base, provider scope, and Agent Gary
 identity, and reject ambient human credential fallback. Operators must not
 locate credential files or invoke `git push` or `gh pr create` manually.
 
+Workflow-file maintenance additionally requires the operator's separate Gary
+Workflows grant and Platform `deliver --purpose workflow-maintenance
+--approval-ref <operator-approval-ref>`. Pass the same two arguments on each
+maintenance command. The private projection must match that exact purpose and
+approval as well as the existing repository, Landing Unit, branch and base.
+Ordinary work-session and realization consumers do not opt in and reject this
+projection. Normal tokens keep their original permissions. Revoke the exact
+maintenance credential after publication; do not repurpose it for app/model
+work or use a human token to bypass a missing grant. The explicit purpose is an
+engineering CI-edit boundary, not a universal requirement for every project.
+
 Before operating-readiness issuance or immutable Review Packet finalization,
 OOS generates and validates every covered work item's completion payload using
 the same completion-evidence rules used by landing-unit status and submit. All

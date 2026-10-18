@@ -202,6 +202,22 @@ test("Agent source preflight proves identity and provider without exposing crede
   assert.equal(JSON.stringify(projection).includes(TOKEN), false);
 });
 
+test("workflow credentials require explicit maintenance purpose and exact approval, never ordinary runtime adoption", async t => {
+  const fixture = setup(); t.after(fixture.cleanup);
+  const providerFixture = provider();
+  const purpose = { purpose: "workflow-maintenance", approval_ref: "operator:2026-10-19-gary-workflows" };
+  fixture.writeCredential({ ...fixture.credential, ...purpose });
+  const ordinary = testAdapter(fixture, providerFixture);
+  assert.equal((await ordinary.preflight({ session: fixture.session })).identity.state, "invalid");
+  assert.equal(providerFixture.calls.length, 0);
+  const authorized = testAdapter(fixture, providerFixture, { credentialPurpose: purpose });
+  assert.equal((await authorized.preflight({ session: fixture.session })).identity.state, "ready");
+  const wrong = testAdapter(fixture, providerFixture, { credentialPurpose: { ...purpose, approval_ref: "operator:other" } });
+  assert.equal((await wrong.preflight({ session: fixture.session })).identity.state, "invalid");
+  fixture.writeCredential();
+  assert.equal((await authorized.preflight({ session: fixture.session })).identity.state, "invalid");
+});
+
 test("source-intent metadata uses the admitted owner policy without reading tokens or changing real Git authorship", t => {
   const fixture = setup(); t.after(fixture.cleanup);
   const providerFixture = provider(); const adapter = testAdapter(fixture, providerFixture);
@@ -333,12 +349,15 @@ test("Agent source repository admission fails closed on every projection mismatc
   ]).includes(TOKEN), false);
 });
 
-test("Agent source prepares exact authorship and publishes one exact head for human review", async () => {
+for (const credentialPurpose of [null, { purpose: "workflow-maintenance", approval_ref: "operator:2026-10-19-gary-workflows" }]) {
+test(`Agent source prepares exact authorship and publishes one exact head for human review (${credentialPurpose?.purpose ?? "ordinary-source"})`, async () => {
   const fixture = setup();
   const providerFixture = provider();
   let pushEnvironment = null;
   try {
+    if (credentialPurpose) fixture.writeCredential({ ...fixture.credential, ...credentialPurpose });
     const adapter = testAdapter(fixture, providerFixture, {
+      credentialPurpose,
       onPush: ({ options }) => {
         pushEnvironment = options.env;
       },
@@ -363,6 +382,7 @@ test("Agent source prepares exact authorship and publishes one exact head for hu
 
     const result = await adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session });
     assert.equal(result.state, "published");
+    if (credentialPurpose) assert.equal(result.purpose, credentialPurpose.purpose);
     assert.equal(result.pushed_head, head);
     assert.equal(result.pull_request.author, "mfshaf7-agent-gary[bot]");
     assert.equal(result.human_reviewer_id, "mfshaf7");
@@ -377,6 +397,7 @@ test("Agent source prepares exact authorship and publishes one exact head for hu
     fixture.cleanup();
   }
 });
+}
 
 test("Agent source reconciles an existing pull request after its head advances", async () => {
   const fixture = setup();
