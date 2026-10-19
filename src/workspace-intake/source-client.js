@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import { intakeDigest, intakeError, intakeManifest } from "./contracts.js";
+import { repositoryCustodyIntakeAuthority } from "../repository-custody/intake-source.js";
 
 const execute = promisify(execFile);
 const REGISTER = "contracts/intake-register.yaml";
@@ -52,6 +53,32 @@ export function createWorkspaceIntakeSourceClient({ authorityRoot, python = "pyt
     return { review, readback };
   }
   return {
+    // Internal reader only. The caller must obtain this result from its
+    // authorized canonical custody service, not accept a browser-supplied receipt.
+    // The selected proposed entry is checked before any target checkout,
+    // credential or source action can be prepared.
+    async proposedSourceOwner({ target, custodyResult }) {
+      const custody = repositoryCustodyIntakeAuthority({ result: custodyResult, target });
+      try {
+        const revision = await provider.mainRevision();
+        return await sandbox(revision, async ({ directory, source }) => {
+          const result = await ownerCommand("proposed-source-owner", source, directory, {
+            target, expected_provider_repository: custody.binding,
+          });
+          if (await git(source, "status", "--short")) {
+            throw intakeError("source_change_invalid", "Proposed-owner inspection must not modify authority source.", 503);
+          }
+          if ((await provider.mainRevision()) !== revision) {
+            throw intakeError("authority_stale", "Intake authority changed during proposed-owner inspection.");
+          }
+          return { ...result, authority_revision: revision,
+            custody_receipt_digest: custody.digest, custody_evidence_refs: custody.evidence_refs };
+        });
+      } catch (error) {
+        if (error?.code?.startsWith("workspace_intake_")) throw error;
+        throw intakeError("proposed_owner_unavailable", "Current proposed source-owner authority is unavailable; no target source effect is authorized.", 503);
+      }
+    },
     async state(target) {
       let revision;
       try {

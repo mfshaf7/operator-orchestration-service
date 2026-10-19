@@ -3743,6 +3743,36 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
   }
 }
 
+async function handleRepositoryOwnerBootstrap({ action, config, repositoryOwnerBootstrapService, request, response, requestId = null, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository owner bootstrap");
+  assertDeliveryMutationAuthority(caller);
+  if (!repositoryOwnerBootstrapService) throw new HttpError(503, "repository_owner_bootstrap_not_active", "Owner bootstrap awaits its exact reviewed composition; no fixture, credential or CLI fallback is substituted.");
+  try {
+  if (["list", "read", "draft"].includes(action)) {
+    const query = [...url.searchParams.keys()];
+    if ((action !== "list" && query.length) || new Set(query).size !== query.length || query.some(key => !["owner_repo", "limit"].includes(key))) {
+      throw new HttpError(400, "repository_owner_bootstrap_query_invalid", "Use only the exact owner and bounded list limit.");
+    }
+    const args = action === "list" ? { callerId: caller.id, ownerRepo: url.searchParams.get("owner_repo"), limit: Number(url.searchParams.get("limit") ?? "25") }
+      : { callerId: caller.id, requestId };
+    const result = await repositoryOwnerBootstrapService[action](args);
+    const times = action === "list" ? result.records.map(record => record.updated_at).sort() : [];
+    sendSourceProjection(response, request, result, () => ({ sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
+      recordRef: action === "list" ? `oos://repository-owner-bootstrap/${args.ownerRepo}` : `oos://repository-owner-bootstrap/requests/${requestId}${action === "draft" ? "/draft" : ""}` }));
+    return;
+  }
+  const input = await readJsonBody(request, { canonical: true, maxBytes: action === "create" ? 73_728 : 65_536 });
+  sendJson(response, action === "create" ? 201 : 200, await repositoryOwnerBootstrapService[action]({ callerId: caller.id, requestId, input }));
+  } catch (error) {
+    if (error instanceof DeliveryArtSourceExecutorError) throw new HttpError(error.statusCode, "repository_owner_bootstrap_upstream_rejected",
+      "The isolated source owner did not complete this operation; inspect the same retained bootstrap request before retrying.",
+      { owner_code: /^[a-z0-9_.:-]{1,128}$/.test(error.code ?? "") ? error.code : "owner_rejected", retryable: Number(error.statusCode) >= 500 });
+    throw error;
+  }
+}
+
 async function handlePrototypeSource({ action, config, prototypeAuthoringService, request, response, requestId = null, url }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Prototype source authoring");
@@ -5482,6 +5512,7 @@ export function createApp({
   productPublicationService = null,
   prototypeLandingService = null,
   prototypeAuthoringService = null,
+  repositoryOwnerBootstrapService = null,
   prototypeMaturityService = null,
   prototypeClosureService = null,
   prototypeClosureOwnerReadbackService = null,
@@ -6004,6 +6035,48 @@ export function createApp({
       if (request.method === "GET" && url.pathname === "/v1/prototypes") {
         await handlePrototypeLanding({ action: "records", config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response });
         return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/repository-owner-bootstrap/preparations") {
+        await handleRepositoryOwnerBootstrap({ action: "prepare", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/repository-owner-bootstrap/requests") {
+        await handleRepositoryOwnerBootstrap({ action: "create", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/repository-owner-bootstrap/requests") {
+        await handleRepositoryOwnerBootstrap({ action: "list", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "read", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/draft$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "draft", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/session$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "start", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/existing-checkout$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "materializeExisting", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/cancel-unapplied$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "cancelUnapplied", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/accept$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "accept", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/recover$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "recover", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/publish$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "publish", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/review$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "review", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/merge$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "merge", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/close$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "close", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
       }
       if (request.method === "GET" && url.pathname === "/v1/prototype-source-requests") {
         await handlePrototypeSource({ action: "list", config, prototypeAuthoringService, request, response, url }); return;

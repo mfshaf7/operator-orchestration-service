@@ -8,13 +8,58 @@ import { createWorkspaceIntakeService } from "../src/workspace-intake/service.js
 import { createWorkspaceIntakeStore } from "../src/workspace-intake/store.js";
 import { at, caller, inputFixture, readinessFixture } from "../test-fixtures/workspace-intake/fixture.js";
 
-async function harness(t, { outcome = "allowed", sourceClient = {} } = {}) {
+async function harness(t, { outcome = "allowed", sourceClient = {}, sourceOwnerReadinessReader = null } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "intake-service-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const store = createWorkspaceIntakeStore({ root });
-  const options = { clock: () => new Date(at), store, readinessClient: { evaluate: async (input) => readinessFixture(input, outcome) }, sourceClient };
+  const options = { clock: () => new Date(at), store, readinessClient: { evaluate: async (input) => readinessFixture(input, outcome) }, sourceClient, sourceOwnerReadinessReader };
   return { root, store, service: createWorkspaceIntakeService(options), reopen: () => createWorkspaceIntakeService({ ...options, store: createWorkspaceIntakeStore({ root }) }) };
 }
+
+function sourceOwnerInput() {
+  const input = inputFixture();
+  input.request = bindIntake({ ...input.request, target: { kind: "repo", name: "source-owner", record_id: "repo:source-owner" },
+    requested_classification: "admitted", requested_record: { kind: "repo", repo_class: "product-source", requires_security_bindings: false,
+      security_owner: null, notes: "Synthetic source owner; no app or runtime acceptance.",
+      provider_repository: { provider: "github", provider_repository_id: "123456789", full_name: "example-organization/source-owner" },
+      validation_behavior: { posture: "covered-by-owner-repo", wgcf_graph_role: "product-runtime-source", catalog_refs: [], notes: "Actual source owner profile required." } } }, "request_digest");
+  input.decision = bindIntake({ ...input.decision, request_ref: { id: input.request.request_id, digest: input.request.request_digest }, target: input.request.target,
+    outcome: { ...input.decision.outcome, classification: "admitted", approved_record: input.request.requested_record } }, "decision_digest");
+  return input;
+}
+function sourceOwnerProof() {
+  return bindIntake({ schema_version: 1, scope: "source-owner-controls-readiness", owner_repo: "source-owner",
+    provider_repository: sourceOwnerInput().request.requested_record.provider_repository, fetched_base: "a".repeat(40), canonical_checkout_commit: "b".repeat(40),
+    evidence_profile_digest: `sha256:${"c".repeat(64)}`, source_request_ref: "oos://repository-owner-bootstrap/requests/bootstrap-request%3Asource-owner",
+    source_request_revision: at, app_acceptance: false, inventory_admission: false, runtime_activation: false }, "receipt_digest");
+}
+
+test("source-only admission requires actual current owner-control proof before acknowledging a new request, without treating it as application acceptance", async t => {
+  const input = sourceOwnerInput(), missing = await harness(t);
+  await assert.rejects(missing.service.submit({ callerId: caller, input }), { code: "workspace_intake_source_owner_readiness_unavailable" });
+  assert.equal(await missing.store.get(input.request.request_id), null);
+  const calls = [];
+  const h = await harness(t, { sourceOwnerReadinessReader: async value => { calls.push(value); return sourceOwnerProof(); } });
+  const admitted = await h.service.submit({ callerId: caller, input });
+  assert.equal(admitted.status, "accepted"); assert.equal(admitted.canonical_mutation, false);
+  assert.deepEqual(calls, [{ callerId: caller, ownerRepo: "source-owner", providerRepository: input.request.requested_record.provider_repository }]);
+  assert.deepEqual((await h.store.get(input.request.request_id)).source_owner_readiness, sourceOwnerProof());
+  assert.deepEqual(await h.reopen().submit({ callerId: caller, input }), admitted);
+  assert.equal(calls.length, 1, "Acknowledgement recovery must not fabricate a new readiness request");
+});
+
+test("forged, cross-owner or app-acceptance readiness cannot satisfy source-only classification", async t => {
+  for (const mutate of [
+    value => { value.owner_repo = "foreign-owner"; }, value => { value.provider_repository.provider_repository_id = "42"; },
+    value => { value.app_acceptance = true; }, value => { value.inventory_admission = true; },
+    value => { value.evidence_profile_digest = `sha256:${"d".repeat(64)}`; },
+  ]) {
+    const proof = sourceOwnerProof(); mutate(proof);
+    const h = await harness(t, { sourceOwnerReadinessReader: async () => proof });
+    await assert.rejects(h.service.submit({ callerId: caller, input: sourceOwnerInput() }), { code: "workspace_intake_source_owner_readiness_invalid" });
+    assert.equal(await h.store.get("request:test"), null);
+  }
+});
 
 test("preparation returns current canonical bindings without workflow state mutation", async (t) => {
   const input = { target: { kind: "product", name: "intake-proof" } };

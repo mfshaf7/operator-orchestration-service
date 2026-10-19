@@ -1,5 +1,6 @@
 import { SOURCE_CREDENTIAL_ACTIONS, SOURCE_CREDENTIAL_RECEIPT_FIELDS, SOURCE_INTENT_FIELDS } from "../src/platform-operation/source-credentials.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { SOURCE_OWNER_BOOTSTRAP_PATHS } from "../src/repository-owner-bootstrap/scaffold.js";
 
 const ref = name => ({ $ref: `#/components/schemas/${name}` });
 const id = { type: "string", minLength: 1, maxLength: 256, pattern: "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]*$" };
@@ -44,18 +45,40 @@ export const sourceCredentialSchemas = {
     preparation_id: { ...id, maxLength: 190 }, subject: { oneOf: [
       closed({ kind: { const: "delivery" }, work_item_ref: workItem }),
       closed({ kind: { const: "prototype" }, prototype_id: prototypeId, source_request_id: id }),
+      closed({ kind: { const: "repository-bootstrap" }, owner_repo: { type: "string", pattern: "^[a-z0-9][a-z0-9._-]*$" }, source_request_id: id }),
     ] }, decision: nullable({ type: "object" }), expires_at: timestamp, supersedes_intent_digest: nullable(digest),
   }) }),
   SourceCredentialPreparation: closed({ schema_version: { const: 1 }, workflow_id: { const: "source-credential-preparation" },
-    intent_id: id, source_intent: ref("SourceCredentialIntent"), source_intent_digest: digest, session_id: nullable(id), created_at: timestamp,
+    intent_id: id, source_intent: ref("SourceCredentialOperationIntent"), source_intent_digest: digest, session_id: nullable(id), created_at: timestamp,
     operation_refs: closed({ issue: nullable(id), revoke: nullable(id) }),
     start_decision: nullable(ref("DeliveryArtWorkSessionDecisionV1")),
-    authorization: closed({ state: { enum: ["prepared", "approved", "expired", "revocation-requested", "revoked"] }, approval_ref: nullable(id), credential_receipt: nullable(ref("SourceCredentialReceipt")) }),
+    authorization: closed({ state: { enum: ["prepared", "approved", "expired", "revocation-requested", "revoked"] }, approval_ref: nullable(id), credential_receipt: nullable(ref("SourceCredentialOperationReceipt")) }),
     authority: { const: "operator-orchestration-service" }, secret_values_embedded: { const: false },
   }),
   SourceCredentialPreparationList: closed({ workflow_id: { const: "source-credential-preparation-list" },
     preparations: { type: "array", maxItems: 200, items: ref("SourceCredentialPreparation") } }),
 };
+
+// Keep ordinary schemas closed and unchanged. Only the authenticated Platform
+// operation boundary dispatches the explicitly marked repository purpose.
+sourceCredentialSchemas.SourceBootstrapSubject = closed({ kind: { const: "repository-bootstrap" },
+  owner_repo: { type: "string", pattern: "^[a-z0-9][a-z0-9._-]*$" },
+  intake_entry_ref: closed({ id: { type: "string", pattern: "^repo:[a-z0-9][a-z0-9._-]*$" }, version: positive, digest }),
+  custody_receipt_digest: digest, template_digest: digest, plan_digest: digest, decision_ref: id,
+  workflow_write: { type: "boolean" }, workflow_approval_ref: nullable(id),
+  allowed_paths: { type: "array", minItems: 1, maxItems: SOURCE_OWNER_BOOTSTRAP_PATHS.length, uniqueItems: true, items: { enum: SOURCE_OWNER_BOOTSTRAP_PATHS } },
+});
+sourceCredentialSchemas.SourceBootstrapIntent = closed({ ...sourceCredentialSchemas.SourceCredentialIntent.properties,
+  purpose: { const: "trusted-owner-bootstrap" }, subject: ref("SourceBootstrapSubject") });
+sourceCredentialSchemas.SourceCredentialOperationIntent = { oneOf: [ref("SourceCredentialIntent"), ref("SourceBootstrapIntent")] };
+sourceCredentialSchemas.SourceCredentialOperationInput = { oneOf: [ref("SourceCredentialInput"),
+  closed({ source_intent: ref("SourceBootstrapIntent"), session_id: nullable(id) })] };
+const bootstrapPermissions = { ...sourceCredentialSchemas.SourceCredentialReceipt.properties.permissions.properties, workflows: { const: "write" } };
+sourceCredentialSchemas.SourceBootstrapReceipt = closed({ ...sourceCredentialSchemas.SourceCredentialReceipt.properties,
+  purpose: { const: "trusted-owner-bootstrap" }, subject: ref("SourceBootstrapSubject"),
+  permissions: { oneOf: [sourceCredentialSchemas.SourceCredentialReceipt.properties.permissions, closed(bootstrapPermissions)] },
+});
+sourceCredentialSchemas.SourceCredentialOperationReceipt = { oneOf: [ref("SourceCredentialReceipt"), ref("SourceBootstrapReceipt")] };
 
 export const sourcePreparationRequestExample = { preparation: { preparation_id: "delivery-42-source-start", subject: { kind: "delivery", work_item_ref: "work-item-42" },
   decision: { schema_version: 1, artifact_type: "delivery_art_work_session_decision", work_item_id: "work-item-42", covered_work_item_ids: ["work-item-42"],

@@ -66,7 +66,7 @@ function assertCaller(record, callerId) {
   }
 }
 
-export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, clock = () => new Date(), audit }) {
+export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, sourceOwnerReadinessReader = null, clock = () => new Date(), audit }) {
   async function list({ callerId, input }) {
     if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "custody_request_id", "cursor"].includes(key)) ||
         typeof input.custody_request_id !== "string" || input.custody_request_id.length > 256 || !input.custody_request_id.trim() ||
@@ -158,8 +158,27 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
         }
         assertWorkspaceIntakeRequestCandidate(evaluation.request, attestation.candidate);
       }
+      const domain = evaluation.request.requested_record ?? {}, behavior = domain.validation_behavior;
+      let sourceOwnerReadiness = null;
+      if (evaluation.request.requested_classification === "admitted" && evaluation.request.target.kind === "repo" &&
+          domain.provider_repository && domain.requires_security_bindings === false &&
+          behavior?.posture === "covered-by-owner-repo" && behavior.wgcf_graph_role === "product-runtime-source") {
+        if (typeof sourceOwnerReadinessReader !== "function") throw intakeError("source_owner_readiness_unavailable", "Source-only admission requires its actual completed owner controls and applicable current profile.", 503);
+        sourceOwnerReadiness = await sourceOwnerReadinessReader({ callerId, ownerRepo: evaluation.request.target.name, providerRepository: domain.provider_repository });
+        const { receipt_digest: proofDigest, ...proofBody } = sourceOwnerReadiness ?? {};
+        if (sourceOwnerReadiness?.schema_version !== 1 || sourceOwnerReadiness.scope !== "source-owner-controls-readiness" ||
+            proofDigest !== intakeDigest(proofBody) || !/^[0-9a-f]{40}$/.test(sourceOwnerReadiness.fetched_base ?? "") ||
+            !/^[0-9a-f]{40}$/.test(sourceOwnerReadiness.canonical_checkout_commit ?? "") ||
+            !/^sha256:[0-9a-f]{64}$/.test(sourceOwnerReadiness.evidence_profile_digest ?? "") ||
+            !/^oos:\/\/repository-owner-bootstrap\/requests\/[^/]+$/.test(sourceOwnerReadiness.source_request_ref ?? "") ||
+            !Number.isFinite(Date.parse(sourceOwnerReadiness.source_request_revision ?? "")) ||
+            sourceOwnerReadiness.owner_repo !== evaluation.request.target.name || sourceOwnerReadiness.app_acceptance !== false ||
+            sourceOwnerReadiness.inventory_admission !== false || sourceOwnerReadiness.runtime_activation !== false ||
+            intakeDigest(sourceOwnerReadiness.provider_repository) !== intakeDigest(domain.provider_repository)) throw intakeError("source_owner_readiness_invalid", "Owner-controls evidence does not bind this exact source-only entrant.");
+      }
       const record = {
         caller_id: callerId, binding_digest: binding, evaluation, request: evaluation.request,
+        ...(sourceOwnerReadiness ? { source_owner_readiness: structuredClone(sourceOwnerReadiness) } : {}),
         source_attestation: attestation ? {
           candidate_digest: attestation.candidate.candidate_digest,
           evidence_refs: [...attestation.candidate.evidence_refs],

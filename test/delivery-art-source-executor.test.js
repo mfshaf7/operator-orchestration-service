@@ -230,6 +230,54 @@ test("Prototype source actions retain their actual subject/request and cannot re
   assert.equal(Object.hasOwn(audit[0], "work_item_id"), false);
 });
 
+test("owner-bootstrap executor uses only its real repository context and checks the private lease before every write", async t => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-bootstrap-context-"));
+  const socketPath = path.join(root, "executor.sock");
+  const audit = []; let inspections = 0; let writes = 0;
+  const configured = adapters([]);
+  configured.bootstrapSource = {
+    inspectSourceCredentialBinding: async input => { inspections++; return { owner_repo: input.owner_repo, purpose: "trusted-owner-bootstrap" }; },
+    ensureOwnedWorktree: async () => { writes++; return { resources: [] }; },
+  };
+  const server = createDeliveryArtSourceExecutorServer({ adapters: configured, audit: value => audit.push(value), executorId: "bootstrap-executor", secret: SECRET });
+  await listen(server, socketPath); t.after(async () => { await close(server); rmSync(root, { recursive: true, force: true }); });
+  const client = createDeliveryArtSourceExecutorClient({ executorId: "bootstrap-executor", secret: SECRET, socketPath, requireSourceLease: true });
+  const bootstrap = { caller_id: "console", operator_id: "operator:test", owner_repo: "example-source",
+    bootstrap_request_id: "bootstrap-request:example-source", session_id: "bootstrap-session:example-source", command_id: null };
+  const input = { owner_repo: bootstrap.owner_repo, session: { caller_id: bootstrap.caller_id, operator: { id: bootstrap.operator_id },
+    owner_repo: bootstrap.owner_repo, source_request_id: bootstrap.bootstrap_request_id, session_id: bootstrap.session_id } };
+  await client.executor.run(bootstrap, async () => {
+    assert.equal((await client.bootstrapSource.inspectSourceCredentialBinding(input)).purpose, "trusted-owner-bootstrap");
+    await assert.rejects(client.bootstrapSource.ensureOwnedWorktree(input), { code: "delivery_art_source_lease_required" });
+    await assert.rejects(client.bootstrapSource.inspectSourceCredentialBinding({ ...input, owner_repo: "another-source" }), { code: "bootstrap_source_executor_subject_mismatch" });
+  });
+  await assert.rejects(client.executor.run(context(), () => client.bootstrapSource.inspectSourceCredentialBinding(input)), { code: "bootstrap_source_executor_context_invalid" });
+  await assert.rejects(client.executor.run({ ...bootstrap, work_item_id: "work-item-1" }, () => client.bootstrapSource.inspectSourceCredentialBinding(input)), { code: "bootstrap_source_executor_context_invalid" });
+  await assert.rejects(client.executor.run(bootstrap, () => client.workSource.resolveBase({})), { code: "delivery_art_source_executor_context_invalid" });
+  let allowed = true; let checks = 0;
+  await client.executor.withSourceLeaseGuard(session => {
+    checks++; assert.equal(session.session_id, bootstrap.session_id);
+    if (!allowed) throw Object.assign(new Error("Stopped bootstrap intent"), { code: "platform_source_intent_stopped" });
+  }, () => client.executor.run(bootstrap, async () => {
+    await client.bootstrapSource.ensureOwnedWorktree(input); allowed = false;
+    await assert.rejects(client.bootstrapSource.ensureOwnedWorktree(input), { code: "platform_source_intent_stopped" });
+  }));
+  assert.equal(inspections, 1); assert.equal(writes, 1); assert.equal(checks, 2);
+  assert.ok(audit.every(value => !Object.hasOwn(value, "work_item_id") && !Object.hasOwn(value, "prototype_id")));
+  assert.equal(JSON.stringify(audit).includes("assert_source_lease"), false);
+});
+
+test("bootstrap wire shape does not activate an absent trusted executor adapter", async t => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-bootstrap-absent-"));
+  const socketPath = path.join(root, "executor.sock");
+  const server = createDeliveryArtSourceExecutorServer({ adapters: adapters([]), executorId: "bootstrap-executor", secret: SECRET });
+  await listen(server, socketPath); t.after(async () => { await close(server); rmSync(root, { recursive: true, force: true }); });
+  const client = createDeliveryArtSourceExecutorClient({ executorId: "bootstrap-executor", secret: SECRET, socketPath });
+  await assert.rejects(client.executor.run({ caller_id: "console", operator_id: "operator:test", owner_repo: "example-source",
+    bootstrap_request_id: "bootstrap-request:example-source", session_id: null },
+  () => client.bootstrapSource.inspectSourceCredentialBinding({ owner_repo: "example-source" })), { code: "bootstrap_source_executor_unavailable" });
+});
+
 test("source executor rejects missing context and incorrect credentials", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "oos-source-executor-"));
   const socketPath = path.join(root, "executor.sock");

@@ -10,8 +10,26 @@ const AGENT_SOURCE_EFFECTS = new Set([
   "work.ensure-owned-worktree", "work.ensure-worktree", "work.apply-source-realization",
   "work.prepare-agent-source", "work.publish-agent-source",
   "prototype.ensure-owned-worktree", "prototype.apply-source-realization", "prototype.publish-agent-source",
+  "bootstrap.ensure-owned-worktree", "bootstrap.apply-source-realization", "bootstrap.publish-agent-source",
 ]);
+const bootstrapAction = method => ({ bootstrapSource }, input) => {
+  if (typeof bootstrapSource?.[method] !== "function") throw new DeliveryArtSourceExecutorError(
+    "bootstrap_source_executor_unavailable", "The separately reviewed owner-bootstrap source adapter is unavailable.", { statusCode: 503 });
+  return bootstrapSource[method](input);
+};
 const ACTIONS = Object.freeze({
+  "bootstrap.materialize-existing-owner": bootstrapAction("materializeExistingOwner"),
+  "bootstrap.inspect-source-identity": bootstrapAction("inspectSourceCredentialBinding"),
+  "bootstrap.ensure-owned-worktree": bootstrapAction("ensureOwnedWorktree"),
+  "bootstrap.apply-source-realization": bootstrapAction("applySourceRealization"),
+  "bootstrap.inspect-agent-source": bootstrapAction("inspectAgentSource"),
+  "bootstrap.inspect-pull-request": bootstrapAction("inspectPullRequest"),
+  "bootstrap.validate-source": bootstrapAction("validateSource"),
+  "bootstrap.publish-agent-source": bootstrapAction("publishAgentSource"),
+  "bootstrap.approve-pull-request": bootstrapAction("approvePullRequest"),
+  "bootstrap.merge-pull-request": bootstrapAction("mergePullRequest"),
+  "bootstrap.retire-source-resources": bootstrapAction("retireSourceResources"),
+  "bootstrap.retire-pristine-resources": bootstrapAction("retirePristineResources"),
   "prototype.ensure-owned-worktree": ({ prototypeSource }, input) => prototypeSource.ensureOwnedWorktree(input),
   "prototype.capture-source-context": ({ prototypeSource }, input) => prototypeSource.captureRealizationContext(input),
   "prototype.prepare-owner": ({ prototypeSource }, input) => prototypeSource.prepareOwner(input),
@@ -141,12 +159,21 @@ async function readJson(request) {
 }
 
 function assertContext(context, action) {
+  if (action?.startsWith("bootstrap.")) {
+    if (!context || Array.isArray(context) || typeof context.caller_id !== "string" || !context.caller_id ||
+        typeof context.operator_id !== "string" || !context.operator_id || !/^[a-z0-9][a-z0-9._-]*$/.test(context.owner_repo ?? "") ||
+        !/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/.test(context.bootstrap_request_id ?? "") ||
+        ["prototype_id", "source_request_id", "work_item_id", "delivery_id"].some(field => Object.hasOwn(context, field))) {
+      throw new DeliveryArtSourceExecutorError("bootstrap_source_executor_context_invalid", "Bootstrap actions require their real repository/request identity, not an ordinary source subject.", { statusCode: 400 });
+    }
+    return;
+  }
   if (action?.startsWith("prototype.")) {
     if (!context || typeof context !== "object" || Array.isArray(context) ||
         typeof context.caller_id !== "string" || !context.caller_id || typeof context.operator_id !== "string" || !context.operator_id ||
         !/^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(context.prototype_id ?? "") || context.prototype_id.length > 256 ||
         !/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/.test(context.source_request_id ?? "") ||
-        Object.hasOwn(context, "work_item_id") || Object.hasOwn(context, "delivery_id")) {
+        Object.hasOwn(context, "work_item_id") || Object.hasOwn(context, "delivery_id") || Object.hasOwn(context, "bootstrap_request_id")) {
       throw new DeliveryArtSourceExecutorError("prototype_source_executor_context_invalid", "Prototype actions require their actual Prototype/request identity, not a Delivery work item.", { statusCode: 400 });
     }
     return;
@@ -156,7 +183,7 @@ function assertContext(context, action) {
     !context ||
     typeof context !== "object" ||
     Array.isArray(context) ||
-    Object.hasOwn(context, "prototype_id") || Object.hasOwn(context, "source_request_id") ||
+    Object.hasOwn(context, "prototype_id") || Object.hasOwn(context, "source_request_id") || Object.hasOwn(context, "bootstrap_request_id") ||
     required.some((field) => typeof context[field] !== "string" || !context[field])
   ) {
     throw new DeliveryArtSourceExecutorError(
@@ -168,6 +195,7 @@ function assertContext(context, action) {
 }
 
 function subjectAudit(context) {
+  if (context?.bootstrap_request_id) return { owner_repo: context.owner_repo, bootstrap_request_id: context.bootstrap_request_id };
   return context?.prototype_id
     ? { prototype_id: context.prototype_id, source_request_id: context.source_request_id }
     : { work_item_id: context?.work_item_id ?? null };
@@ -245,6 +273,17 @@ export function createDeliveryArtSourceExecutorServer({
         );
       }
       assertContext(envelope.context, envelope.action);
+      if (envelope.action === "bootstrap.materialize-existing-owner" &&
+          (envelope.context.session_id !== null || envelope.input.bootstrap_request_id !== envelope.context.bootstrap_request_id ||
+           envelope.input.preparation?.caller_id !== envelope.context.caller_id || envelope.input.preparation?.operator_id !== envelope.context.operator_id)) {
+        throw new DeliveryArtSourceExecutorError("bootstrap_source_executor_subject_mismatch", "Existing-owner checkout must retain its actual non-source request and accountable caller/operator.", { statusCode: 409 });
+      }
+      if (envelope.action.startsWith("bootstrap.") && (envelope.input.owner_repo !== envelope.context.owner_repo ||
+          (envelope.input.session && (envelope.input.session.owner_repo !== envelope.context.owner_repo ||
+            envelope.input.session.source_request_id !== envelope.context.bootstrap_request_id || envelope.input.session.session_id !== envelope.context.session_id ||
+            envelope.input.session.caller_id !== envelope.context.caller_id || envelope.input.session.operator?.id !== envelope.context.operator_id)))) {
+        throw new DeliveryArtSourceExecutorError("bootstrap_source_executor_subject_mismatch", "Bootstrap action must retain its exact repository, caller, operator, request and session bindings.", { statusCode: 409 });
+      }
       if (envelope.action.startsWith("prototype.") && envelope.input.prototype_id !== envelope.context.prototype_id) {
         throw new DeliveryArtSourceExecutorError("prototype_source_executor_subject_mismatch", "Source action and actual Prototype context do not match.", { statusCode: 409 });
       }
@@ -467,6 +506,20 @@ export function createDeliveryArtSourceExecutorClient({
   };
 
   return {
+    bootstrapSource: {
+      materializeExistingOwner: input => invoke("bootstrap.materialize-existing-owner", input),
+      inspectSourceCredentialBinding: input => invoke("bootstrap.inspect-source-identity", input),
+      ensureOwnedWorktree: input => invoke("bootstrap.ensure-owned-worktree", input),
+      applySourceRealization: input => invoke("bootstrap.apply-source-realization", input),
+      inspectAgentSource: input => invoke("bootstrap.inspect-agent-source", input),
+      inspectPullRequest: input => invoke("bootstrap.inspect-pull-request", input),
+      validateSource: input => invoke("bootstrap.validate-source", input),
+      publishAgentSource: input => invoke("bootstrap.publish-agent-source", input),
+      approvePullRequest: input => invoke("bootstrap.approve-pull-request", input),
+      mergePullRequest: input => invoke("bootstrap.merge-pull-request", input),
+      retireSourceResources: input => invoke("bootstrap.retire-source-resources", input),
+      retirePristineResources: input => invoke("bootstrap.retire-pristine-resources", input),
+    },
     prototypeSource: {
       ensureOwnedWorktree: input => invoke("prototype.ensure-owned-worktree", input),
       captureRealizationContext: input => invoke("prototype.capture-source-context", input),

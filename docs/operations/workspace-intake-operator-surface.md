@@ -78,6 +78,20 @@ authenticated OOS source owner at the generic attestation endpoint.
 
 ### Classification And Reviewed Source
 
+For a new source-only repository requesting `admitted` with explicit provider
+binding and `covered-by-owner-repo` / `product-runtime-source` validation,
+complete the existing [owner bootstrap/checkout workflow](repository-owner-bootstrap-operator-surface.md)
+first. OOS rereads the actual current owner profile and requires completed
+canonical checkout/control evidence before acknowledging the admission. Missing
+or changed owner controls are a named prerequisite, not permission to create a
+dummy passing profile or defer the failure until cross-repo CI. Existing valid
+controls take the non-source checkout path without a fake PR. This proves only
+owner controls: normal WGCF evaluation, explicit classification review and
+Inventory promotion remain separate, and no app/runtime acceptance is inferred.
+Proposed/out-of-scope and legacy/non-source classification keep their existing
+semantics. Private/client source readiness is not qualified by the current
+public synthetic source adapter.
+
 1. POST one target kind and name to `/v1/workspace-intake/preparations`. Retain
    the returned exact authority revision, canonical target, register digest,
    record version, and record digest. A response is preparation only, not

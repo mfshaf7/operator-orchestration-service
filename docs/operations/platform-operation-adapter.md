@@ -48,11 +48,53 @@ requires a new command and approval.
 
 The finite `agent-source.issue`, `agent-source.renew`, and `agent-source.revoke`
 actions extend the existing Platform operation family. They do not authorize a
-new repository, installation, App permission, model, bootstrap purpose, or
-deployment. Their source implementation is not operating acceptance: exact
+new repository, installation, App permission, model, or deployment. Ordinary
+source remains separate from the explicitly marked proposed-owner bootstrap
+purpose described below. Their source implementation is not operating acceptance: exact
 Security acceptance and coherent Platform/Console commissioning are still
 required. An unavailable canonical subject resolver fails closed; accepting
 the typed Prototype wire shape alone does not make Prototype authoring usable.
+
+### Proposed-owner bootstrap source boundary
+
+The staged credential-operation dispatcher additionally recognizes only
+`trusted-owner-bootstrap` with a real `repository-bootstrap` subject. The
+ordinary Delivery/Prototype input and receipt contracts remain closed and
+reject that purpose. A missing bootstrap workflow resolver fails before
+issuance; accepting this wire shape is not an available Console workflow.
+The Console adapter is source-staged in Repository Intake with isolated
+browser/recovery and native OOS protocol checks. Normal operator bootstrap
+execution still requires exact composed Security/Platform acceptance and its
+complete operating witness.
+
+Read-only bootstrap preparation binds its authenticated caller/operator and
+verifies successful canonical Repository Custody, current proposed source-only Intake, absence from active/retired
+Inventory, and exact provider identity before target source inspection. The
+current public synthetic adapter reads a stable provider main and verifies
+bounded regular UTF-8 Git blobs. Private/client source is explicitly
+unqualified; no ambient credential or exposure-changing fallback exists.
+Preparation creates no checkout, token, source request, admission or runtime.
+Custody is shared workspace authority under its authenticated API contract,
+not a caller-private historical record. The new source request, exact approval,
+session and credential intent are caller-bound; no custody-adoption mechanism
+or fabricated legacy ownership is introduced.
+
+The trusted OOS template produces only finite owner controls and the actual
+operator-selected owner evidence profile. Existing README bytes are retained;
+independent controls are not overwritten. CI is optional. Bootstrap validation
+does not execute app commands or count as application acceptance. The optional
+CI app runner uses actual selected tests/validations and explicit Git base/head
+substitution; missing application source is reported as bootstrap-only.
+
+The separate credential subject binds the exact proposed entry version/digest,
+custody receipt, template/plan digests, finite changed paths and operator
+decision. Workflow write additionally requires a separate approval reference
+and the exact selected workflow path. Platform independently rereads canonical
+proposed Intake before minting. The projection is purpose-marked; ordinary
+consumers cannot adopt it. The existing issuer, renewal, uncertain-operation
+recovery, human reviewer separation and exact revocation remain in use.
+Neither successful bootstrap nor an App installation admits or activates an
+owner or permits model/application imports.
 
 1. For Delivery, obtain and review the actual work-session decision through
    its normal preflight. Resolve every prerequisite other than the missing

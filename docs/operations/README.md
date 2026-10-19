@@ -14,6 +14,7 @@ completed ART items are historical evidence, not live feature flags.
 - [Proposal Target Application](proposal-target-application-operator-surface.md)
 - [Workspace Intake](workspace-intake-operator-surface.md)
 - [Workspace Inventory](workspace-inventory-operator-surface.md)
+- [Repository Owner Bootstrap](repository-owner-bootstrap-operator-surface.md)
 - [Lifecycle Transition Journal](lifecycle-transition-operator-surface.md)
 
 ## Prototype

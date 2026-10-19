@@ -135,7 +135,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function canonicalRepo(ownerRepo) {
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(String(ownerRepo))) {
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(String(ownerRepo))) {
       throw new Error(`Owner repository name is invalid: ${ownerRepo}.`);
     }
     const repoRoot = path.join(workspaceRoot, ownerRepo);
@@ -1526,6 +1526,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 export function createConfiguredAgentSourceIdentityAdapter({
   env = process.env,
   credentialPurpose = null,
+  bootstrapBoundary = null,
 } = {}) {
   const enabled = ["1", "true", "yes", "on"].includes(
     String(env.OOS_AGENT_SOURCE_IDENTITY_ENABLED ?? "").trim().toLowerCase(),
@@ -1533,8 +1534,9 @@ export function createConfiguredAgentSourceIdentityAdapter({
   return createAgentSourceIdentityAdapter({
     enabled,
     credentialPurpose,
+    bootstrapBoundary,
     credentialRoot: resolveAgentSourceCredentialRoot(env),
-    ...(enabled && env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED === "true"
+    ...(enabled && !bootstrapBoundary && env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED === "true"
       ? { repositoryReader: createCanonicalSourceRepositoryReader({
         authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
         python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3",

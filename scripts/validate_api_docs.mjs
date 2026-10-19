@@ -594,6 +594,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/prototype-source-requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }
+  if (pattern.startsWith("/v1/repository-owner-bootstrap/requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
   if (pattern.startsWith("/v1/proposal-target-applications/")) {
     return pattern.replace("[^/]+", "{application_id}");
   }

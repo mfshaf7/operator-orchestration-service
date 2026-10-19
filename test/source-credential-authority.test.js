@@ -13,7 +13,8 @@ import { sourcePreparationRequestExample } from "../scripts/source_credential_op
 import { normalizePlatformOperationCommand, platformOperationIntent } from "../src/platform-operation/contracts.js";
 import { createPlatformOperationService } from "../src/platform-operation/service.js";
 import { createSourceCredentialAuthority } from "../src/platform-operation/source-credential-authority.js";
-import { assertSourceCredentialReceipt, assertSourceCredentialTimestamp, normalizeSourceCredentialInput } from "../src/platform-operation/source-credentials.js";
+import { assertSourceCredentialReceipt, assertSourceCredentialTimestamp, normalizeSourceCredentialInput,
+  assertSourceCredentialOperationReceipt, normalizeSourceCredentialOperationInput } from "../src/platform-operation/source-credentials.js";
 import { createPlatformOperationStore } from "../src/platform-operation/store.js";
 
 const NOW = "2026-10-18T10:00:00.000Z";
@@ -93,7 +94,7 @@ function fixture(t, initial = plan()) {
   const store = createPlatformOperationStore({ root });
   const authority = createSourceCredentialAuthority({
     clock: () => new Date(now), providerCallerId: "operator-orchestration-service", store,
-    resolvers: { delivery: {
+    resolvers: { [initial.subject.kind]: {
       async prepare() { calls.prepare++; return structuredClone(current); },
       async verify() { calls.verify++; if (verifyHook) await verifyHook(); return structuredClone(current); },
     } },
@@ -108,7 +109,12 @@ function fixture(t, initial = plan()) {
       }; },
       async submit(input) {
         submits++;
-        const value = projection(input, receipt(input, input.action === "agent-source.revoke" ? {} : { token_expires_at: new Date(now.getTime() + 3_600_000).toISOString(), recorded_at: now.toISOString() }));
+        const bootstrap = input.input.source_intent.purpose === "trusted-owner-bootstrap";
+        const value = projection(input, receipt(input, {
+          ...(input.action === "agent-source.revoke" ? {} : { token_expires_at: new Date(now.getTime() + 3_600_000).toISOString(), recorded_at: now.toISOString() }),
+          ...(bootstrap ? { purpose: "trusted-owner-bootstrap", permissions: { metadata: "read", contents: "write", pull_requests: "write", checks: "read",
+            ...(input.input.source_intent.subject.workflow_write ? { workflows: "write" } : {}) } } : {}),
+        }));
         providerRecords.set(input.command_id, value);
         return value;
       },
@@ -497,4 +503,90 @@ test("uncertain issuance preserves original command and retry-after boundary wit
     assert.equal(error.details.retry_after, "2026-10-18T11:01:00.000Z"); return true;
   });
   assert.equal(controls, 0); assert.equal(f.store.list().length, 1);
+});
+
+function bootstrapPlan({ workflow = false } = {}) {
+  return plan({ purpose: "trusted-owner-bootstrap", subject: { kind: "repository-bootstrap", owner_repo: "example-source",
+    intake_entry_ref: { id: "repo:example-source", version: 1, digest: d("a") },
+    custody_receipt_digest: d("b"), template_digest: d("c"), plan_digest: d("d"), decision_ref: "operator:bootstrap-example-source",
+    workflow_write: workflow, workflow_approval_ref: workflow ? "operator:workflows-grant" : null,
+    allowed_paths: [...(workflow ? [".github/workflows/validate.yaml"] : []), "AGENTS.md"],
+  } });
+}
+const bootstrapPreparation = () => preparation({ preparation_id: "bootstrap-example-source", decision: null,
+  subject: { kind: "repository-bootstrap", owner_repo: "example-source", source_request_id: "bootstrap-request:example-source" } });
+
+test("bootstrap credential dispatcher is separate from closed ordinary Delivery/Prototype input and receipt contracts", async t => {
+  const f = fixture(t, bootstrapPlan());
+  const prepared = await f.prepare(bootstrapPreparation());
+  const input = { source_intent: prepared.source_intent, session_id: null };
+  assert.equal(input.source_intent.purpose, "trusted-owner-bootstrap");
+  assert.equal(input.source_intent.subject.kind, "repository-bootstrap");
+  assert.deepEqual(normalizeSourceCredentialOperationInput(input), input);
+  assert.throws(() => normalizeSourceCredentialInput(input));
+  const approved = command(prepared);
+  const value = receipt(approved, { purpose: "trusted-owner-bootstrap" });
+  assert.deepEqual(assertSourceCredentialOperationReceipt(value, approved), value);
+  assert.throws(() => assertSourceCredentialReceipt(value, approved));
+  await assert.rejects(f.lease(prepared.intent_id), { code: "platform_source_approval_required" });
+});
+
+test("explicit bootstrap issue and revoke use the existing durable Platform-operation path without changing ordinary source purpose", async t => {
+  const f = fixture(t, bootstrapPlan({ workflow: true }));
+  const prepared = await f.prepare(bootstrapPreparation());
+  const issued = await f.service.submit({ callerId: CALLER, input: command(prepared) });
+  assert.equal(issued.state, "succeeded");
+  const current = f.authority.read({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id });
+  assert.equal(current.authorization.credential_receipt.purpose, "trusted-owner-bootstrap");
+  assert.equal(current.authorization.credential_receipt.permissions.workflows, "write");
+  f.setVerifyHook(() => { throw new Error("Current proposed owner is temporarily unavailable"); });
+  const revoked = await f.service.submit({ callerId: CALLER, input: command(prepared, "agent-source.revoke") });
+  assert.equal(revoked.state, "succeeded");
+  assert.equal(f.authority.read({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id }).authorization.state, "revoked");
+});
+
+test("bootstrap preparation requires its configured canonical resolver and finite independently marked purpose", async t => {
+  const ordinary = fixture(t);
+  await assert.rejects(ordinary.prepare(bootstrapPreparation()), { code: "platform_source_subject_unavailable" });
+  const f = fixture(t, bootstrapPlan());
+  const wrong = bootstrapPlan(); delete wrong.purpose;
+  f.setPlan(wrong);
+  await assert.rejects(f.prepare(bootstrapPreparation()), { code: "platform_source_preparation_invalid" });
+  const invalid = bootstrapPlan(); invalid.subject.allowed_paths.push("app/arbitrary.js");
+  f.setPlan(invalid);
+  await assert.rejects(f.prepare(bootstrapPreparation()), { code: "platform_source_bootstrap_contract_invalid" });
+});
+
+test("bootstrap receipt cannot claim workflow permission without the separate selected write and grant", async t => {
+  const f = fixture(t, bootstrapPlan());
+  const prepared = await f.prepare(bootstrapPreparation());
+  const input = command(prepared);
+  assert.throws(() => assertSourceCredentialOperationReceipt(receipt(input, { purpose: "trusted-owner-bootstrap",
+    permissions: { metadata: "read", contents: "write", pull_requests: "write", checks: "read", workflows: "write" } }), input));
+  const altered = structuredClone(prepared);
+  altered.source_intent.subject.allowed_paths.push(".github/workflows/validate.yaml");
+  assert.throws(() => command(altered), { code: "platform_source_bootstrap_contract_invalid" });
+});
+
+test("an unissued preparation can be stopped locally without inventing provider revocation or approval", async t => {
+  const f = fixture(t), prepared = await f.prepare();
+  const stopped = await f.service.stopUnissuedSourcePreparation({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id });
+  assert.equal(stopped.authorization.state, "revocation-requested");
+  assert.equal(stopped.authorization.approval_ref, null); assert.equal(stopped.authorization.credential_receipt, null);
+  assert.equal(f.submits, 0);
+  await assert.rejects(f.auth(command(prepared)), { code: "platform_source_intent_revoked" });
+});
+
+test("approved or uncertain source issuance cannot be mislabeled as an unissued preparation stop", async t => {
+  const f = fixture(t), prepared = await f.prepare(); await f.auth(command(prepared));
+  await assert.rejects(f.service.stopUnissuedSourcePreparation({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id }), { code: "platform_source_revocation_required" });
+  assert.equal(f.authority.read({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id }).authorization.state, "approved");
+});
+
+test("stopping a pre-journal reference proves canonical absence without fabricating a receipt", async t => {
+  const f = fixture(t);
+  const result = await f.service.stopUnissuedSourcePreparation({ callerId: CALLER, operatorId: OPERATOR, intentId: "source-intent:interrupted-before-journal" });
+  assert.deepEqual(result, { state: "not-prepared", credential_issued: false });
+  assert.equal(f.submits, 0);
+  await assert.rejects(f.service.readSourcePreparation({ callerId: CALLER, intentId: "source-intent:interrupted-before-journal" }), { code: "platform_source_intent_not_found" });
 });

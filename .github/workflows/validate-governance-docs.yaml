@@ -23,7 +23,7 @@ jobs:
           node-version: "22"
 
       - name: Install governance validator dependencies
-        run: python3 -m pip install pyyaml
+        run: python3 -m pip install pyyaml 'jsonschema[format-nongpl]==4.23.0'
 
       - name: Install broker dependencies
         run: npm ci

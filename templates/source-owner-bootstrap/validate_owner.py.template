@@ -1,0 +1,61 @@
+"""Owner controls only by default; never infer app readiness from bootstrap."""
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+
+from jsonschema import Draft202012Validator
+
+EXPECTED_OWNER = "@@OWNER@@"
+PROFILE = "contracts/delivery-art-work-session/evidence-profile.json"
+
+
+def validate(root):
+    for name in ("README.md", "AGENTS.md", PROFILE, PROFILE.replace(".json", ".schema.json")):
+        target = root / name
+        if target.is_symlink() or not target.is_file():
+            raise ValueError("Required owner metadata is missing or not a regular file")
+    profile = json.loads((root / PROFILE).read_text())
+    schema = json.loads((root / PROFILE.replace(".json", ".schema.json")).read_text())
+    Draft202012Validator(schema).validate(profile)
+    if profile["owner_repo"] != EXPECTED_OWNER:
+        raise ValueError("Evidence profile belongs to another owner")
+    if not {"tests", "validations"}.issubset({command["kind"] for command in profile["commands"]}):
+        raise ValueError("Owner profile must include actual tests and validations")
+    return profile
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--application-if-present", action="store_true")
+    parser.add_argument("--base-commit")
+    parser.add_argument("--head-commit")
+    args = parser.parse_args()
+    root = args.repo_root.resolve()
+    profile = validate(root)
+    print("Owner controls valid; this is not app acceptance")
+    if not args.application_if_present:
+        return
+    metadata = json.loads((root / "contracts/delivery-art-work-session/source-bootstrap.json").read_text())
+    if not any((root / marker).is_file() for marker in metadata["application_markers"]):
+        print("Application absent: bootstrap-only validation; no application tests executed")
+        return
+    # Match the existing evidence runner's two supported placeholders. Never
+    # turn provider/event input into a shell expression or infer a passing base.
+    bindings = {"{{base_commit}}": args.base_commit, "{{head_commit}}": args.head_commit}
+    for token, value in bindings.items():
+        if any(token in arg for command in profile["commands"] for arg in command["args"]):
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value):
+                raise ValueError("Application evidence requires its exact base and head commits")
+    for command in profile["commands"]:
+        if command["kind"] in {"tests", "validations"}:
+            argv = list(command["args"])
+            for token, value in bindings.items():
+                argv = [arg.replace(token, value) if value is not None else arg for arg in argv]
+            subprocess.run([command["executable"], *argv], cwd=root, check=True, timeout=command["timeout_seconds"])
+
+
+if __name__ == "__main__":
+    main()

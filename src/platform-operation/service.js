@@ -301,6 +301,10 @@ export function createPlatformOperationService({
       const operatorId = assertCaller(operatorBindings, callerId);
       return requireSourceAuthority().read({ callerId, operatorId, intentId });
     },
+    async stopUnissuedSourcePreparation({ callerId, operatorId, intentId }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      return requireSourceAuthority().stopUnissued({ callerId, operatorId, intentId });
+    },
     async listSourcePreparations({ callerId, limit = 100 }) {
       const operatorId = assertCaller(operatorBindings, callerId);
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "platform_source_preparation_limit_invalid", "Source preparation limit must be between 1 and 200.");

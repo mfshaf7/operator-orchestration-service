@@ -1,6 +1,7 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
-import { assertSourceCredentialReceipt, assertSourceCredentialTimestamp, normalizeSourceCredentialInput } from "./source-credentials.js";
+import { assertSourceCredentialOperationReceipt as assertSourceCredentialReceipt, assertSourceCredentialTimestamp,
+  normalizeSourceCredentialOperationInput as normalizeSourceCredentialInput } from "./source-credentials.js";
 import { platformOperationIdFor } from "./contracts.js";
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/;
@@ -20,6 +21,11 @@ function selector(value) {
     closed(value, ["kind", "prototype_id", "source_request_id"]);
     if (!/^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.prototype_id ?? "") || !ID.test(value.source_request_id ?? "")) {
       fail("platform_source_preparation_invalid", "Actual Prototype and source request are required.", 400);
+    }
+  } else if (value?.kind === "repository-bootstrap") {
+    closed(value, ["kind", "owner_repo", "source_request_id"]);
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(value.owner_repo ?? "") || !ID.test(value.source_request_id ?? "")) {
+      fail("platform_source_preparation_invalid", "Actual proposed repository and bootstrap request are required.", 400);
     }
   } else {
     fail("platform_source_preparation_invalid", "Only explicit Delivery and Prototype source subjects are admitted.", 400);
@@ -96,9 +102,14 @@ export function createSourceCredentialAuthority({ clock = () => new Date(), prov
         return publicPreparation(existing, clock());
       }
       if (Date.parse(input.expires_at) <= clock().getTime()) fail("platform_source_intent_expired", "Source approval expiry must be in the future.");
-      const resolved = await resolver(input.subject.kind).prepare({ callerId, operatorId, subject: input.subject, decision: input.decision });
+      const resolved = await resolver(input.subject.kind).prepare({ callerId, operatorId, subject: input.subject, decision: input.decision,
+        ...(input.subject.kind === "repository-bootstrap" ? { intentId } : {}) });
+      const bootstrap = input.subject.kind === "repository-bootstrap";
+      if (resolved.subject?.kind !== input.subject.kind || (bootstrap && resolved.purpose !== "trusted-owner-bootstrap")) {
+        fail("platform_source_preparation_invalid", "Canonical source resolver did not retain its selected subject and separate purpose.");
+      }
       const sourceIntent = normalizeSourceCredentialInput({ session_id: resolved.session_id, source_intent: {
-        schema_version: 1, purpose: "ordinary-source", intent_id: intentId, caller_id: providerCallerId,
+        schema_version: 1, purpose: bootstrap ? "trusted-owner-bootstrap" : "ordinary-source", intent_id: intentId, caller_id: providerCallerId,
         operator_id: operatorId, subject: resolved.subject, source_start_digest: resolved.source_start_digest,
         repository: resolved.repository, repository_id: resolved.repository_id, installation_id: resolved.installation_id,
         landing_unit_id: resolved.landing_unit_id, branch: resolved.branch, fetched_base: resolved.fetched_base,
@@ -265,7 +276,7 @@ export function createSourceCredentialAuthority({ clock = () => new Date(), prov
       const previous = retained(previousIntentId, callerId, operatorId);
       const current = retained(intentId, callerId, operatorId);
       assertOpen(current);
-      const subjectKey = previous.source_intent.subject.kind === "delivery" ? "work_item_ref" : "prototype_id";
+      const subjectKey = { delivery: "work_item_ref", prototype: "prototype_id", "repository-bootstrap": "owner_repo" }[previous.source_intent.subject.kind];
       if (intentId === previousIntentId || !previous.revocation_requested || !current.approval || !current.credential_receipt ||
           current.credential_receipt.action === "agent-source.revoke" || current.source_intent.supersedes_intent_digest !== previous.source_intent_digest ||
           current.session_id !== sessionId || sessionId === null || (previous.session_id !== null && previous.session_id !== sessionId) ||
@@ -281,6 +292,22 @@ export function createSourceCredentialAuthority({ clock = () => new Date(), prov
         put({ ...current, revocation_requested: current.revocation_requested ?? {
           command_id: null, requested_at: clock().toISOString(),
         } });
+      });
+    },
+    async stopUnissued({ callerId, operatorId, intentId }) {
+      if (typeof intentId !== "string" || !ID.test(intentId)) fail("platform_source_intent_invalid", "Source intent identity is invalid.", 400);
+      return store.transactSourcePreparation(intentId, ({ current, put }) => {
+        // A bootstrap resolver retains its reference before this journal is
+        // written. Serialize with preparation so a lost pre-write operation
+        // cannot leave cancellation waiting forever for a nonexistent token.
+        // The bootstrap owner has already closed that request to new resolves.
+        if (!current) return { state: "not-prepared", credential_issued: false };
+        retained(intentId, callerId, operatorId);
+        // Serialize with issue approval. Never label an approved/unknown
+        // provider operation as unissued merely because no ack arrived.
+        if (current.approval || current.credential_receipt) fail("platform_source_revocation_required", "This source preparation may have provider effects; revoke its original exact intent.");
+        const stopped = { ...current, revocation_requested: current.revocation_requested ?? { command_id: null, requested_at: clock().toISOString() } };
+        put(stopped); return publicPreparation(stopped, clock());
       });
     },
     read({ callerId, operatorId, intentId }) { return publicPreparation(retained(intentId, callerId, operatorId), clock()); },

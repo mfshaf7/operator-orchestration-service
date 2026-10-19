@@ -11,6 +11,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { canonicalDigest } from "./canonical-json.js";
+import { bootstrapCredentialProjection } from "../repository-owner-bootstrap/credentials.js";
+import { assertBootstrapSourceSession, bootstrapSourceChangeSet } from "../repository-owner-bootstrap/session.js";
+import { assertProposedSourceOwnerAuthority } from "../repository-owner-bootstrap/scaffold.js";
 
 const ASKPASS_PATH = fileURLToPath(
   new URL("../../scripts/agent_source_git_askpass.mjs", import.meta.url),
@@ -285,15 +288,14 @@ function readCredential({ clock, contract, credentialRoot, session, credentialPu
   }
   const expectedFields = new Set(CREDENTIAL_FIELDS);
   if (credentialPurpose) {
-    expectedFields.add("purpose");
-    expectedFields.add("approval_ref");
+    for (const field of Object.keys(credentialPurpose)) expectedFields.add(field);
   }
   if (
     !credential ||
     Array.isArray(credential) ||
     new Set(Object.keys(credential)).size !== expectedFields.size ||
     [...expectedFields].some((field) => !Object.hasOwn(credential, field)) ||
-    (credentialPurpose && (credential.purpose !== credentialPurpose.purpose || credential.approval_ref !== credentialPurpose.approval_ref)) ||
+    (credentialPurpose && Object.entries(credentialPurpose).some(([field, expected]) => credential[field] !== expected)) ||
     typeof credential.token !== "string" ||
     !credential.token
   ) {
@@ -579,8 +581,17 @@ export function createAgentSourceIdentityAdapter({
   wait = delay,
   credentialPurpose = null,
   repositoryReader = null,
+  bootstrapBoundary = null,
 } = {}) {
-  if (credentialPurpose !== null && (
+  const bootstrap = bootstrapBoundary ? { ...bootstrapBoundary, session: structuredClone(bootstrapBoundary.session), plan: structuredClone(bootstrapBoundary.plan) } : null;
+  if (bootstrap) {
+    assertBootstrapSourceSession(bootstrap.session);
+    bootstrapSourceChangeSet(bootstrap.plan, bootstrap.session);
+    if (typeof bootstrap.readAuthority !== "function" || typeof bootstrap.assertCommittedSource !== "function" ||
+        canonicalDigest(credentialPurpose) !== canonicalDigest(bootstrapCredentialProjection(bootstrap.session.subject))) {
+      throw new Error("Bootstrap publication requires its exact trusted plan, current proposed reader and finite committed-source enforcement.");
+    }
+  } else if (credentialPurpose !== null && (
     credentialPurpose?.purpose !== "workflow-maintenance" ||
     typeof credentialPurpose.approval_ref !== "string" ||
     !/^[A-Za-z0-9][A-Za-z0-9:/._#-]{2,255}$/.test(credentialPurpose.approval_ref) ||
@@ -595,6 +606,24 @@ export function createAgentSourceIdentityAdapter({
 
   function currentContract(session = null) {
     const contract = loadContract(contractPath);
+    if (bootstrap && enabled) {
+      const selected = session ?? bootstrap.session;
+      if (canonicalDigest(assertBootstrapSourceSession(selected)) !== canonicalDigest(bootstrap.session)) fail("agent_source_bootstrap_session_changed", "Bootstrap identity cannot be borrowed by another source session.");
+      try {
+        const authority = assertProposedSourceOwnerAuthority(bootstrap.readAuthority({ ownerRepo: selected.owner_repo,
+          providerRepository: bootstrap.plan.provider_repository, intakeEntryRef: selected.subject.intake_entry_ref }));
+        const binding = authority.provider_repository;
+        const account = contract.identity.installation_accounts.find(item => item.login.toLowerCase() === binding.full_name.split("/")[0].toLowerCase());
+        if (!account || authority.owner_repo !== selected.owner_repo ||
+            canonicalDigest(authority.intake_entry_ref) !== canonicalDigest(selected.subject.intake_entry_ref) ||
+            canonicalDigest(binding) !== canonicalDigest(bootstrap.plan.provider_repository)) throw new Error();
+        return { ...contract, identity: { ...contract.identity, installation_id: account.installation_id },
+          resolved_repository: { owner_repo: selected.owner_repo,
+            repository: { full_name: binding.full_name, id: Number(binding.provider_repository_id) }, proposed_authority: authority } };
+      } catch {
+        fail("agent_source_bootstrap_authority_unavailable", "Current proposed source-only authority does not match the exact bootstrap plan.");
+      }
+    }
     if (!enabled || repositoryReader === null || session === null) return contract;
     if (typeof repositoryReader !== "function") fail("agent_source_repository_authority_unavailable", "Canonical source repository reader is unavailable.");
     try {
@@ -618,6 +647,9 @@ export function createAgentSourceIdentityAdapter({
     try {
       const contract = currentContract(session);
       const repository = assertSession(contract, session);
+      if (bootstrap) return { state: "bootstrap-only", owner_repo: session.owner_repo, repository: repository.full_name,
+        repository_id: repository.id, intake_entry_ref: structuredClone(session.subject.intake_entry_ref),
+        ordinary_source_eligible: false, model_writes_allowed: false, canonical_mutation: false, runtime_activation: false };
       return {
         authority: {
           inventory_digest: contract.authority.repository_inventory.digest,
@@ -769,6 +801,7 @@ export function createAgentSourceIdentityAdapter({
     assertSession(contract, session);
     configureAuthor(execFileSyncImpl, repoRoot, contract);
     const source = inspectSource(execFileSyncImpl, repoRoot, session, contract);
+    if (bootstrap) await bootstrap.assertCommittedSource({ repoRoot, session, headCommit: source.head });
     return lock(
       path.join(credentialRoot, contract.runtime.lock_filename),
       async () => {
@@ -787,6 +820,10 @@ export function createAgentSourceIdentityAdapter({
               fresh.identity.installation_id !== contract.identity.installation_id) {
             fail("agent_source_repository_authority_unavailable", "Canonical source admission changed before publication.");
           }
+        }
+        if (bootstrap) {
+          currentContract(session);
+          await bootstrap.assertCommittedSource({ repoRoot, session, headCommit: source.head });
         }
         const environment = {
           ...process.env,
@@ -855,7 +892,7 @@ export function createAgentSourceIdentityAdapter({
                 head: session.landing_unit.branch,
                 base: session.landing_unit.base_ref.replace(/^origin\//, ""),
                 body:
-                  `Implements ${session.subject?.kind === "prototype" ? session.subject.prototype_id : session.covered_work_item_ids.join(", ")} through Landing Unit ` +
+                  `Implements ${session.subject?.kind === "prototype" ? session.subject.prototype_id : session.subject?.kind === "repository-bootstrap" ? `trusted owner bootstrap for ${session.owner_repo}` : session.covered_work_item_ids.join(", ")} through Landing Unit ` +
                   `\`${session.landing_unit_id}\`. Human review and merge are required.`,
                 draft: false,
               },

@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { createRepositoryOwnerBootstrapRuntime } from "./repository-owner-bootstrap/runtime.js";
 import { HttpError } from "./errors.js";
 import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
@@ -279,6 +280,10 @@ export function createRuntime({
   const workspaceIntakeService = createWorkspaceIntakeRuntime({
     audit,
     config: config.workspaceIntake,
+    sourceOwnerReadinessReader: input => {
+      if (!repositoryOwnerBootstrapService) throw new HttpError(503, "source_owner_readiness_unavailable", "The actual source-owner checkout/readiness workflow is not commissioned.");
+      return repositoryOwnerBootstrapService.ownerReadiness(input);
+    },
     fetchImpl,
     custodySourceReader: repositoryCustodyService
       ? (requestId, options) => repositoryCustodyService.project(requestId, options)
@@ -313,11 +318,20 @@ export function createRuntime({
     recordsReader: prototypeLandingService ? () => prototypeLandingService.records() : null,
     platformOperations: () => platformOperationService, fetchImpl,
   });
+  const repositoryOwnerBootstrapService = createRepositoryOwnerBootstrapRuntime({
+    sourceConfig: config.deliveryArt.workSession, intakeConfig: config.workspaceIntake, env, fetchImpl,
+    custodySourceReader: repositoryCustodyService ? (requestId, options) => repositoryCustodyService.project(requestId, options) : null,
+    platformOperations: () => platformOperationService,
+  });
   const platformOperationService = createPlatformOperationRuntime({
     audit,
     config: config.platformOperation,
     fetchImpl,
     sourceCredentialResolvers: {
+      "repository-bootstrap": repositoryOwnerBootstrapService ? {
+        prepare: args => repositoryOwnerBootstrapService.prepareSourceCredential(args),
+        verify: args => repositoryOwnerBootstrapService.verifySourceCredential(args),
+      } : null,
       prototype: prototypeAuthoringService ? {
         prepare: args => prototypeAuthoringService.prepareSourceCredential(args),
         verify: args => prototypeAuthoringService.verifySourceCredential(args),
@@ -385,6 +399,7 @@ export function createRuntime({
     productPublicationService,
     platformOperationService,
     prototypeAuthoringService,
+    repositoryOwnerBootstrapService,
     prototypeLandingService,
     prototypeMaturityService,
     prototypeClosureService,
@@ -417,6 +432,7 @@ export function createRuntime({
     orchestrationService,
     platformOperationService,
     prototypeAuthoringService,
+    repositoryOwnerBootstrapService,
     productPublicationService,
     prototypeLandingService,
     prototypeMaturityService,

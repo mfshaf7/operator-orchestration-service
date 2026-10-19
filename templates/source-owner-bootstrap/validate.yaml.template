@@ -1,0 +1,25 @@
+name: validate
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python3 -m pip install 'jsonschema==4.23.0'
+      - run: make validate
+      - run: python3 scripts/validate_owner.py --application-if-present --base-commit "$OWNER_EVIDENCE_BASE" --head-commit "$OWNER_EVIDENCE_HEAD"
+        env:
+          OWNER_EVIDENCE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          OWNER_EVIDENCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}

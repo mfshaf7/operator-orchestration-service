@@ -1,9 +1,9 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import {
-  assertSourceCredentialReceipt,
+  assertSourceCredentialOperationReceipt as assertSourceCredentialReceipt,
   assertSourceCredentialTimestamp,
-  normalizeSourceCredentialInput,
+  normalizeSourceCredentialOperationInput as normalizeSourceCredentialInput,
   SOURCE_CREDENTIAL_ACTIONS,
 } from "./source-credentials.js";
 

@@ -1,5 +1,6 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
+import { assertBootstrapCredentialSubject } from "../repository-owner-bootstrap/credentials.js";
 
 export const SOURCE_CREDENTIAL_ACTIONS = Object.freeze([
   "agent-source.issue", "agent-source.renew", "agent-source.revoke",
@@ -68,12 +69,12 @@ export function assertSourceCredentialSubject(subject) {
   return structuredClone(subject);
 }
 
-export function normalizeSourceCredentialInput(input) {
+function normalizeInput(input, bootstrap = false) {
   if (Buffer.byteLength(JSON.stringify(input) ?? "", "utf8") > 32_768) invalid("Source credential input exceeds the existing 32768-byte command budget.");
   object(input, ["source_intent", "session_id"], "Source credential input");
   const value = input.source_intent;
   object(value, SOURCE_INTENT_FIELDS, "Source intent");
-  if (value.schema_version !== 1 || value.purpose !== "ordinary-source") invalid("Only schema-v1 ordinary-source intent is admitted; bootstrap is separate.");
+  if (value.schema_version !== 1 || value.purpose !== (bootstrap ? "trusted-owner-bootstrap" : "ordinary-source")) invalid("Only schema-v1 ordinary-source intent is admitted here; bootstrap is separate.");
   for (const field of ["intent_id", "caller_id", "operator_id", "human_reviewer_id"]) match(value[field], IDENTIFIER, field);
   match(value.source_start_digest, DIGEST, "source_start_digest");
   match(value.repository, REPOSITORY, "repository");
@@ -85,15 +86,21 @@ export function normalizeSourceCredentialInput(input) {
   match(value.fetched_base, COMMIT, "fetched_base");
   integer(value.repository_id, "repository_id");
   integer(value.installation_id, "installation_id");
-  assertSourceCredentialSubject(value.subject);
+  if (bootstrap) assertBootstrapCredentialSubject(value.subject);
+  else assertSourceCredentialSubject(value.subject);
   assertSourceCredentialTimestamp(value.expires_at, "expires_at");
   if (value.supersedes_intent_digest !== null) match(value.supersedes_intent_digest, DIGEST, "supersedes_intent_digest");
   if (input.session_id !== null) match(input.session_id, IDENTIFIER, "session_id");
   return structuredClone(input);
 }
 
-export function assertSourceCredentialReceipt(value, command = null) {
-  object(value, SOURCE_CREDENTIAL_RECEIPT_FIELDS, "Source credential receipt");
+// Ordinary source callers retain an explicit deny for proposed bootstrap.
+export const normalizeSourceCredentialInput = input => normalizeInput(input);
+export const normalizeSourceCredentialOperationInput = input => normalizeInput(input, input?.source_intent?.purpose === "trusted-owner-bootstrap");
+
+function assertReceipt(value, command = null, bootstrap = false) {
+  object(value, [...SOURCE_CREDENTIAL_RECEIPT_FIELDS, ...(bootstrap ? ["purpose"] : [])], "Source credential receipt");
+  if (bootstrap && value.purpose !== "trusted-owner-bootstrap") invalid("Bootstrap receipt purpose is invalid.");
   if (value.schema_version !== 1 || value.artifact_type !== "source-intent-credential-receipt" || value.secret_values_embedded !== false) {
     invalid("Source credential receipt type/version/safety is invalid.");
   }
@@ -105,25 +112,26 @@ export function assertSourceCredentialReceipt(value, command = null) {
   integer(value.app_id, "app_id");
   match(value.definition_digest, DIGEST, "definition_digest");
   match(value.source_intent_digest, DIGEST, "source_intent_digest");
-  const receiptInput = normalizeSourceCredentialInput({
+  const receiptInput = normalizeInput({
     session_id: value.session_id,
     source_intent: {
-      schema_version: 1, purpose: "ordinary-source", intent_id: value.source_intent_id,
+      schema_version: 1, purpose: bootstrap ? "trusted-owner-bootstrap" : "ordinary-source", intent_id: value.source_intent_id,
       caller_id: value.caller_id, operator_id: value.operator_id, subject: value.subject,
       source_start_digest: value.source_start_digest, repository: value.repository, repository_id: value.repository_id,
       installation_id: value.installation_id, landing_unit_id: value.landing_unit_id, branch: value.branch,
       fetched_base: value.fetched_base, human_reviewer_id: value.human_reviewer_id,
       expires_at: value.authorization_expires_at, supersedes_intent_digest: value.supersedes_intent_digest,
     },
-  });
+  }, bootstrap);
   if (canonicalDigest(receiptInput.source_intent) !== value.source_intent_digest) invalid("Source credential receipt intent digest is invalid.");
   if (value.action === "agent-source.revoke") {
     if (value.token_expires_at !== null) invalid("Revoked credential receipt must not claim a live projection.");
   } else {
     assertSourceCredentialTimestamp(value.token_expires_at, "token_expires_at");
   }
-  object(value.permissions, ["metadata", "contents", "pull_requests", "checks"], "Credential permissions");
-  if (canonicalDigest(value.permissions) !== canonicalDigest({ metadata: "read", contents: "write", pull_requests: "write", checks: "read" })) {
+  const workflow = bootstrap && value.subject.workflow_write;
+  object(value.permissions, ["metadata", "contents", "pull_requests", "checks", ...(workflow ? ["workflows"] : [])], "Credential permissions");
+  if (canonicalDigest(value.permissions) !== canonicalDigest({ metadata: "read", contents: "write", pull_requests: "write", checks: "read", ...(workflow ? { workflows: "write" } : {}) })) {
     invalid("Source credential permissions do not match the existing ordinary-source boundary.");
   }
   assertSourceCredentialTimestamp(value.recorded_at, "recorded_at");
@@ -131,10 +139,13 @@ export function assertSourceCredentialReceipt(value, command = null) {
   const { receipt_digest: recordedDigest, ...body } = value;
   if (recordedDigest !== canonicalDigest(body)) invalid("Source credential receipt digest is invalid.");
   if (command) {
-    const expected = normalizeSourceCredentialInput(command.input);
+    const expected = normalizeInput(command.input, bootstrap);
     if (value.command_id !== command.command_id || value.action !== command.action || canonicalDigest(expected) !== canonicalDigest(receiptInput)) {
       throw new HttpError(409, "platform_source_credential_binding_mismatch", "Source credential receipt does not match the exact approved OOS command.");
     }
   }
   return structuredClone(value);
 }
+
+export const assertSourceCredentialReceipt = (value, command = null) => assertReceipt(value, command);
+export const assertSourceCredentialOperationReceipt = (value, command = null) => assertReceipt(value, command, value?.purpose === "trusted-owner-bootstrap");

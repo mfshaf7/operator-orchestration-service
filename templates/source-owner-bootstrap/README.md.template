@@ -1,0 +1,13 @@
+# @@OWNER@@
+
+Owner purpose, as recorded in the reviewed Workspace Intake:
+
+```json
+@@PURPOSE_JSON@@
+```
+
+This is an owner-source scaffold, not a working application or release.
+`make validate` checks owner controls only. The reviewed owner evidence profile
+declares the applicable project checks; missing application sources are not
+passing application tests. Source review, admission, real application evidence
+and any runtime qualification remain separate steps in the Console workflow.

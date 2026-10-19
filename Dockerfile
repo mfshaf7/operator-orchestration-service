@@ -52,6 +52,7 @@ COPY --chown=node:node contracts/workflow-activity ./contracts/workflow-activity
 COPY --chown=node:node scripts/workspace_intake_source.py ./scripts/workspace_intake_source.py
 COPY --chown=node:node scripts/workspace_inventory_source.py ./scripts/workspace_inventory_source.py
 COPY --chown=node:node src ./src
+COPY --chown=node:node templates/source-owner-bootstrap ./templates/source-owner-bootstrap
 
 USER node
 

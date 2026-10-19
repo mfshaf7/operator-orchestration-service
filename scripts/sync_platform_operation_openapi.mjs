@@ -143,7 +143,7 @@ const schemas = {
     additionalProperties: false,
     required: ["schema_version", "command_id", "idempotency_key", "correlation_id", "causation_id", "actor_ref", "subject", "capability_id", "action", "input", "requested_at", "intent_digest", "approval"],
     allOf: [{ if: { properties: { action: { enum: SOURCE_CREDENTIAL_ACTIONS } }, required: ["action"] },
-      then: { properties: { input: ref("SourceCredentialInput"), subject: { properties: { kind: { const: "dev-integration-profile" } } } } } }],
+      then: { properties: { input: ref("SourceCredentialOperationInput"), subject: { properties: { kind: { const: "dev-integration-profile" } } } } } }],
     properties: {
       schema_version: { const: 1 },
       command_id: identifier,
