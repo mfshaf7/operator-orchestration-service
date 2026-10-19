@@ -7,8 +7,9 @@ repository, deploy runtime, or promote product maturity.
 ## Availability
 
 The OOS workflow is pinned to the merged Workspace Governance authority and
-WGCF readiness manifests from ART #1206 and #1207. Its durable orchestration
-source is ready for the Console adapter, but normal operation is not active.
+WGCF readiness manifests from ART #1206 and #1207. The manifest's
+`ready-for-console-adapter` state is source readiness, not standalone routine
+operation authority. Availability depends on the accepted runtime composition.
 The Console adapter (#1209), Security decision (#1216), Platform composition
 (#1217), and composed operating proof (#1210) remain mandatory and ordered.
 Do not interpret source readiness, a prepared review, or a WGCF receipt as
@@ -111,6 +112,22 @@ findings, history, the review, and terminal evidence without advancing work.
 The API contract and examples are in [OpenAPI](../api/openapi.json).
 
 ## Recovery
+
+For repository-custody candidates, the Console reopens retained requests via
+`GET /v1/workspace-intake/requests?target_kind=repo&target_name=<owner>&custody_request_id=<exact-id>`.
+This read verifies the matching successful custody authority and returns only
+that caller/target/custody's original candidates and progress locators, newest
+first. It never creates a journal, attests a candidate, submits a classification
+or advances a workflow. The original request's existing GET/continue/cancel
+actions remain the recovery path; do not manufacture a new classification to
+replace a lost acknowledgement.
+
+Pages contain at most 25 records and at most 512 KiB of projected record data.
+Use the returned opaque `next_cursor` for the same selector. The durable-history
+revision and pending-request count cover the entire selected set, not just the
+visible page. A pending original request therefore blocks the Console's new
+classification preparation even when that request is on a later page. An
+unavailable/corrupt read remains unavailable, not an empty-history fallback.
 
 | Situation | Operator action |
 | --- | --- |

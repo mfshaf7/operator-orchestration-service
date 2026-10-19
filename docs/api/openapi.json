@@ -10163,6 +10163,106 @@
       }
     },
     "/v1/workspace-intake/requests": {
+      "get": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "listCustodyWorkspaceIntakeRequests",
+        "summary": "Read retained caller-owned requests for one exact repository custody target",
+        "parameters": [
+          {
+            "name": "target_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "const": "repo"
+            }
+          },
+          {
+            "name": "target_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            }
+          },
+          {
+            "name": "custody_request_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only caller/custody-scoped page; reopening does not resubmit classification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeRequestPage"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "target": {
+                    "kind": "repo",
+                    "name": "example-repository",
+                    "record_id": "repo:example-repository"
+                  },
+                  "custody_request_id": "repository-custody-request:example",
+                  "revision": 0,
+                  "pending_request_count": 0,
+                  "updated_at": null,
+                  "records": [],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          },
+          "401": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          },
+          "403": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          },
+          "404": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          },
+          "502": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          },
+          "503": {
+            "description": "Invalid selector, denied caller/custody, or unavailable retained state."
+          }
+        }
+      },
       "post": {
         "tags": [
           "Workspace Intake"
@@ -73527,6 +73627,133 @@
               },
               "rationale": {
                 "$ref": "#/components/schemas/PrototypeDeliveryPreparation/$defs/text"
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceIntakeRequestPage": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "target",
+          "custody_request_id",
+          "revision",
+          "pending_request_count",
+          "updated_at",
+          "next_cursor",
+          "records"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-intake"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "repo"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "custody_request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_request_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": [
+                "request_id",
+                "requested_at",
+                "updated_at",
+                "revision",
+                "status",
+                "classification",
+                "candidate"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "requested_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "status": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeResult/properties/status"
+                },
+                "classification": {
+                  "enum": [
+                    "proposed",
+                    "admitted",
+                    "out-of-scope"
+                  ]
+                },
+                "candidate": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
+                }
               }
             }
           }

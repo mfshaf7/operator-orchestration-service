@@ -92,6 +92,8 @@ export function createWorkspaceIntakeStore({ root }) {
   }
   return {
     transact,
+    // A missing journal is an empty read, not a reason to create state.
+    async list() { return structuredClone(Object.values((await load()).records)); },
     async get(requestId) { await initialize(); return structuredClone((await load()).records[key(requestId)] ?? null); },
     async getCandidate(sourceRef) { await initialize(); return structuredClone((await load()).candidates[key(sourceRef)] ?? null); },
   };

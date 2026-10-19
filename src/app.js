@@ -3625,7 +3625,24 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
     return;
   }
   assertDeliveryMutationAuthority(caller);
-  if (action === "prepare") {
+  if (action === "list") {
+    const parameters = new URL(request.url, "http://localhost").searchParams;
+    const keys = [...parameters.keys()];
+    if (new Set(keys).size !== keys.length || keys.some(key => !["target_kind", "target_name", "custody_request_id", "cursor"].includes(key))) {
+      throw new HttpError(400, "workspace_intake_list_invalid", "Request list parameters are invalid.");
+    }
+    const result = await workspaceIntakeService.list({ callerId: caller.id, input: {
+      target: { kind: parameters.get("target_kind"), name: parameters.get("target_name") },
+      custody_request_id: parameters.get("custody_request_id"),
+      ...(parameters.has("cursor") ? { cursor: parameters.get("cursor") } : {}),
+    } });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `oos://workspace-intake/requests?${parameters.toString()}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: result.updated_at ?? new Date().toISOString(),
+      eventSequence: result.revision,
+    }));
+  } else if (action === "prepare") {
     sendJson(response, 200, await workspaceIntakeService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
   } else if (action === "read") {
     const result = await workspaceIntakeService.project(requestId, { callerId: caller.id });
@@ -5919,6 +5936,10 @@ export function createApp({
       }
       if (request.method === "POST" && url.pathname === "/v1/workspace-intake/requests") {
         await handleWorkspaceIntake({ action: "submit", config, workspaceIntakeService, request, response });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/workspace-intake/requests") {
+        await handleWorkspaceIntake({ action: "list", config, workspaceIntakeService, request, response });
         return;
       }
       if (request.method === "GET" && /^\/v1\/workspace-intake\/requests\/[^/]+$/.test(url.pathname)) {

@@ -20,7 +20,7 @@ export function custodyRequestFromIntakeSource(source) {
   }
 }
 
-export function repositoryCustodyIntakeCandidate({ result, target, requestedRecord }) {
+export function repositoryCustodyIntakeAuthority({ result, target }) {
   assertRepositoryCustodyWorkflowResult(result);
   assertRepositoryCustodyRequest(result.request);
   if (result.receipt) assertRepositoryCustodyReceipt(result.receipt);
@@ -37,11 +37,19 @@ export function repositoryCustodyIntakeCandidate({ result, target, requestedReco
     throw intakeError("custody_source_unavailable", "A successful canonical custody receipt and active provider readback are required.");
   }
   if (target.kind !== "repo" || target.record_id !== result.request.requested_custody.workspace_owner_ref ||
-      target.record_id !== `repo:${target.name}` || requestedRecord?.kind !== "repo") {
+      target.record_id !== `repo:${target.name}`) {
     throw intakeError("custody_source_mismatch", "Intake target must match the custody request's selected workspace owner.");
   }
   const binding = { ...readback.repository_identity,
     full_name: `${readback.canonical_owner}/${readback.canonical_name}` };
+  return { binding, digest: result.receipt.integrity.content_digest,
+    evidence_refs: [result.receipt_ref.uri, result.provider_readback_ref.uri] };
+}
+
+export function repositoryCustodyIntakeCandidate({ result, target, requestedRecord }) {
+  const authority = repositoryCustodyIntakeAuthority({ result, target });
+  if (requestedRecord?.kind !== "repo") throw intakeError("custody_source_mismatch", "Custody candidate requires repository metadata.");
+  const binding = authority.binding;
   if (requestedRecord.provider_repository !== undefined &&
       intakeDigest(requestedRecord.provider_repository) !== intakeDigest(binding)) {
     throw intakeError("custody_source_mismatch", "Provider coordinates are derived from custody, not selected by the caller.");
@@ -50,9 +58,9 @@ export function repositoryCustodyIntakeCandidate({ result, target, requestedReco
   const selector = intakeDigest({ target, requested_record: record }).slice(7);
   return bindWorkspaceIntakeSourceCandidate({
     schema_version: 1, artifact_type: "workspace-intake-source-candidate",
-    source: { class: "repository-custody", digest: result.receipt.integrity.content_digest,
+    source: { class: "repository-custody", digest: authority.digest,
       ref: `${PREFIX}${encodeURIComponent(result.request.request_id)}/intake/${selector}` },
     target, requested_record: record,
-    evidence_refs: [result.receipt_ref.uri, result.provider_readback_ref.uri],
+    evidence_refs: authority.evidence_refs,
   });
 }

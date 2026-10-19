@@ -1,10 +1,11 @@
 import { assertIntake, bindIntake, createIntakeEvaluation, intakeDigest, intakeError, intakeReference } from "./contracts.js";
 import { persistWorkflowFailure } from "../workflow-progress.js";
-import { custodyRequestFromIntakeSource, repositoryCustodyIntakeCandidate } from "../repository-custody/intake-source.js";
+import { custodyRequestFromIntakeSource, repositoryCustodyIntakeCandidate, repositoryCustodyIntakeAuthority } from "../repository-custody/intake-source.js";
 import {
   assertWorkspaceIntakeRequestCandidate,
   assertWorkspaceIntakeSourceCaller,
   assertWorkspaceIntakeSourceCandidate,
+  bindWorkspaceIntakeSourceCandidate,
 } from "./source-candidate.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "requires-action"]);
@@ -66,6 +67,54 @@ function assertCaller(record, callerId) {
 }
 
 export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, clock = () => new Date(), audit }) {
+  async function list({ callerId, input }) {
+    if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "custody_request_id", "cursor"].includes(key)) ||
+        typeof input.custody_request_id !== "string" || input.custody_request_id.length > 256 || !input.custody_request_id.trim() ||
+        (input.cursor !== undefined && !/^[0-9a-f]{64}$/.test(input.cursor))) {
+      throw intakeError("list_invalid", "Request listing requires one exact repository custody selector and an optional opaque cursor.", 400);
+    }
+    const selected = preparationTarget({ target: input.target });
+    if (selected.kind !== "repo") throw intakeError("list_invalid", "Custody request listing requires a repository target.", 400);
+    if (typeof custodySourceReader !== "function") throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
+    const target = { ...selected, record_id: `repo:${selected.name}` };
+    const custody = repositoryCustodyIntakeAuthority({ result: await custodySourceReader(input.custody_request_id, { callerId }), target });
+    const retained = (await store.list()).filter(record => record.caller_id === callerId &&
+      record.request.target.kind === target.kind && record.request.target.name === target.name &&
+      custodyRequestFromIntakeSource(record.request.source) === input.custody_request_id);
+    retained.sort((left, right) => Date.parse(right.request.requested_at) - Date.parse(left.request.requested_at) ||
+      right.request.request_id.localeCompare(left.request.request_id));
+    const cursorFor = record => intakeDigest({ caller_id: callerId, target,
+      custody_request_id: input.custody_request_id, request_id: record.request.request_id }).slice(7);
+    let offset = 0;
+    if (input.cursor !== undefined) {
+      offset = retained.findIndex(record => cursorFor(record) === input.cursor) + 1;
+      if (!offset) throw intakeError("cursor_invalid", "Request cursor does not belong to this caller and custody target.", 400);
+    }
+    const page = retained.slice(offset, offset + 25);
+    const records = page.map(record => {
+      assertCaller(record, callerId);
+      if (record.request.source.digest !== custody.digest || !record.source_attestation) {
+        throw intakeError("storage_invalid", "Retained request does not bind its canonical custody receipt.", 503);
+      }
+      const candidate = bindWorkspaceIntakeSourceCandidate({ schema_version: 1, artifact_type: "workspace-intake-source-candidate",
+        source: record.request.source, target, requested_record: record.request.requested_record,
+        evidence_refs: record.source_attestation.evidence_refs });
+      if (candidate.candidate_digest !== record.source_attestation.candidate_digest) throw intakeError("storage_invalid", "Retained candidate binding is invalid.", 503);
+      return { request_id: record.request.request_id, requested_at: record.request.requested_at,
+        updated_at: record.history.at(-1).at, status: record.status, revision: record.history.length,
+        classification: record.request.requested_classification, candidate };
+    });
+    // Stay below the existing Console response budget, including its source
+    // envelope. Count and byte bounds both apply; never skip an omitted row.
+    while (records.length && Buffer.byteLength(JSON.stringify(records), "utf8") > 524288) records.pop();
+    if (page.length && !records.length) throw intakeError("list_record_large", "A retained request exceeds the bounded list projection.", 503);
+    return { schema_version: 1, workflow_id: "workspace-intake", target,
+      revision: retained.reduce((total, record) => total + record.history.length, 0),
+      pending_request_count: retained.filter(record => !TERMINAL.has(record.status)).length,
+      updated_at: retained.map(record => record.history.at(-1).at).sort().at(-1) ?? null,
+      custody_request_id: input.custody_request_id, records,
+      next_cursor: offset + records.length < retained.length ? cursorFor(page[records.length - 1]) : null };
+  }
   async function custodyCandidate(callerId, requestId, target, requestedRecord) {
     if (typeof custodySourceReader !== "function") {
       throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
@@ -266,6 +315,7 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
   }
 
   return {
+    list,
     attest,
     prepare,
     submit,
