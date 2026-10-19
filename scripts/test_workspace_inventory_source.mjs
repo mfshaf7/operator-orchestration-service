@@ -21,6 +21,7 @@ import { createWorkspaceInventoryLifecycleService } from "../src/workspace-inven
 import { createCanonicalSourceRepositoryReader } from "../src/delivery-art/source-repository-admission.js";
 import { createAgentSourceIdentityAdapter } from "../src/delivery-art/agent-source-identity.js";
 import { createWorkspaceInventoryStore } from "../src/workspace-inventory/store.js";
+import { inventorySourceFiles } from "../src/workspace-inventory/source-files.js";
 import {
   at,
   caller,
@@ -146,8 +147,8 @@ def record(kind, name):
     value["last_mutation"]["decision_ref"] = value["decision"]["ref"]
     return value
 validation = {
-    "posture": "owner-reviewed",
-    "wgcf_graph_role": "workspace-inventory-candidate",
+    "posture": "covered-by-owner-repo",
+    "wgcf_graph_role": "product-readiness-aggregate",
     "catalog_refs": [],
     "notes": "Temporary conformance candidate.",
 }
@@ -162,9 +163,9 @@ data["repos"]["inventory-proof-repo"] = {
         "provider_repository_id": "123456789",
         "full_name": "mfshaf7-workspace/inventory-proof-repo",
     },
-    "requires_security_bindings": True,
+    "requires_security_bindings": False,
     "security_owner": "security-architecture",
-    "validation_behavior": validation,
+    "validation_behavior": {**validation, "posture": "covered-by-owner-repo", "wgcf_graph_role": "product-runtime-source"},
     "notes": "Temporary repository candidate.",
 }
 data["products"]["inventory-proof-product"] = {
@@ -227,14 +228,27 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
     execution_ref: "execution:inventory-test",
   };
   let review = null;
+  async function applyPreparedFiles(preparation) {
+    const files = inventorySourceFiles(preparation);
+    for (const [name, text] of Object.entries(files)) await writeFile(path.join(repo, name), text);
+    git("add", ...Object.keys(files));
+  }
+  function verifyPreparedFiles(preparation, value) {
+    for (const [name, text] of Object.entries(inventorySourceFiles(preparation))) {
+      assert.equal(execFileSync("git", ["-C", repo, "show", `${value.head_commit}:${name}`], { encoding: "utf8" }), text);
+      assert.match(git("ls-tree", value.head_commit, "--", name), /^100644 blob /);
+    }
+  }
+  function mergedFiles(value, preparation) {
+    return Object.fromEntries(Object.keys(inventorySourceFiles(preparation)).map((name) =>
+      [name, execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:${name}`], { encoding: "utf8" })]));
+  }
   const provider = {
     async mainRevision() { return git("rev-parse", "main"); },
     async prepareReview(preparation) {
       if (review) return structuredClone(review);
       git("checkout", "-b", preparation.branch, preparation.base_commit);
-      await writeFile(path.join(repo, "contracts/intake-register.yaml"), preparation.intake_text);
-      await writeFile(path.join(repo, preparation.inventory_path), preparation.inventory_text);
-      git("add", "contracts/intake-register.yaml", preparation.inventory_path);
+      await applyPreparedFiles(preparation);
       git("commit", "-m", "Reviewed inventory promotion test change");
       review = {
         repository: "workspace-governance",
@@ -254,23 +268,21 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
     async review() { return structuredClone(review); },
     async findReview() { return structuredClone(review); },
     async verifyPreparedReview(preparation, value) {
-      assert.equal(git("show", `${value.head_commit}:contracts/intake-register.yaml`), preparation.intake_text.trim());
-      assert.equal(git("show", `${value.head_commit}:${preparation.inventory_path}`), preparation.inventory_text.trim());
+      verifyPreparedFiles(preparation, value);
     },
     async closeReview() { review.state = "closed"; },
-    async readMergedFiles(value, inventoryPath) {
+    async readMergedFiles(value, inventoryPath, preparation) {
       git("merge-base", "--is-ancestor", value.merge_commit, "main");
       return {
         intakeText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:contracts/intake-register.yaml`], { encoding: "utf8" }),
         inventoryText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:${inventoryPath}`], { encoding: "utf8" }),
+        sourceFiles: mergedFiles(value, preparation),
       };
     },
     async prepareLifecycleReview(preparation) {
       if (review?.branch === preparation.branch) return structuredClone(review);
       git("checkout", "-b", preparation.branch, preparation.base_commit);
-      await writeFile(path.join(repo, preparation.inventory_path), preparation.inventory_text);
-      await writeFile(path.join(repo, preparation.history_path), preparation.history_text);
-      git("add", preparation.inventory_path, preparation.history_path);
+      await applyPreparedFiles(preparation);
       git("commit", "-m", "Reviewed inventory lifecycle test change");
       review = {
         repository: "workspace-governance",
@@ -288,14 +300,14 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
       return structuredClone(review);
     },
     async verifyPreparedLifecycleReview(preparation, value) {
-      assert.equal(git("show", `${value.head_commit}:${preparation.inventory_path}`), preparation.inventory_text.trim());
-      assert.equal(git("show", `${value.head_commit}:${preparation.history_path}`), preparation.history_text.trim());
+      verifyPreparedFiles(preparation, value);
     },
-    async readMergedLifecycleFiles(value, inventoryPath) {
+    async readMergedLifecycleFiles(value, inventoryPath, preparation) {
       git("merge-base", "--is-ancestor", value.merge_commit, "main");
       return {
         historyText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:contracts/workspace-inventory-history.yaml`], { encoding: "utf8" }),
         inventoryText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:${inventoryPath}`], { encoding: "utf8" }),
+        sourceFiles: mergedFiles(value, preparation),
       };
     },
   };
@@ -367,7 +379,10 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assertInventory("mutation", stored.preparation.mutation);
   assertInventory("readback", stored.preparation.readback);
   assertInventory("receipt", stored.preparation.receipt);
-  pass("owner command prepares exactly two review-branch files without canonical success");
+  assert.deepEqual(git("diff", "--name-only", base, review.head_commit).split("\n").sort(),
+    Object.keys(inventorySourceFiles(stored.preparation)).sort());
+  assert.ok(stored.preparation.source_files["generated/system-map.yaml"]);
+  pass("owner command binds its canonical pair and complete changed companion set without canonical success");
 
   const expectedHead = review.head_commit;
   review.head_commit = "a".repeat(40);
@@ -464,9 +479,10 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assert.equal(lifecycleWaiting.canonical_mutation, false);
   assert.deepEqual(
     git("diff", "--name-only", lifecycleBase, review.head_commit).split("\n").sort(),
-    ["contracts/components.yaml", "contracts/workspace-inventory-history.yaml"],
+    ["contracts/components.yaml", "contracts/workspace-inventory-history.yaml",
+      "generated/resolved-owner-map.json", "generated/system-map.yaml"],
   );
-  pass("lifecycle preparation mutates one active inventory record and append-only history on one review head");
+  pass("lifecycle preparation binds one record, append-only history and exact generated metadata on one review head");
 
   const lifecycleHead = review.head_commit;
   review.head_commit = "f".repeat(40);
@@ -593,6 +609,8 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   const promoted = await repoService.advance({ callerId: caller, requestId: repoRequest.request_id });
   assert.equal(promoted.status, "succeeded");
   assert.equal(promoted.readback.intake_entry_present, false);
+  execFileSync("python3", [path.join(repo, "scripts/validate_contracts.py"), "--repo-root", repo], { stdio: "pipe", encoding: "utf8" });
+  pass("actual OOS-prepared and merged source-owner registration passes the full WG contract model");
   await writeFile(checkpointPath, JSON.stringify(checkpoint()));
   const binding = reader({ ownerRepo: "inventory-proof-repo", legacyRepository: null });
   assert.deepEqual(binding.repository, { full_name: "mfshaf7-workspace/inventory-proof-repo", id: 123456789 });

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { inventoryError } from "./contracts.js";
+import { inventorySourceFiles, inventorySourceDigest } from "./source-files.js";
 
 const SHA = /^[0-9a-f]{40}$/;
 const BRANCH = /^(inventory|inventory-lifecycle)\/[0-9a-f]{64}$/;
@@ -145,6 +146,20 @@ export function createWorkspaceInventoryGitHubClient({
     return Buffer.from(content.content, "base64").toString("utf8");
   }
 
+  async function checkFileModes(treeSha, files) {
+    if (!SHA.test(treeSha)) throw inventoryError("source_tree_invalid", "Inventory source tree identity is invalid.");
+    const tree = await request(`${prefix}/git/trees/${treeSha}?recursive=1`);
+    if (tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > 8192) {
+      throw inventoryError("source_tree_invalid", "Inventory source tree proof is incomplete.");
+    }
+    for (const name of Object.keys(files)) {
+      const entries = tree.tree.filter((entry) => entry.path === name);
+      if (entries.length !== 1 || entries[0].mode !== "100644" || entries[0].type !== "blob" || !SHA.test(entries[0].sha)) {
+        throw inventoryError("source_tree_invalid", "Inventory registration requires regular, non-executable source files.");
+      }
+    }
+  }
+
   async function checkPreparedHead(head, preparation) {
     if (!INVENTORY_PATHS.has(preparation.inventory_path)) throw inventoryError("preparation_invalid", "Invalid active inventory path.");
     const lifecycle = typeof preparation.history_text === "string";
@@ -157,18 +172,16 @@ export function createWorkspaceInventoryGitHubClient({
     }
     const comparison = await request(`${prefix}/compare/${preparation.base_commit}...${head}`);
     const files = comparison.files?.map((entry) => entry.filename).sort();
-    const companionPath = lifecycle ? INVENTORY_HISTORY : INTAKE_REGISTER;
-    const expected = [companionPath, preparation.inventory_path].sort();
+    const sourceFiles = inventorySourceFiles(preparation);
+    const expected = Object.keys(sourceFiles).sort();
     if (comparison.total_commits !== 1 || JSON.stringify(files) !== JSON.stringify(expected)) {
       throw inventoryError("branch_conflict", "Inventory branch includes unexpected changes.");
     }
-    const [companionText, inventoryText] = await Promise.all([
-      readContent(companionPath, head),
-      readContent(preparation.inventory_path, head),
-    ]);
-    const expectedCompanion = lifecycle ? preparation.history_text : preparation.intake_text;
-    if (companionText !== expectedCompanion || inventoryText !== preparation.inventory_text) {
-      throw inventoryError("branch_conflict", "Existing inventory branch content differs from the approved preparation.");
+    await checkFileModes(commit.tree?.sha, sourceFiles);
+    for (const [name, text] of Object.entries(sourceFiles)) {
+      if (await readContent(name, head) !== text) {
+        throw inventoryError("branch_conflict", "Existing inventory branch content differs from the complete approved preparation.");
+      }
     }
   }
 
@@ -180,6 +193,10 @@ export function createWorkspaceInventoryGitHubClient({
         (lifecycle && preparation.history_path !== INVENTORY_HISTORY)) {
       throw inventoryError("preparation_invalid", "Invalid inventory source preparation.");
     }
+    const sourceFiles = inventorySourceFiles(preparation);
+    if (preparation.source_files && preparation.content_digest !== inventorySourceDigest(preparation)) {
+      throw inventoryError("preparation_invalid", "Inventory source preparation does not bind its complete file set.");
+    }
     await assertIdentity();
     const existing = await findReview(preparation.branch);
     if (existing) {
@@ -190,20 +207,17 @@ export function createWorkspaceInventoryGitHubClient({
     if (!branch) {
       if (await mainRevision() !== preparation.base_commit) throw inventoryError("authority_stale", "Authority changed before publication; submit a new request.");
       const base = await request(`${prefix}/git/commits/${preparation.base_commit}`);
-      const companionPath = lifecycle ? INVENTORY_HISTORY : INTAKE_REGISTER;
-      const companionText = lifecycle ? preparation.history_text : preparation.intake_text;
-      const [companionBlob, inventoryBlob] = await Promise.all([
-        request(`${prefix}/git/blobs`, { method: "POST", body: { content: companionText, encoding: "utf-8" } }),
-        request(`${prefix}/git/blobs`, { method: "POST", body: { content: preparation.inventory_text, encoding: "utf-8" } }),
-      ]);
+      const entries = [];
+      for (const [name, text] of Object.entries(sourceFiles)) {
+        const blob = await request(`${prefix}/git/blobs`, { method: "POST", body: { content: text, encoding: "utf-8" } });
+        if (!SHA.test(blob.sha)) throw inventoryError("source_tree_invalid", "Provider did not return an exact source blob.");
+        entries.push({ path: name, mode: "100644", type: "blob", sha: blob.sha });
+      }
       const tree = await request(`${prefix}/git/trees`, {
         method: "POST",
         body: {
           base_tree: base.tree.sha,
-          tree: [
-            { path: companionPath, mode: "100644", type: "blob", sha: companionBlob.sha },
-            { path: preparation.inventory_path, mode: "100644", type: "blob", sha: inventoryBlob.sha },
-          ],
+          tree: entries,
         },
       });
       const verb = lifecycle ? `${action[0].toUpperCase()}${action.slice(1)}` : "Promote";
@@ -237,7 +251,7 @@ export function createWorkspaceInventoryGitHubClient({
     return review(created.number);
   }
 
-  async function readMergedSourceFiles(value, inventoryPath, companionPath) {
+  async function readMergedSourceFiles(value, inventoryPath, companionPath, preparation) {
     await assertIdentity();
     if (!value.merged || !value.human_reviewed || !SHA.test(value.merge_commit) || !INVENTORY_PATHS.has(inventoryPath)) {
       throw inventoryError("merge_unproven", "A reviewed canonical inventory merge is required.");
@@ -250,6 +264,18 @@ export function createWorkspaceInventoryGitHubClient({
     }
     const comparison = await request(`${prefix}/compare/${value.merge_commit}...main`);
     if (!["ahead", "identical"].includes(comparison.status)) throw inventoryError("merge_not_canonical", "Merge is not in canonical main history.");
+    if (preparation?.source_files) {
+      await checkPreparedHead(value.head_commit, preparation);
+      const expected = inventorySourceFiles(preparation);
+      const mergedCommit = await request(`${prefix}/git/commits/${value.merge_commit}`);
+      await checkFileModes(mergedCommit.tree?.sha, expected);
+      const sourceFiles = {};
+      for (const [name, text] of Object.entries(expected)) {
+        sourceFiles[name] = await readContent(name, value.merge_commit);
+        if (sourceFiles[name] !== text) throw inventoryError("readback_invalid", "Merged source differs from its complete reviewed registration.");
+      }
+      return { companionText: sourceFiles[companionPath], inventoryText: sourceFiles[inventoryPath], sourceFiles };
+    }
     const [companionText, inventoryText] = await Promise.all([
       readContent(companionPath, value.merge_commit),
       readContent(inventoryPath, value.merge_commit),
@@ -270,13 +296,13 @@ export function createWorkspaceInventoryGitHubClient({
     async prepareLifecycleReview(preparation, { requestId, binding, target, action }) {
       return prepareSourceReview(preparation, { requestId, binding, target, action });
     },
-    async readMergedFiles(value, inventoryPath) {
-      const result = await readMergedSourceFiles(value, inventoryPath, INTAKE_REGISTER);
-      return { intakeText: result.companionText, inventoryText: result.inventoryText };
+    async readMergedFiles(value, inventoryPath, preparation) {
+      const result = await readMergedSourceFiles(value, inventoryPath, INTAKE_REGISTER, preparation);
+      return { intakeText: result.companionText, inventoryText: result.inventoryText, ...(result.sourceFiles ? { sourceFiles: result.sourceFiles } : {}) };
     },
-    async readMergedLifecycleFiles(value, inventoryPath) {
-      const result = await readMergedSourceFiles(value, inventoryPath, INVENTORY_HISTORY);
-      return { historyText: result.companionText, inventoryText: result.inventoryText };
+    async readMergedLifecycleFiles(value, inventoryPath, preparation) {
+      const result = await readMergedSourceFiles(value, inventoryPath, INVENTORY_HISTORY, preparation);
+      return { historyText: result.companionText, inventoryText: result.inventoryText, ...(result.sourceFiles ? { sourceFiles: result.sourceFiles } : {}) };
     },
     async verifyPreparedLifecycleReview(preparation, value) {
       await checkPreparedHead(value.head_commit, preparation);

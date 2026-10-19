@@ -48,6 +48,33 @@ from workspace_inventory import (  # noqa: E402
 )
 
 
+def registration_snapshot():
+    """Finite owner companion family; capture before the native transaction."""
+    from contracts_lib import generated_output_specs, load_contracts
+    from workspace_repo_registration import GUIDANCE_PATHS
+    contracts = load_contracts(args.source_root)
+    paths = {*GUIDANCE_PATHS, "contracts/context-behavior.yaml", "contracts/raw-context-retirement.yaml"}
+    paths.update(spec["path"].relative_to(args.source_root).as_posix()
+                 for spec in generated_output_specs(args.source_root, contracts).values())
+    target = value["request"]["target"]
+    if target["kind"] == "repo":
+        paths.add(f"contracts/repo-rules/{target['name']}.yaml")
+    return {relative: (args.source_root / relative).read_text() if (args.source_root / relative).is_file() else None
+            for relative in paths}
+
+
+def registration_files(before, pair):
+    files = dict(pair)
+    for relative, original in before.items():
+        path = args.source_root / relative
+        current = path.read_text() if path.is_file() else None
+        if current != original:
+            if current is None or path.is_symlink():
+                raise WorkspaceInventoryError("Registration cannot remove a companion or publish a symbolic link")
+            files[relative] = current
+    return files
+
+
 def unique_text(values):
     return list(dict.fromkeys(value for value in values if isinstance(value, str) and value))
 
@@ -85,8 +112,8 @@ def active_value(kind, entry):
             **({"provider_repository": copy.deepcopy(entry["provider_repository"])}
                if "provider_repository" in entry else {}),
             "requires_security_bindings": bindings,
-            "owns": [],
-            "must_not_own": [],
+            "owns": [entry["notes"]],
+            "must_not_own": ["Workspace governance, shared orchestration, Platform release, Security acceptance, authenticated identity or privileged runtime authority"],
             "allowed_authoritative_refs": [],
             "validation_behavior": validation,
         }
@@ -300,6 +327,7 @@ elif args.command == "lifecycle-state":
         else None
     )
 elif args.command == "lifecycle-prepare":
+    companions_before = registration_snapshot()
     result = apply_lifecycle(
         repo_root=args.source_root,
         request=value["request"],
@@ -313,7 +341,10 @@ elif args.command == "lifecycle-prepare":
     result["inventory_text"] = (args.source_root / INVENTORY_FILES[kind]).read_text()
     result["history_path"] = HISTORY_FILE
     result["history_text"] = (args.source_root / HISTORY_FILE).read_text()
+    result["source_files"] = registration_files(companions_before, {
+        result["inventory_path"]: result["inventory_text"], HISTORY_FILE: result["history_text"]})
 elif args.command == "prepare":
+    companions_before = registration_snapshot()
     result = apply_promotion(
         repo_root=args.source_root,
         request=value["request"],
@@ -328,6 +359,8 @@ elif args.command == "prepare":
     ).read_text()
     result["inventory_path"] = INVENTORY_FILES[kind]
     result["inventory_text"] = (args.source_root / INVENTORY_FILES[kind]).read_text()
+    result["source_files"] = registration_files(companions_before, {
+        "contracts/intake-register.yaml": result["intake_text"], result["inventory_path"]: result["inventory_text"]})
 elif args.command == "readback":
     target = value["readback"]["target"]
     collection = COLLECTIONS[target["kind"]]

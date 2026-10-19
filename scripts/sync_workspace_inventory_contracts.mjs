@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const target = path.join(root, "contracts/workspace-inventory");
-const governanceCommit = "a255bfc9c82bc896f278dcd158704c760704c0eb";
-const wgcfCommit = "a4973a9a44ba0b7388a008a4139279f5fd0a8c42";
+const governanceCommit = "1773d30b05042b821aa90105e8412cb615d0d914";
+const wgcfCommit = "c992e5be71fd64200ab27a70827f2489bc25b670";
 const sources = [
   {
     repo: "workspace-governance",
