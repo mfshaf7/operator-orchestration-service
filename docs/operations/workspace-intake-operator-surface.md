@@ -28,6 +28,55 @@ that end-user identity delegation has already been implemented.
 
 ## Procedure
 
+### Preparing From An Existing Custody Result
+
+The source-qualified owner-admission extension consumes the exact WG/WGCF
+bundles on its review branch. Those producer pins are engineering proof, not
+merged runtime authority: replace them with actual canonical merged commits
+in the coordinated acceptance window before activation. Do not bypass bundle
+digests, caller bindings or the existing exact activation chain.
+
+For a repository already provisioned or linked through Repository Custody,
+the existing preparation API additionally accepts:
+
+```json
+{
+  "target": { "kind": "repo", "name": "selected-owner" },
+  "repository_custody": {
+    "request_id": "<actual retained custody request id>",
+    "requested_record": {
+      "kind": "repo",
+      "repo_class": "<operator-selected class>",
+      "requires_security_bindings": false,
+      "security_owner": null,
+      "notes": "<operator-reviewed classification context>"
+    }
+  }
+}
+```
+
+OOS reads its retained, integrity-checked successful custody result and derives
+the provider/full-name/numeric-ID binding. The target must match the custody
+request's selected workspace owner. A caller cannot substitute provider
+coordinates or turn a failed custody result into provenance. The returned
+optional `source_candidate` binds the exact custody receipt, provider readback,
+target and requested record. Preparation remains read-only: it creates neither
+an attestation nor an acknowledged Intake request. The existing body bound is
+4 KiB; no token, provider response or arbitrary file is accepted.
+
+Use that exact source/target/requested-record in the existing explicit Intake
+request and decision. At submit, OOS rereads custody, independently reconstructs
+and compares the source candidate, then retains its own immutable attestation
+inside the existing Intake store before acknowledgement. This is an explicit
+write, not a hidden preparation effect. The classification still needs the
+normal WGCF decision, human source review/merge and canonical readback.
+Custody alone is not proposed/admitted status, active Inventory or permission
+to issue ordinary source credentials. Direct, Prototype and Delivery source
+adapters retain their existing semantics; the Console cannot claim to be the
+authenticated OOS source owner at the generic attestation endpoint.
+
+### Classification And Reviewed Source
+
 1. POST one target kind and name to `/v1/workspace-intake/preparations`. Retain
    the returned exact authority revision, canonical target, register digest,
    record version, and record digest. A response is preparation only, not

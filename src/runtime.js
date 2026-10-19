@@ -271,10 +271,18 @@ export function createRuntime({
     deliveryService,
     openProjectClient,
   });
+  const repositoryCustodyService = createRepositoryCustodyRuntime({
+    audit,
+    config: config.repositoryCustody,
+    fetchImpl,
+  });
   const workspaceIntakeService = createWorkspaceIntakeRuntime({
     audit,
     config: config.workspaceIntake,
     fetchImpl,
+    custodySourceReader: repositoryCustodyService
+      ? (requestId, options) => repositoryCustodyService.project(requestId, options)
+      : null,
   });
   const lifecycleTransitionService = createLifecycleTransitionRuntime({
     audit,
@@ -346,11 +354,6 @@ export function createRuntime({
         available: config.orchestration.runtimeEnabled,
       }),
     ],
-  });
-  const repositoryCustodyService = createRepositoryCustodyRuntime({
-    audit,
-    config: config.repositoryCustody,
-    fetchImpl,
   });
   const repositoryLifecycleService = createRepositoryLifecycleRuntime({
     audit,

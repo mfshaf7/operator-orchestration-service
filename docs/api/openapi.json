@@ -49624,6 +49624,28 @@
           "request_digest"
         ],
         "$defs": {
+          "providerRepository": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id",
+              "full_name"
+            ],
+            "properties": {
+              "provider": {
+                "const": "github"
+              },
+              "provider_repository_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "full_name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": false
+          },
           "text": {
             "type": "string",
             "minLength": 1
@@ -49678,6 +49700,9 @@
                   "string",
                   "null"
                 ]
+              },
+              "provider_repository": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/providerRepository"
               },
               "requires_security_bindings": {
                 "type": [
@@ -49955,6 +49980,28 @@
           "decision_digest"
         ],
         "$defs": {
+          "providerRepository": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id",
+              "full_name"
+            ],
+            "properties": {
+              "provider": {
+                "const": "github"
+              },
+              "provider_repository_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "full_name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": false
+          },
           "text": {
             "type": "string",
             "minLength": 1
@@ -50203,6 +50250,9 @@
                   "string",
                   "null"
                 ]
+              },
+              "provider_repository": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/providerRepository"
               },
               "requires_security_bindings": {
                 "type": [
@@ -50907,6 +50957,28 @@
           "readback_digest"
         ],
         "$defs": {
+          "providerRepository": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id",
+              "full_name"
+            ],
+            "properties": {
+              "provider": {
+                "const": "github"
+              },
+              "provider_repository_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "full_name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": false
+          },
           "text": {
             "type": "string",
             "minLength": 1
@@ -51200,6 +51272,9 @@
               "validation_behavior": {},
               "ai_suggestion": {},
               "repo_class": {},
+              "provider_repository": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/providerRepository"
+              },
               "requires_security_bindings": {},
               "security_owner": {},
               "notes": {}
@@ -52371,34 +52446,82 @@
         }
       },
       "WorkspaceIntakePreparationCommand": {
-        "type": "object",
-        "required": [
-          "target"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "target": {
+        "oneOf": [
+          {
             "type": "object",
             "required": [
-              "kind",
-              "name"
+              "target"
             ],
             "additionalProperties": false,
             "properties": {
-              "kind": {
-                "enum": [
-                  "repo",
-                  "product",
-                  "component"
-                ]
+              "target": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "repo",
+                      "product",
+                      "component"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "target",
+              "repository_custody"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "repo"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  }
+                }
               },
-              "name": {
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              "repository_custody": {
+                "type": "object",
+                "required": [
+                  "request_id",
+                  "requested_record"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "request_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "requested_record": {
+                    "$ref": "#/components/schemas/WorkspaceIntakeRequest/properties/requested_record"
+                  }
+                }
               }
             }
           }
-        }
+        ]
       },
       "WorkspaceIntakePreparation": {
         "type": "object",
@@ -52519,6 +52642,9 @@
           },
           "canonical_mutation": {
             "const": false
+          },
+          "source_candidate": {
+            "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
           }
         }
       },

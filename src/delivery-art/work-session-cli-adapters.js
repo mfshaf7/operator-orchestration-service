@@ -15,6 +15,7 @@ import path from "node:path";
 
 import { canonicalDigest } from "./canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+import { createCanonicalSourceRepositoryReader } from "./source-repository-admission.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
   DeliveryArtEvidenceAcquisitionError,
@@ -1533,6 +1534,12 @@ export function createConfiguredAgentSourceIdentityAdapter({
     enabled,
     credentialPurpose,
     credentialRoot: resolveAgentSourceCredentialRoot(env),
+    ...(enabled && env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED === "true"
+      ? { repositoryReader: createCanonicalSourceRepositoryReader({
+        authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
+        python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3",
+      }) }
+      : {}),
     ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
       ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }
       : {}),

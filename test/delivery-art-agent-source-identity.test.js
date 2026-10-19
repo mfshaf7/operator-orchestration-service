@@ -112,6 +112,8 @@ function provider({
   existingPullRequestHead = null,
   historicalPullRequestHead = null,
   principal = CONTRACT.identity.provider_principal,
+  repositoryFullName = "mfshaf7/operator-orchestration-service",
+  repositoryId = 1213863054,
 } = {}) {
   const calls = [];
   let head = null;
@@ -119,7 +121,7 @@ function provider({
     number: 42,
     state: "open",
     draft: false,
-    html_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/42",
+    html_url: `https://github.com/${repositoryFullName}/pull/42`,
     user: { login: principal },
     base: { ref: "main" },
     head: { sha: pullRequestHead },
@@ -135,8 +137,8 @@ function provider({
     assert.equal(options.headers.authorization, `Bearer ${TOKEN}`);
     if (parsed.pathname === "/installation/repositories") {
       const repositories = [{
-        id: 1213863054,
-        full_name: "mfshaf7/operator-orchestration-service",
+        id: repositoryId,
+        full_name: repositoryFullName,
       }];
       if (broadScope) repositories.push({ id: 1, full_name: "mfshaf7/other" });
       return response({ total_count: repositories.length, repositories });
@@ -252,7 +254,7 @@ test("Agent source admits exactly the active Platform-selected owner repositorie
   );
   assert.equal(
     CONTRACT.authority.platform_definition.digest,
-    "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01",
+    "sha256:5d5012280d8abb5494b5604d6540e195027562966fe0ec204d593925d34b0a85",
   );
   const fixture = setup();
   const adapter = testAdapter(fixture, provider());
@@ -281,6 +283,64 @@ test("Agent source admits exactly the active Platform-selected owner repositorie
   } finally {
     fixture.cleanup();
   }
+});
+
+test("canonical new-owner binding selects the organization installation for actual Git publication without enlarging static recovery scope", async t => {
+  const fixture = setup(); t.after(fixture.cleanup);
+  fixture.session.owner_repo = "synthetic-owner";
+  const repository = { full_name: "mfshaf7-workspace/synthetic-owner", id: 123456789 };
+  fixture.writeCredential({ ...fixture.credential, repository: repository.full_name,
+    repository_id: repository.id, installation_id: 172173010 });
+  const providerFixture = provider({ repositoryFullName: repository.full_name, repositoryId: repository.id });
+  let pushed = false;
+  const reader = ({ ownerRepo, legacyRepository }) => {
+    assert.equal(ownerRepo, "synthetic-owner"); assert.equal(legacyRepository, null);
+    return { owner_repo: ownerRepo, repository, inventory_revision: "b".repeat(40), inventory_digest: "sha256:" + "c".repeat(64) };
+  };
+  const adapter = testAdapter(fixture, providerFixture, { repositoryReader: reader, onPush({ args }) {
+    pushed = true; assert.equal(args[2], `https://github.com/${repository.full_name}.git`);
+  } });
+  const binding = adapter.sourceIntentBinding({ session: fixture.session });
+  assert.equal(binding.installation_id, 172173010);
+  assert.equal(binding.repository_id, repository.id);
+  assert.equal((await adapter.inspectRepositoryAdmission({ session: fixture.session })).state, "ready");
+  assert.equal((await adapter.preflight({ session: fixture.session })).provider.state, "ready");
+  await adapter.prepare({ repoRoot: fixture.repoRoot, session: fixture.session });
+  writeFileSync(path.join(fixture.repoRoot, "source.txt"), "Synthetic reviewed source\n");
+  git(fixture.repoRoot, "add", "source.txt");
+  git(fixture.repoRoot, "commit", "-m", "Synthetic organization source");
+  providerFixture.setHead(git(fixture.repoRoot, "rev-parse", "HEAD"));
+  const result = await adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session });
+  assert.equal(result.state, "published"); assert.equal(result.installation_id, 172173010);
+  assert.equal(pushed, true); assert.equal(JSON.stringify(result).includes(TOKEN), false);
+  const ordinaryRecovery = testAdapter(fixture, providerFixture);
+  assert.throws(() => ordinaryRecovery.sourceIntentBinding({ session: fixture.session }), { code: "agent_source_repository_not_admitted" });
+});
+
+test("canonical source authority loss before remote push denies publication instead of using retained credentials", async t => {
+  const fixture = setup(); t.after(fixture.cleanup);
+  let current = true;
+  let pushes = 0;
+  const providerFixture = provider();
+  const actualFetch = providerFixture.fetchImpl;
+  providerFixture.fetchImpl = async (...args) => {
+    const result = await actualFetch(...args);
+    current = false;
+    return result;
+  };
+  const adapter = testAdapter(fixture, providerFixture, { onPush: () => { pushes += 1; },
+    repositoryReader({ ownerRepo, legacyRepository }) {
+      if (!current) throw new Error("synthetic private dependency failure must not leak");
+      return { owner_repo: ownerRepo, repository: legacyRepository, inventory_revision: "b".repeat(40), inventory_digest: "sha256:" + "c".repeat(64) };
+    } });
+  await adapter.prepare({ repoRoot: fixture.repoRoot, session: fixture.session });
+  writeFileSync(path.join(fixture.repoRoot, "source.txt"), "Synthetic reviewed source\n");
+  git(fixture.repoRoot, "add", "source.txt");
+  git(fixture.repoRoot, "commit", "-m", "Synthetic source awaiting authority");
+  providerFixture.setHead(git(fixture.repoRoot, "rev-parse", "HEAD"));
+  await assert.rejects(adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session }),
+    error => error.code === "agent_source_repository_authority_unavailable" && !error.message.includes("private dependency"));
+  assert.equal(pushes, 0);
 });
 
 test("Agent source repository admission fails closed on every projection mismatch", async (t) => {

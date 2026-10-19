@@ -1,5 +1,6 @@
 import { assertIntake, bindIntake, createIntakeEvaluation, intakeDigest, intakeError, intakeReference } from "./contracts.js";
 import { persistWorkflowFailure } from "../workflow-progress.js";
+import { custodyRequestFromIntakeSource, repositoryCustodyIntakeCandidate } from "../repository-custody/intake-source.js";
 import {
   assertWorkspaceIntakeRequestCandidate,
   assertWorkspaceIntakeSourceCaller,
@@ -17,7 +18,8 @@ const TARGET_NAME = /^[a-z0-9][a-z0-9._-]*$/;
 const TARGET_KINDS = new Set(["repo", "product", "component"]);
 
 function preparationTarget(input) {
-  if (!input || Array.isArray(input) || Object.keys(input).join(",") !== "target") {
+  if (!input || Array.isArray(input) || !Object.hasOwn(input, "target") ||
+      Object.keys(input).some((key) => !["target", "repository_custody"].includes(key))) {
     throw intakeError("preparation_invalid", "Preparation requires exactly one target.", 400);
   }
   const target = input.target;
@@ -63,7 +65,15 @@ function assertCaller(record, callerId) {
   }
 }
 
-export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, clock = () => new Date(), audit }) {
+export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, clock = () => new Date(), audit }) {
+  async function custodyCandidate(callerId, requestId, target, requestedRecord) {
+    if (typeof custodySourceReader !== "function") {
+      throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
+    }
+    return repositoryCustodyIntakeCandidate({
+      result: await custodySourceReader(requestId, { callerId }), target, requestedRecord,
+    });
+  }
   async function transition(transaction, record, status, details = null) {
     transaction.assertHeld();
     record.status = status;
@@ -84,6 +94,15 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
       }
       let attestation = null;
       if (evaluation.request.source.class !== "direct") {
+        const custodyId = custodyRequestFromIntakeSource(evaluation.request.source);
+        if (custodyId !== null) {
+          const candidate = await custodyCandidate(callerId, custodyId, evaluation.request.target, evaluation.request.requested_record);
+          assertWorkspaceIntakeRequestCandidate(evaluation.request, candidate);
+          // This explicit mutating submit retains the attestation. Read-only
+          // preparation never writes a candidate or workflow record.
+          await tx.putCandidate({ candidate, attested_at: clock().toISOString(),
+            attested_by: "operator-orchestration-service" });
+        }
         attestation = tx.getCandidate(evaluation.request.source.ref);
         if (!attestation) {
           throw intakeError("source_candidate_not_found", "Source-owner attestation was not found.", 404);
@@ -130,6 +149,16 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
 
   async function prepare({ callerId, input }) {
     const target = preparationTarget(input);
+    let candidate = null;
+    if (input.repository_custody !== undefined) {
+      const custody = input.repository_custody;
+      if (!custody || Array.isArray(custody) || Object.keys(custody).sort().join(",") !== "request_id,requested_record" ||
+          typeof custody.request_id !== "string" || !custody.request_id.trim()) {
+        throw intakeError("preparation_invalid", "Repository custody preparation requires exactly request_id and requested_record.", 400);
+      }
+      candidate = await custodyCandidate(callerId, custody.request_id,
+        { ...target, record_id: `${target.kind}:${target.name}` }, custody.requested_record);
+    }
     const state = assertPreparationState(await sourceClient.state(target), target);
     const result = {
       schema_version: 1,
@@ -143,6 +172,7 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
         branch: "main",
       },
       canonical_mutation: false,
+      ...(candidate ? { source_candidate: candidate } : {}),
     };
     audit?.emit({
       actor: callerId,

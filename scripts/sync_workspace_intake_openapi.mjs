@@ -12,6 +12,7 @@ const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 const text = { type: "string", minLength: 1 };
 const nullable = (shape) => ({ oneOf: [shape, { type: "null" }] });
 const object = (properties) => ({ type: "object", required: Object.keys(properties), additionalProperties: false, properties });
+const withOptional = (schema, properties) => ({ ...schema, properties: { ...schema.properties, ...properties } });
 const digest = { type: "string", pattern: "^sha256:[0-9a-f]{64}$" };
 const commit = { type: "string", pattern: "^[0-9a-f]{40}$" };
 const date = { type: "string", format: "date-time" };
@@ -44,8 +45,13 @@ const schemas = {
     source: object({ class: { enum: ["repository-custody", "prototype", "delivery"] }, ref: text, digest }),
     attested_at: date, attested_by: text,
   }),
-  WorkspaceIntakePreparationCommand: object({ target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName }) }),
-  WorkspaceIntakePreparation: object({
+  WorkspaceIntakePreparationCommand: { oneOf: [
+    object({ target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName }) }),
+    object({ target: object({ kind: { const: "repo" }, name: targetName }),
+      repository_custody: object({ request_id: text,
+        requested_record: { $ref: "#/components/schemas/WorkspaceIntakeRequest/properties/requested_record" } }) }),
+  ] },
+  WorkspaceIntakePreparation: withOptional(object({
     schema_version: { const: 1 }, workflow_id: { const: "workspace-intake" }, authority_revision: commit,
     target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName, record_id: { type: "string", pattern: "^(repo|product|component):[a-z0-9][a-z0-9._-]*$" } }),
     expected_state: { oneOf: [
@@ -54,7 +60,7 @@ const schemas = {
     ] },
     canonical_authority: object({ repo: { const: "workspace-governance" }, path: { const: "contracts/intake-register.yaml" }, branch: { const: "main" } }),
     canonical_mutation: { const: false },
-  }),
+  }), { source_candidate: ref("WorkspaceIntakeSourceCandidate") }),
   WorkspaceIntakeCommand: object({ request: ref("WorkspaceIntakeRequest"), decision: ref("WorkspaceIntakeDecision"), authority_revision: commit, session_ref: text, execution_ref: text }),
   WorkspaceIntakeReview: object({ repository: { const: "workspace-governance" }, number: { type: "integer", minimum: 1 }, url: { type: "string", format: "uri" },
     state: { enum: ["open", "closed"] }, branch: text, base_branch: { const: "main" }, base_commit: commit, head_commit: commit,

@@ -23,11 +23,15 @@ const CONTRACT_PATH = fileURLToPath(
   ),
 );
 const EXPECTED_PLATFORM_PROJECTION = Object.freeze({
-  digest: "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01",
+  digest: "sha256:5d5012280d8abb5494b5604d6540e195027562966fe0ec204d593925d34b0a85",
   path: "security/agent-source-identity.yaml",
   repo: "platform-engineering",
-  revision: "58c66e6320484fba3eb9f46de5461863b835f71d",
+  revision: "9619121e237adf666963825cde5cab1396c406d7",
 });
+const EXPECTED_INSTALLATION_ACCOUNTS = Object.freeze([
+  { login: "mfshaf7", id: 244414185, type: "User", installation_id: 160815600 },
+  { login: "mfshaf7-workspace", id: 322605984, type: "Organization", installation_id: 172173010 },
+]);
 const EXPECTED_REPOSITORY_INVENTORY = Object.freeze({
   digest: "sha256:94aeb6a58b5bcea176b629546df1577971c94c69516c7b8be544e676cc9fc342",
   lifecycle: "active",
@@ -119,6 +123,9 @@ function assertPrivatePath(target, kind, expectedMode) {
 
 function validateContract(contract) {
   const errors = [];
+  if (canonicalDigest(contract?.identity?.installation_accounts ?? null) !== canonicalDigest(EXPECTED_INSTALLATION_ACCOUNTS)) {
+    errors.push("installation_accounts");
+  }
   if (contract?.schema_version !== 1) errors.push("schema_version");
   if (contract?.owner_repo !== "operator-orchestration-service") errors.push("owner_repo");
   if (contract?.activation_work_item_id !== "work-item-1137") errors.push("activation_work_item_id");
@@ -230,6 +237,10 @@ function sessionDirectory(root, landingUnitId) {
 }
 
 function expectedRepository(contract, ownerRepo) {
+  if (contract.resolved_repository) {
+    if (contract.resolved_repository.owner_repo !== ownerRepo) fail("agent_source_repository_not_admitted", "Canonical source binding belongs to another owner.");
+    return contract.resolved_repository.repository;
+  }
   const fullName = `mfshaf7/${ownerRepo}`;
   const match = contract.repositories.filter((entry) => entry.full_name === fullName);
   if (match.length !== 1) {
@@ -567,6 +578,7 @@ export function createAgentSourceIdentityAdapter({
   lock = withProjectionLock,
   wait = delay,
   credentialPurpose = null,
+  repositoryReader = null,
 } = {}) {
   if (credentialPurpose !== null && (
     credentialPurpose?.purpose !== "workflow-maintenance" ||
@@ -581,13 +593,30 @@ export function createAgentSourceIdentityAdapter({
     throw new Error("fetchImpl is required when Agent source identity is enabled.");
   }
 
-  function currentContract() {
-    return loadContract(contractPath);
+  function currentContract(session = null) {
+    const contract = loadContract(contractPath);
+    if (!enabled || repositoryReader === null || session === null) return contract;
+    if (typeof repositoryReader !== "function") fail("agent_source_repository_authority_unavailable", "Canonical source repository reader is unavailable.");
+    try {
+      const legacy = contract.repositories.find((item) => item.full_name === `mfshaf7/${session.owner_repo}`) ?? null;
+      const resolved = repositoryReader({ ownerRepo: session.owner_repo, legacyRepository: legacy });
+      const repository = resolved?.repository;
+      const account = contract.identity.installation_accounts.find((item) =>
+        item.login.toLowerCase() === String(repository?.full_name ?? "").split("/")[0].toLowerCase());
+      if (resolved?.owner_repo !== session.owner_repo || !account || !Number.isSafeInteger(repository.id) || repository.id <= 0 ||
+          !COMMIT_PATTERN.test(resolved.inventory_revision ?? "") || !/^sha256:[0-9a-f]{64}$/.test(resolved.inventory_digest ?? "")) throw new Error();
+      return { ...contract, identity: { ...contract.identity, installation_id: account.installation_id },
+        resolved_repository: resolved, authority: { ...contract.authority,
+          repository_inventory: { ...contract.authority.repository_inventory,
+            revision: resolved.inventory_revision, digest: resolved.inventory_digest } } };
+    } catch {
+      fail("agent_source_repository_authority_unavailable", "Current canonical source admission is unavailable or does not bind an approved installation.");
+    }
   }
 
   async function inspectRepositoryAdmission({ session }) {
     try {
-      const contract = currentContract();
+      const contract = currentContract(session);
       const repository = assertSession(contract, session);
       return {
         authority: {
@@ -614,7 +643,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function inspect({ repoRoot = null, session }) {
-    const contract = currentContract();
+    const contract = currentContract(session);
     if (!enabled) return { state: "inactive" };
     assertSession(contract, session);
     const projection = safeIdentityProjection(contract, session);
@@ -649,7 +678,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   function reviewPolicy({ session }) {
-    const contract = currentContract();
+    const contract = currentContract(session);
     assertSession(contract, session);
     const repository = expectedRepository(contract, session.owner_repo);
     return {
@@ -660,7 +689,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function preflight({ session }) {
-    const contract = currentContract();
+    const contract = currentContract(session);
     if (!enabled) {
       return {
         identity: { state: "inactive" },
@@ -718,7 +747,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function prepare({ repoRoot, session }) {
-    const contract = currentContract();
+    const contract = currentContract(session);
     if (!enabled) return { state: "inactive" };
     assertSession(contract, session);
     configureAuthor(execFileSyncImpl, repoRoot, contract);
@@ -733,7 +762,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function publish({ repoRoot, session }) {
-    const contract = currentContract();
+    const contract = currentContract(session);
     if (!enabled) {
       fail("agent_source_identity_inactive", "Agent source identity is not active.");
     }
@@ -751,6 +780,14 @@ export function createAgentSourceIdentityAdapter({
           credentialPurpose,
         });
         await assertProviderScope(fetchImpl, credential, repository);
+        if (repositoryReader !== null) {
+          const fresh = currentContract(session);
+          const binding = expectedRepository(fresh, session.owner_repo);
+          if (binding.id !== repository.id || binding.full_name !== repository.full_name ||
+              fresh.identity.installation_id !== contract.identity.installation_id) {
+            fail("agent_source_repository_authority_unavailable", "Canonical source admission changed before publication.");
+          }
+        }
         const environment = {
           ...process.env,
           GIT_ASKPASS: ASKPASS_PATH,
@@ -903,7 +940,7 @@ export function createAgentSourceIdentityAdapter({
   return {
     assertHumanMergeAuthority,
     sourceIntentBinding({ session }) {
-      const contract = currentContract();
+      const contract = currentContract(session);
       if (!enabled) fail("agent_source_identity_inactive", "Agent source identity is not active.");
       assertSession(contract, session);
       // Metadata-only: obtaining an approved prospective intent must not depend

@@ -3,6 +3,7 @@
 
 import argparse
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -19,6 +20,7 @@ parser.add_argument(
         "lifecycle-state",
         "lifecycle-prepare",
         "lifecycle-readback",
+        "source-admission",
     ),
 )
 parser.add_argument("--source-root", type=Path, required=True)
@@ -28,7 +30,7 @@ args = parser.parse_args()
 sys.path.insert(0, str(args.source_root / "scripts"))
 
 from contracts_lib import load_yaml  # noqa: E402
-from workspace_intake import canonical_digest  # noqa: E402
+from workspace_intake import canonical_digest, provider_repository_conflicts  # noqa: E402
 from workspace_inventory import (  # noqa: E402
     COLLECTIONS,
     INVENTORY_FILES,
@@ -80,6 +82,8 @@ def active_value(kind, entry):
             "posture": "active",
             "lifecycle": "active",
             "repo_class": repo_class,
+            **({"provider_repository": copy.deepcopy(entry["provider_repository"])}
+               if "provider_repository" in entry else {}),
             "requires_security_bindings": bindings,
             "owns": [],
             "must_not_own": [],
@@ -239,8 +243,40 @@ def registry_projection(repo_root):
     }
 
 
-value = json.loads(args.input.read_text())
-if args.command == "state":
+if str(args.input) == "-" and args.command != "source-admission":
+    parser.error("standard input is reserved for the read-only source-admission query")
+if str(args.output) == "-" and args.command != "source-admission":
+    parser.error("standard output is reserved for the read-only source-admission query")
+value = json.loads(sys.stdin.read(65537) if str(args.input) == "-" else args.input.read_text())
+if args.command == "source-admission":
+    if set(value) != {"owner_repo", "legacy_provider"}:
+        raise WorkspaceInventoryError("source admission requires an exact owner selector and trusted legacy fallback")
+    name = value["owner_repo"]
+    current_state(args.source_root, "repo", name)
+    inventory = _load_inventory(args.source_root, "repo")
+    _validate_contract(args.source_root, "repos.yaml", inventory)
+    intake = load_yaml(args.source_root / "contracts" / "intake-register.yaml")
+    _validate_contract(args.source_root, "intake-register.yaml", intake)
+    entry = inventory["repos"].get(name)
+    if not entry or entry.get("posture") != "active" or entry.get("lifecycle") != "active":
+        raise WorkspaceInventoryError("ordinary source requires a current active repository")
+    binding = entry.get("provider_repository") or value["legacy_provider"]
+    if not binding or provider_repository_conflicts(args.source_root, binding, name):
+        raise WorkspaceInventoryError("ordinary source requires a unique canonical provider binding")
+    if value["legacy_provider"] is not None:
+        if binding.get("provider_repository_id") != value["legacy_provider"].get("provider_repository_id"):
+            raise WorkspaceInventoryError("legacy physical repository identity cannot be replaced")
+    else:
+        lineage = entry["record"]["lineage"]
+        if (name in intake.get("repos", {}) or entry["record"]["id"] != f"repo:{name}"
+            or lineage.get("source") != "workspace-intake" or lineage.get("source_ref") != f"repo:{name}"
+            or type(lineage.get("intake_entry_version")) is not int
+            or lineage["intake_entry_version"] < 1):
+            raise WorkspaceInventoryError("ordinary source requires current Inventory with canonical promotion lineage")
+    result = {"owner_repo": name, "provider_repository": binding,
+        "inventory_digest": "sha256:" + hashlib.sha256((args.source_root / "contracts/repos.yaml").read_bytes()).hexdigest(),
+        "record_digest": canonical_digest(entry), "record_version": entry["record"]["version"]}
+elif args.command == "state":
     target = value["target"]
     result = current_state(args.source_root, target["kind"], target["name"])
 elif args.command == "registry":
@@ -338,4 +374,7 @@ else:
         "record": record,
         "history_event_ref": event_ref,
     }
-args.output.write_text(json.dumps(result, ensure_ascii=False))
+if str(args.output) == "-":
+    print(json.dumps(result, ensure_ascii=False))
+else:
+    args.output.write_text(json.dumps(result, ensure_ascii=False))
