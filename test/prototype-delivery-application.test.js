@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { HttpError } from "../src/errors.js";
@@ -190,6 +191,34 @@ test("Prototype Delivery readiness projection excludes client-internal metadata"
     digest: input.reference.digest,
     uri: input.reference.uri,
   });
+});
+
+test("native ASCII-escaped Unicode packets apply and replay without changing ART hashing", async () => {
+  for (const title of ["ASCII unchanged", "Résumé — 日本語", "😀 e\u0301", "control\tline\n\u007f"]) {
+    const request = applicationRequest();
+    request.packet.content.work.title = title;
+    // Independent native Studio/WGCF wire rule, not the implementation under test.
+    const expected = execFileSync("python3", ["-c", "import sys,json,hashlib;v=json.load(sys.stdin);print('sha256:'+hashlib.sha256(json.dumps(v,ensure_ascii=True,sort_keys=True,separators=(',',':')).encode()).hexdigest())"], { input: JSON.stringify(request.packet.content), encoding: "utf8" }).trim();
+    const genericArtDigest = canonicalDigest(request.packet.content);
+    request.packet.packet_digest = expected;
+    request.packet.packet_id = `sample-prototype-${expected.slice(7)}`;
+    request.packet.packet_ref = `record://delivery-packets/${request.packet.packet_id}`;
+    const { service, state } = createHarness();
+    const input = { callerId: "codex-local", correlationId: "unicode-packet", request };
+    const applied = await service.apply(input);
+    assert.equal((await service.apply(input)).receipt.receipt_ref, applied.receipt.receipt_ref);
+    assert.equal(state.ingressCalls, 1);
+    assert.equal(state.issueCalls, 1);
+    assert.equal(canonicalDigest(request.packet.content), genericArtDigest);
+    const changed = structuredClone(request); changed.packet.content.work.title += " tampered";
+    await assert.rejects(service.apply({ ...input, request: changed }), e => e.code === "prototype_delivery_packet_identity_mismatch");
+    if (expected !== genericArtDigest) {
+      const wrong = structuredClone(request); wrong.packet.packet_digest = genericArtDigest;
+      wrong.packet.packet_id = `sample-prototype-${genericArtDigest.slice(7)}`;
+      wrong.packet.packet_ref = `record://delivery-packets/${wrong.packet.packet_id}`;
+      await assert.rejects(service.apply({ ...input, request: wrong }), e => e.code === "prototype_delivery_packet_identity_mismatch");
+    }
+  }
 });
 
 test("Prototype Delivery application creates one target and replays from its trusted event", async () => {

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +7,15 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import { HttpError } from "../errors.js";
+import { canonicalStringify } from "../delivery-art/canonical-json.js";
+
+export function prototypeDeliveryPacketDigest(content) {
+  // Studio and WGCF declare an ASCII-escaped packet wire format. Keep this
+  // local to that contract; ART and workflow event digests remain UTF-8.
+  const bytes = canonicalStringify(content).replace(/[\u007f-\uffff]/g,
+    character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
 
 const contractRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -12,6 +12,9 @@ durable target receipt that the Prototype owner can consume.
 - Prototype Studio emitted and committed the packet.
 - The source lifecycle is `baseline-approved` and custody is resolved.
 - The request uses the packet unchanged.
+- Packet identity uses Studio/WGCF's declared ASCII-escaped canonical JSON,
+  including Unicode work text. Generic ART/event UTF-8 digests are separate;
+  rewriting the native packet digest or restricting text to ASCII is not recovery.
 - The authenticated caller matches `operator_decision.operator_id`.
 - WGCF and OpenProject configuration are available to OOS.
 

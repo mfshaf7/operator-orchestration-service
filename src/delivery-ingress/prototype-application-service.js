@@ -1,6 +1,6 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
-import { assertPrototypeDeliveryApplicationRequest } from "./contracts.js";
+import { assertPrototypeDeliveryApplicationRequest, prototypeDeliveryPacketDigest } from "./contracts.js";
 import {
   assertPrototypeApplicationReplayBinding,
   buildPrototypeDeliveryApplicationEvent,
@@ -11,7 +11,7 @@ import {
 import { prototypeDeliveryTargetMarker } from "./prototype-adapter.js";
 
 function assertPacketIdentity(packet) {
-  const expectedDigest = canonicalDigest(packet.content);
+  const expectedDigest = prototypeDeliveryPacketDigest(packet.content);
   const expectedId =
     `${packet.content.source.prototype_id}-${expectedDigest.slice("sha256:".length)}`;
   if (
