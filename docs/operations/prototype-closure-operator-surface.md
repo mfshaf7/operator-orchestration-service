@@ -38,6 +38,12 @@ It returns exact owner-backed evidence, never a caller's
 proof body. The route is available only in the commissioned Closure composition
 and does not replace the Studio, Platform, or durable-owner authorities.
 
+Historical Baseline source readback uses Maturity's UTF-8 canonical record
+digest, including Unicode text. Closure's current source snapshots and history
+continue to use Closure's ASCII-escaped codec. These are distinct producer
+contracts: do not rewrite historical receipts or normalize source text to make
+the hashes match. A dependency failure retains the original request for retry.
+
 ## Isolated Conformance
 
 ART #1109 uses a source-only conformance runner before Security activation:

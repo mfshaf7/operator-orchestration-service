@@ -31,7 +31,7 @@ test("Studio retention proof binds a committed plan and exact operator decision"
   git("add", "--", path.relative(source, prepared.path));
   git("commit", "-m", "Prepare isolated retention plan");
   const revision = git("rev-parse", "HEAD");
-  git("branch", "main", revision);
+  git("branch", "-f", "main", revision);
   git("update-ref", "refs/remotes/origin/main", revision);
   const client = createPrototypeClosureSourceClient({
     authorityRoot: source, provider: { mainRevision: async () => revision },
