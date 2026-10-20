@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import { parse as parseYaml } from "yaml";
 import { assertClosureArtifact, closureDigest, closureError, closureManifest } from "./contracts.js";
+import { prototypeMaturityDigest } from "../prototype-maturity/contracts.js";
 
 const execute = promisify(execFile);
 const SHA = /^[0-9a-f]{40}$/;
@@ -145,7 +146,11 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
       const custody = item.source_custody ?? (item.lifecycle === "graduated" ? null : "incubation-repo");
       return {
         source_revision: revision,
-        record_digest: closureDigest(item, { ascii: true }),
+        // A historical Baseline read proves Maturity's receipt, not a Closure
+        // snapshot. Preserve the producer's UTF-8 codec at that boundary only.
+        record_digest: requireClosureAuthority
+          ? closureDigest(item, { ascii: true })
+          : prototypeMaturityDigest(item),
         lifecycle: item.lifecycle,
         source_custody: custody,
         design_baseline_ref: item.design_baseline_ref ?? null,

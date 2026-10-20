@@ -12,11 +12,11 @@ const config = () => loadConfig({
 });
 
 async function invoke(app, { url = "/v1/prototype-closures/requests", method = "POST", body = "{}",
-  secret = "test-secret", callerId = caller } = {}) {
+  secret = "test-secret", callerId = caller, headers = {} } = {}) {
   const request = Readable.from([Buffer.from(body)]);
   Object.assign(request, {
     url, method,
-    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret },
+    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret, ...headers },
   });
   let code;
   let output = "";
@@ -47,6 +47,24 @@ test("Prototype Closure routes caller-bound workflow commands", async () => {
   assert.ok(calls.every((value) => value.callerId === caller));
   assert.equal(calls[0].input.prototype_id, "sample");
   assert.equal(calls[2].id, "prototype-closure-request:sample:apply-delivery");
+});
+
+test("Closure canonical GET binds the plain prototype subject and retained phase", async () => {
+  const retained = { prototype_id: "sample-tool", status: "evaluating", revision: 3,
+    failure: { code: "prototype_closure_readiness_unavailable", retryable: true },
+    history: [{ at: new Date().toISOString() }] };
+  const app = createApp({ config: config(), prototypeClosureService: {
+    async project() { return retained; },
+  } });
+  const result = await invoke(app, {
+    url: "/v1/prototype-closures/requests/prototype-closure-request%3Asample-tool%3A123",
+    method: "GET", body: "",
+    headers: { accept: "application/vnd.mfshaf7.console-source-projection+json; version=1" },
+  });
+  assert.equal(result.code, 200);
+  assert.equal(result.body.binding.record_ref, "prototype://sample-tool");
+  assert.equal(result.body.binding.source_owner, "workspace-prototype-studio");
+  assert.deepEqual(result.body.projection, retained);
 });
 
 test("Prototype Closure remains inactive by default and rejects malformed or unauthenticated commands", async () => {
