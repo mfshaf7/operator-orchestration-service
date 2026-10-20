@@ -43,6 +43,12 @@ removes the recovery unit.
 - `operator-orchestration-service` from local source mounted into a generic
   Node runtime pod with exact lockfile dependencies installed into an isolated
   runtime volume
+  - the API and both worker preparations copy the trusted `templates/` assets
+    alongside source and contracts; the mounted volume hides image contents,
+    so a passing production-image smoke alone does not prove this runtime
+  - `node --test test/devint-runtime-copy.test.js` executes all three native
+    copy stanzas and checks exact template identity, entry-module loading,
+    loopback API health and missing-asset denial without business credentials
 - the source-admitted OOS workflow worker with its dedicated service account
   and identity, fixed at zero replicas until runtime activation
 - the OOS-owned Lifecycle Transition journal for the three admitted Proposal
