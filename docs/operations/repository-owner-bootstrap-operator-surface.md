@@ -42,6 +42,11 @@ not this source-only shortcut.
 3. Inspect the finite plan and `preparation_digest`. This read-only preparation
    creates no request journal, checkout, token, admission or runtime. Existing
    README bytes are preserved; independent controls are not overwritten.
+   The optional CI validates pull requests at their exact base/head and pushes
+   to the qualified `main` branch at their actual before/head. It does not run
+   on first pushes of review branches or tags, whose prior ref is absent.
+   Control-only bootstrap is explicitly not application evidence; once the
+   selected application markers exist, the real owner profile must pass.
 4. Explicitly create one request at `POST .../requests`, carrying a stable
    `request_id`, the same preparation input, exact reviewed preparation digest,
    request time and nullable workflow permission approval reference. OOS

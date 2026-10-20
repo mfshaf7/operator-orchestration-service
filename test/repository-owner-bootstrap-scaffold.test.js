@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { parse as parseYaml } from "yaml";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, SOURCE_OWNER_BOOTSTRAP_TEMPLATE } from "../src/repository-owner-bootstrap/scaffold.js";
 
@@ -52,6 +53,23 @@ test("CI is an explicit finite optional file and existing identical controls nee
   const unchanged = planSourceOwnerBootstrap(request);
   assert.equal(unchanged.source_change_required, false);
   assert.equal(unchanged.requires_workflow_permission, false);
+});
+
+test("optional CI selects PRs and existing main pushes, not first review-branch or tag pushes with no previous commit", () => {
+  const plan = planSourceOwnerBootstrap(input(true));
+  const workflow = parseYaml(plan.files.find(file => file.path === ".github/workflows/validate.yaml").content);
+  assert.deepEqual(workflow.on, { pull_request: null, push: { branches: ["main"] } });
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  const checkout = workflow.jobs.validate.steps.find(step => step.uses?.startsWith("actions/checkout@"));
+  assert.equal(checkout.with["fetch-depth"], 0);
+  assert.equal(checkout.with["persist-credentials"], false);
+  assert.equal(checkout.with.ref, "${{ github.event.pull_request.head.sha || github.sha }}");
+  const runner = workflow.jobs.validate.steps.find(step => step.run?.startsWith("python3 scripts/validate_owner.py --application-if-present"));
+  assert.deepEqual(runner.env, {
+    OWNER_EVIDENCE_BASE: "${{ github.event.pull_request.base.sha || github.event.before }}",
+    OWNER_EVIDENCE_HEAD: "${{ github.event.pull_request.head.sha || github.sha }}",
+  });
+  assert.equal(runner.if, undefined, "Selected app validation must not be silently skipped");
 });
 
 test("an independently valid existing owner profile and guidance require no template replacement, app proof or dummy PR", () => {
@@ -115,7 +133,7 @@ test("generated native owner controls validate without executing absent project 
 test("bootstrap validation stays distinct from real app evidence and the optional app runner substitutes exact Git commits", async t => {
   const directory = await mkdtemp(path.join(tmpdir(), "owner-scaffold-application-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const plan = planSourceOwnerBootstrap(input());
+  const plan = planSourceOwnerBootstrap(input(true));
   for (const file of plan.files) {
     const target = path.join(directory, file.path);
     await mkdir(path.dirname(target), { recursive: true });
@@ -125,6 +143,13 @@ test("bootstrap validation stays distinct from real app evidence and the optiona
     { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }).trim();
   git("init", "--initial-branch=main"); git("add", "."); git("commit", "-m", "fixture: trusted controls only");
   const base = git("rev-parse", "HEAD");
+  const workflow = parseYaml(plan.files.find(file => file.path === ".github/workflows/validate.yaml").content);
+  const runner = workflow.jobs.validate.steps.find(step => step.run?.startsWith("python3 scripts/validate_owner.py --application-if-present"));
+  const workflowRun = (before, after) => execFileSync("bash", ["-eu", "-c", runner.run], { cwd: directory,
+    env: { ...process.env, OWNER_EVIDENCE_BASE: before, OWNER_EVIDENCE_HEAD: after },
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+  assert.match(workflowRun("0".repeat(40), base), /no application tests executed/,
+    "Initial main with controls alone must not pretend app evidence exists");
   await mkdir(path.join(directory, "app"));
   await writeFile(path.join(directory, "app/package.json"), '{"private":true}\n');
   await writeFile(path.join(directory, "app/test.mjs"), 'console.log("Actual project test executed");\n');
@@ -134,6 +159,10 @@ test("bootstrap validation stays distinct from real app evidence and the optiona
     { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
   assert.throws(() => run([]), /Command failed/, "An app cannot silently receive a guessed diff base");
   assert.match(run(["--base-commit", base, "--head-commit", head]), /Actual project test executed/);
+  assert.match(workflowRun(base, head), /Actual project test executed/,
+    "The exact generated workflow must execute real app and Git checks for PR base/head and existing-main before/head");
+  assert.throws(() => workflowRun("0".repeat(40), head), /Command failed/,
+    "Do not substitute a guessed commit for an event without a prior ref; its trigger must be excluded");
   await writeFile(path.join(directory, "app/test.mjs"), 'throw new Error("Actual project test fails");\n');
   assert.match(execFileSync("make", ["validate"], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }), /not app acceptance/);
   assert.throws(() => run(["--base-commit", base, "--head-commit", head]), /Command failed/, "Real app failures cannot be replaced by green bootstrap checks");
