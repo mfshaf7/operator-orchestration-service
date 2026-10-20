@@ -21,7 +21,7 @@
   "authority": {
     "platform_definition": {
       "repo": "platform-engineering",
-      "revision": "9619121e237adf666963825cde5cab1396c406d7",
+      "revision": "72c3b13cf20329aaff34146c587fe2969b9d9a03",
       "path": "security/agent-source-identity.yaml",
       "digest": "sha256:5d5012280d8abb5494b5604d6540e195027562966fe0ec204d593925d34b0a85"
     },

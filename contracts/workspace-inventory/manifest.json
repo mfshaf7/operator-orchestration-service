@@ -6,17 +6,17 @@
     "orchestration_work_ref": "openproject://work_packages/1208",
     "authority": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914"
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2"
     },
     "readiness_authority": {
       "repo": "workspace-governance-control-fabric",
-      "commit": "c992e5be71fd64200ab27a70827f2489bc25b670",
+      "commit": "f789a19c06f0896774a09ee8942c88c518c7bd70",
       "manifest_path": "contracts/workspace-active-inventory/manifest.json",
       "contract_id": "wgcf.workspace-active-inventory-readiness.v1"
     },
     "activation_contract": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/workspace-intake-inventory-operation.yaml",
       "schema_path": "contracts/schemas/workspace-intake-inventory-operation.schema.json",
       "contract_work_ref": "openproject://work_packages/1206",
@@ -42,109 +42,109 @@
   "files": {
     "workspace-active-inventory.yaml": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/workspace-active-inventory.yaml",
       "sha256": "d9d154d3dc4cc122f10cb52d133435ef598e3595cc4b30d34e73b95e5cfdf893"
     },
     "operation.yaml": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/workspace-intake-inventory-operation.yaml",
       "sha256": "5ad9f582d39730f506658e1ca37fd75f57c11a0703c8978176c2e7e0936dac85"
     },
     "operation.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-intake-inventory-operation.schema.json",
       "sha256": "32538b651ce50ad549f6268b5e62302b324e17b3a1dcc98fffb6aca49b4d3ceb"
     },
     "request.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-promotion-request.schema.json",
       "sha256": "61fef759a3960dba8590a297931eb2eda326fa957057fe66f31e74f623e5cc25"
     },
     "readiness.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-promotion-readiness.schema.json",
       "sha256": "22a9a998afa70aee3bfd1b34e134fd49829fca9e79866b8638e3394a49d50887"
     },
     "mutation.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-promotion-mutation.schema.json",
       "sha256": "2017e148feaf312914bd672c57f6cfbcdd0bb8153118c129e13ea57ec6da6a9b"
     },
     "readback.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-promotion-readback.schema.json",
       "sha256": "f7a681a31239ae60bbd0371cda010bd5cf6ff2db030f89869971571dd3141c2c"
     },
     "receipt.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-promotion-receipt.schema.json",
       "sha256": "304b4a2e4bcd49516d4d2e98ec4112ad0fb51ad9b025a808265514e70f57b650"
     },
     "lifecycle-policy.yaml": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/workspace-inventory-lifecycle.yaml",
       "sha256": "7a96f09186af8601079391b61f493d157a21fa6123176307d8c72aab6ce706ed"
     },
     "history.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-history.schema.json",
       "sha256": "e4c81c2583b1ca85208ec80141e36282db9ebcf31d7a3e8398eb146e1f7fc58a"
     },
     "lifecycle.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle.schema.json",
       "sha256": "fd9e49b945ac2c5e945769a1cdf237e3b5aa39fe8b4d84f6edb8f953ce6c4806"
     },
     "lifecycle-request.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle-request.schema.json",
       "sha256": "aab4fd9b148fc372a276aa325b807cb068e7dcc8e5a4d82817429ec202a93ea3"
     },
     "lifecycle-readiness.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle-readiness.schema.json",
       "sha256": "6e614bb4ea9e77a2440ca9a3ad96ed0222213da73d9d91b3d1dcbf605c132cd5"
     },
     "lifecycle-mutation.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle-mutation.schema.json",
       "sha256": "3f110dcf10e071119be6c5674511edc1004cf0b0c02c892ed3b9d1c49d4df14e"
     },
     "lifecycle-readback.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle-readback.schema.json",
       "sha256": "cfbe51ccb87c4d6912d5111a362ea816f5a915c2701476bac68f5c647f1cb2e1"
     },
     "lifecycle-receipt.schema.json": {
       "repo": "workspace-governance",
-      "commit": "1773d30b05042b821aa90105e8412cb615d0d914",
+      "commit": "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
       "path": "contracts/schemas/workspace-inventory-lifecycle-receipt.schema.json",
       "sha256": "88cee7f8229bf191d2731c025a793bf0e60d1a70af9376b3609417d5fe7e9ae7"
     },
     "evaluation.schema.json": {
       "repo": "workspace-governance-control-fabric",
-      "commit": "c992e5be71fd64200ab27a70827f2489bc25b670",
+      "commit": "f789a19c06f0896774a09ee8942c88c518c7bd70",
       "path": "contracts/workspace-active-inventory/evaluation.schema.json",
       "sha256": "67106a28f630ef4d02376e4243e521d200c0bc55b8c68174ce3dc7a84ba6c5a4"
     },
     "lifecycle-evaluation.schema.json": {
       "repo": "workspace-governance-control-fabric",
-      "commit": "c992e5be71fd64200ab27a70827f2489bc25b670",
+      "commit": "f789a19c06f0896774a09ee8942c88c518c7bd70",
       "path": "contracts/workspace-active-inventory/lifecycle-evaluation.schema.json",
       "sha256": "cde5ff21fcff1afe5d37c492912d51aa7b140e23aff065b3d8b0e70063cde30a"
     }
