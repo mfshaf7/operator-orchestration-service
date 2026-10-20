@@ -19,6 +19,62 @@ const profileRoot = path.join(
 );
 const scriptsRoot = path.join(profileRoot, "scripts");
 
+test("native source runner selects existing composed record custody without changing standalone recovery or launching services", t => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "source-admission-runner-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const runner = path.join(root, "run_delivery_source_executor.sh");
+  writeFileSync(runner, readFileSync(path.join(scriptsRoot, "run_delivery_source_executor.sh")));
+  const oos = path.join(root, "oos");
+  const platform = path.join(root, "platform");
+  const policy = path.join(platform, "products/governance-operations-console/complete-runtime-policy.yaml");
+  mkdirSync(path.dirname(policy), { recursive: true });
+  mkdirSync(path.join(oos, "src/delivery-art"), { recursive: true });
+  writeFileSync(path.join(oos, "src/delivery-art/source-executor-server.js"), `console.log(JSON.stringify({
+    freshness: process.env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED ?? null,
+    authority: process.env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT ?? null,
+    identity: process.env.OOS_AGENT_SOURCE_IDENTITY_ENABLED,
+    contract: process.env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH
+  }));`);
+  writeFileSync(path.join(root, "common.sh"), `
+ensure_state_dirs() { :; }
+ensure_local_secrets() { :; }
+load_local_secrets() { :; }
+repo_path() {
+  case "$1" in
+    operator-orchestration-service) printf '%s\\n' "$SOURCE_ADMISSION_TEST_OOS_ROOT" ;;
+    platform-engineering) printf '%s\\n' "$SOURCE_ADMISSION_TEST_PLATFORM_ROOT" ;;
+    *) return 1 ;;
+  esac
+}
+DELIVERY_SOURCE_EXECUTOR_SOCKET="$SOURCE_ADMISSION_TEST_ROOT/socket"
+DELIVERY_SOURCE_EXECUTOR_ID=synthetic-executor
+DELIVERY_SOURCE_EXECUTOR_SECRET=synthetic-test-only
+DELIVERY_SOURCE_EXECUTOR_RESULT_STORE="$SOURCE_ADMISSION_TEST_ROOT/results"
+WORKSPACE_ROOT="$SOURCE_ADMISSION_TEST_ROOT"
+AGENT_SOURCE_IDENTITY_ROOT="$SOURCE_ADMISSION_TEST_ROOT/identity"
+REFINEMENT_CATALOG_COMPOSITION_ID=refinement-catalog
+`);
+  const env = { PATH: process.env.PATH, SOURCE_ADMISSION_TEST_ROOT: root,
+    SOURCE_ADMISSION_TEST_OOS_ROOT: oos, SOURCE_ADMISSION_TEST_PLATFORM_ROOT: platform };
+  const state = path.join(root, "existing-platform-state");
+  writeFileSync(policy, JSON.stringify({ runtime_state_root: state, record_authority: { enabled: true } }));
+  const standalone = spawnSync("bash", [runner], { env, encoding: "utf8" });
+  assert.equal(standalone.status, 0, standalone.stderr);
+  assert.equal(JSON.parse(standalone.stdout).freshness, null);
+  const composed = spawnSync("bash", [runner], { env: { ...env, DEVINT_COMPOSITION_ID: "refinement-catalog" }, encoding: "utf8" });
+  assert.equal(composed.status, 0, composed.stderr);
+  const actual = JSON.parse(composed.stdout);
+  assert.equal(actual.freshness, "true");
+  assert.equal(actual.authority, path.join(state, "record-authority/workspace-governance"));
+  assert.equal(actual.identity, "true");
+  assert.equal(actual.contract, path.join(oos, "contracts/delivery-art-work-session/agent-source-identity.json"));
+  writeFileSync(policy, JSON.stringify({ runtime_state_root: "relative-path", record_authority: { enabled: true } }));
+  const invalid = spawnSync("bash", [runner], { env: { ...env, DEVINT_COMPOSITION_ID: "refinement-catalog" }, encoding: "utf8" });
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /refused: composed source admission/);
+  assert.equal(invalid.stdout, "");
+});
+
 test("accepted-idea-delivery delegates reconciler supervision to the shared runner", () => {
   const profile = readFileSync(path.join(profileRoot, "profile.yaml"), "utf8");
   const common = readFileSync(path.join(scriptsRoot, "common.sh"), "utf8");
@@ -90,6 +146,11 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_ENABLED=true/);
   assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_ROOT="\$\{AGENT_SOURCE_IDENTITY_ROOT\}"/);
   assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH="\$\{agent_source_identity_contract\}"/);
+  assert.match(sourceExecutor, /DEVINT_COMPOSITION_ID:-.*REFINEMENT_CATALOG_COMPOSITION_ID/);
+  assert.match(sourceExecutor, /OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED=true/);
+  assert.match(sourceExecutor, /OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT=/);
+  assert.match(sourceExecutor, /complete-runtime-policy\.yaml/);
+  assert.match(sourceExecutor, /record-authority.*workspace-governance/);
   assert.doesNotMatch(sourceExecutor, /PRIVATE_KEY|GITHUB_TOKEN|GH_TOKEN/);
   assert.doesNotMatch(common, /STATE_ROOT}\/delivery-source-executor/);
   assert.match(

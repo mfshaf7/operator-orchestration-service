@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
 
 import {
   createDeliveryArtWorkSessionService,
@@ -93,9 +96,10 @@ function result(current) {
 
 function createHarness(
   store,
-  { available = true, lifecycleContext = null, sourceRealization = null } = {},
+  { available = true, lifecycleContext = null, sourceRealization = null, sourceCredentials = null } = {},
 ) {
   const controller = {
+    async prepareSourceCredential() { return { source_start_digest: `sha256:${"a".repeat(64)}` }; },
     async preflight() {
       return {
         ...result(store.readByAlias("work-item-1024") ?? session()),
@@ -155,9 +159,136 @@ function createHarness(
     executor: { available, id: "source-executor:test" },
     lifecycleContext,
     sourceRealization,
+    sourceCredentials,
     store,
   });
 }
+
+test("source credential pending does not journal a failed source command and permits exact retry", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-pending-"));
+  const store = createStore(root);
+  let ready = false; let leases = 0;
+  const sourceCredentials = {
+    async ensureSourceCredential(scope) {
+      assert.equal(scope.workItemId, "work-item-1024");
+      assert.equal(scope.intentId, "source-intent:test-1024");
+      if (!ready) throw new DeliveryArtWorkSessionServiceError("platform_source_credential_pending", "Owner operation pending.", { statusCode: 409 });
+    },
+    async withSourceLease({ operation }) { leases++; return operation(); },
+    async stopSourceCredential() {},
+  };
+  const service = createHarness(store, { sourceCredentials });
+  const command = { command_id: "work-session-command:credential-start", expected_session_revision: null, source_intent_ref: "source-intent:test-1024",
+    decision: { caller_id: "operator:workspace-owner", operator: { id: "operator:workspace-owner" } } };
+  const input = { action: "start", callerId: "operator:workspace-owner", workItemId: "1024", command };
+  await assert.rejects(service.execute(input), { code: "platform_source_credential_pending" });
+  assert.equal(store.readCommandRecord(command.command_id), null);
+  assert.equal(store.readByAlias("1024"), null);
+  assert.equal(leases, 0);
+  ready = true;
+  const started = await service.execute(input);
+  assert.equal(leases, 1);
+  assert.equal(started.source_authorization.intent_ref, command.source_intent_ref);
+  assert.equal((await service.execute(input)).source_authorization.intent_ref, command.source_intent_ref);
+  const recovered = await createHarness(store, { sourceCredentials }).read({ callerId: "operator:workspace-owner", workItemId: "1024" });
+  assert.equal(recovered.source_authorization.intent_ref, command.source_intent_ref);
+});
+
+test("continued source work cannot bypass a stopped lease or silently replace its binding", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-stop-"));
+  const store = createStore(root); store.writeSession(session());
+  let writes = 0;
+  const sourceCredentials = {
+    async ensureSourceCredential(scope) {
+      if (scope.previousIntentId) throw new DeliveryArtWorkSessionServiceError("platform_source_successor_unconfirmed", "No approved successor exists.", { statusCode: 409 });
+    },
+    async withSourceLease() { throw new DeliveryArtWorkSessionServiceError("platform_source_intent_revoked", "Source access stopped.", { statusCode: 409 }); },
+    async stopSourceCredential() {},
+  };
+  const service = createHarness(store, { sourceCredentials });
+  const input = { action: "continue", callerId: "operator:workspace-owner", workItemId: "1024",
+    command: { command_id: "work-session-command:stopped-continue", expected_session_revision: session().updated_at, source_intent_ref: "source-intent:stopped" } };
+  await assert.rejects(service.execute(input), { code: "platform_source_intent_revoked" });
+  assert.equal(store.readCommandRecord(input.command.command_id), null);
+  assert.equal(store.readByAlias("work-item-1024").updated_at, session().updated_at);
+  const realization = { async read() {}, async start() {}, async continue() { writes++; }, async cancel() {}, async recover() { writes++; } };
+  const realized = createHarness(store, { sourceCredentials, sourceRealization: realization });
+  store.writeArtifact(session(), "artifacts/source-intent.json", { schema_version: 1, artifact_type: "delivery-art-source-intent-binding", session_id: session().session_id, source_intent_ref: "source-intent:stopped" });
+  await assert.rejects(realized.executeRealization({ action: "continue", callerId: "operator:workspace-owner", workItemId: "1024", request: {} }), { code: "platform_source_intent_revoked" });
+  assert.equal(writes, 0);
+  await assert.rejects(service.execute({ ...input, command: { ...input.command, source_intent_ref: "source-intent:replacement" } }), { code: "platform_source_successor_unconfirmed" });
+});
+
+test("terminal work close invokes exact source revocation and exposes pending owner confirmation", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-terminal-"));
+  const store = createStore(root); store.writeSession(session());
+  store.writeArtifact(session(), "artifacts/source-intent.json", { schema_version: 1, artifact_type: "delivery-art-source-intent-binding", session_id: session().session_id, source_intent_ref: "source-intent:terminal" });
+  const stops = [];
+  const sourceCredentials = {
+    async ensureSourceCredential() { throw new Error("close must not renew source credentials"); },
+    async withSourceLease() { throw new Error("cleanup is not a new Gary source effect"); },
+    async stopSourceCredential(scope) { stops.push(scope); return { state: "queued", operation_id: "platform-operation:revoke-terminal" }; },
+  };
+  const service = createHarness(store, { sourceCredentials });
+  const closed = await service.execute({ action: "close", callerId: "operator:workspace-owner", workItemId: "1024",
+    command: { command_id: "work-session-command:close-with-revoke", expected_session_revision: session().updated_at } });
+  assert.equal(stops.length, 1); assert.equal(stops[0].intentId, "source-intent:terminal");
+  assert.equal(closed.source_authorization.state, "revocation-pending");
+  assert.equal(closed.next_action.code, "source-revocation-pending");
+});
+
+test("completed realization acknowledgements remain readable after source authorization stops", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-history-"));
+  const store = createStore(root); store.writeSession(session());
+  const denied = async () => { throw new Error("historical receipt read must not obtain new source authority"); };
+  const sourceRealization = { async read() {}, async start() {}, async continue() { throw new Error("must not apply twice"); }, async cancel() {}, async recover() {},
+    readCompletedCommand(input) { assert.equal(input.action, "continue"); return { workflow_id: "delivery-art-source-realization", state: "source-created", replayed: true }; } };
+  const service = createHarness(store, { sourceRealization, sourceCredentials: { ensureSourceCredential: denied, withSourceLease: denied, stopSourceCredential: denied } });
+  const replay = await service.executeRealization({ action: "continue", callerId: "operator:workspace-owner", workItemId: "1024", request: {} });
+  assert.equal(replay.replayed, true); assert.equal(replay.state, "source-created");
+});
+
+test("normal source continuation adopts only its explicitly approved exact successor and preserves the real session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-reauthorize-"));
+  const store = createStore(root); store.writeSession(session());
+  store.writeArtifact(session(), "artifacts/source-intent.json", { schema_version: 1, artifact_type: "delivery-art-source-intent-binding", session_id: session().session_id, source_intent_ref: "source-intent:expired" });
+  const scopes = [];
+  const sourceCredentials = {
+    async ensureSourceCredential(scope) { scopes.push(scope); assert.equal(scope.previousIntentId, "source-intent:expired"); assert.equal(scope.intentId, "source-intent:fresh-approved"); },
+    async withSourceLease({ operation }) { return operation(); }, async stopSourceCredential() {},
+  };
+  const continued = await createHarness(store, { sourceCredentials }).execute({ action: "continue", callerId: "operator:workspace-owner", workItemId: "1024",
+    command: { command_id: "work-session-command:explicit-reauthorization", expected_session_revision: session().updated_at, source_intent_ref: "source-intent:fresh-approved" } });
+  assert.equal(scopes.length, 1); assert.equal(continued.session_id, session().session_id);
+  assert.equal(continued.source_authorization.intent_ref, "source-intent:fresh-approved");
+  assert.equal(store.readByAlias("work-item-1024").landing_unit.branch, session().landing_unit.branch);
+});
+
+test("realization successor adoption advances canonical source ordering without changing the actual Work Session command revision", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-ordering-"));
+  const store = createStore(root); store.writeSession(session());
+  store.writeArtifact(session(), "artifacts/source-intent.json", { schema_version: 1, artifact_type: "delivery-art-source-intent-binding", session_id: session().session_id, source_intent_ref: "source-intent:expired" });
+  let effects = 0;
+  const sourceRealization = { async read() {}, async start() {}, async cancel() {}, async recover() {},
+    async continue() { effects++; assert.equal(store.readArtifact(session(), "artifacts/source-intent.json").source_intent_ref, "source-intent:fresh-approved"); return { workflow_id: "delivery-art-source-realization", state: "source-created" }; } };
+  const sourceCredentials = { async ensureSourceCredential(scope) { assert.equal(scope.previousIntentId, "source-intent:expired"); assert.equal(scope.intentId, "source-intent:fresh-approved"); }, async withSourceLease({ operation }) { return operation(); }, async stopSourceCredential() {} };
+  const service = createHarness(store, { sourceCredentials, sourceRealization });
+  const config = loadConfig({ CALLER_ALLOWED_IDS: "operator:workspace-owner", CALLER_AUTH_SECRETS_JSON: JSON.stringify({ "operator:workspace-owner": "test-secret" }), OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({ "operator:workspace-owner": "operator:workspace-owner" }) });
+  const app = createApp({ config, deliveryArtWorkSessionService: service });
+  async function read() {
+    const request = Readable.from([]); request.method = "GET"; request.url = "/v1/delivery-work-items/1024/work-session";
+    request.headers = { "x-oos-caller-id": "operator:workspace-owner", "x-oos-caller-secret": "test-secret", "x-oos-operator-id": "operator:workspace-owner", accept: "application/vnd.mfshaf7.console-source-projection+json; version=1" };
+    let body, code; await app(request, { writeHead(value) { code = value; }, end(value) { body = JSON.parse(value); } });
+    assert.equal(code, 200, JSON.stringify(body)); return body;
+  }
+  const before = await read();
+  await service.executeRealization({ action: "continue", callerId: "operator:workspace-owner", workItemId: "1024", request: {}, sourceIntentRef: "source-intent:fresh-approved" });
+  const after = await read(), unchanged = await read();
+  assert.equal(effects, 1); assert.equal(after.projection.session_revision, before.projection.session_revision);
+  assert.equal(after.projection.source_authorization.intent_ref, "source-intent:fresh-approved");
+  assert.ok(after.revision.event_sequence > before.revision.event_sequence); assert.notEqual(after.revision.source_revision, before.revision.source_revision);
+  assert.equal(unchanged.revision.event_sequence, after.revision.event_sequence); assert.equal(unchanged.revision.source_revision, after.revision.source_revision);
+});
 
 test("work-session service binds source realization to the authenticated session identity", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-realization-"));

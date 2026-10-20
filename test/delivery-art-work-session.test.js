@@ -351,6 +351,9 @@ function createHarness(
     },
   };
   const sourceAdapter = {
+    async inspectSourceCredentialBinding() {
+      return { repository: "mfshaf7/operator-orchestration-service", repository_id: 123, installation_id: 456, human_reviewer_id: "mfshaf7", rotate_before_expiry_seconds: 300 };
+    },
     async ensureOwnedWorktree() {
       ownedWorktreeCreates += 1;
       repoRoot = "/tmp/reconstructed-oos-worktree";
@@ -3203,6 +3206,57 @@ test("valid identifier names do not collide with inherited object properties", a
   store.writeSession(session);
 
   assert.equal(store.readByAlias("constructor").session_id, session.session_id);
+});
+
+test("canonical credentials resolve before session creation without bypassing other work-start gates", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-prospective-credential-"));
+  const harness = createHarness(root, { configuredPathSource: { identity: {
+    agent_identity_id: "agent:gary", human_reviewer_id: "mfshaf7", state: "credential-required",
+  } } });
+  const value = await harness.controller.prepareSourceCredential("work-item-963", {
+    callerId: "governance-operations-console", operatorId: "operator:workspace-owner", decision: acceptedDecision(),
+  });
+  assert.equal(value.session_id, null);
+  assert.equal(value.subject.kind, "delivery");
+  assert.equal(value.subject.work_item_ref, "work-item-963");
+  assert.equal(value.fetched_base, "a".repeat(40));
+  assert.equal(value.repository_id, 123);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  assert.equal(harness.ownedWorktreeCreates(), 0);
+  assert.equal(harness.resolveBaseCalls().length, 0);
+  await assert.rejects(readFile(harness.store.decisionPath("work-item-963")), { code: "ENOENT" });
+});
+
+test("canonical credential preparation retains real dirty-owner, branch, base and admission denials", async () => {
+  for (const source of [
+    { owner_repo: { name: "operator-orchestration-service", state: "dirty", changed_files: ["unrelated.txt"] } },
+    { branch: { state: "occupied", name: "topic/already-present" } },
+    { base: { state: "stale", fetched_commit: "a".repeat(40), ref: "origin/main" } },
+    { admission: { state: "blocked", reason: "Owner not admitted", blocker_code: "owner-not-admitted" } },
+  ]) {
+    const root = await mkdtemp(path.join(tmpdir(), "oos-credential-denied-"));
+    const harness = createHarness(root, { configuredPathSource: source });
+    await assert.rejects(harness.controller.prepareSourceCredential("work-item-963", {
+      callerId: "governance-operations-console", operatorId: "operator:workspace-owner", decision: acceptedDecision(),
+    }), { code: "delivery_art_source_credential_start_blocked" });
+    assert.equal(harness.store.readByAlias("work-item-963"), null);
+    assert.equal(harness.ownedWorktreeCreates(), 0);
+  }
+});
+
+test("source credential intent binds the actual session and preserves its initial snapshot through ordinary progress", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-credential-session-"));
+  const harness = createHarness(root);
+  const args = { callerId: "governance-operations-console", operatorId: "operator:workspace-owner", decision: acceptedDecision() };
+  const prospective = await harness.controller.prepareSourceCredential("work-item-963", args);
+  await harness.controller.start("work-item-963", args);
+  const record = { source_intent: { subject: prospective.subject }, proof: prospective.proof };
+  const actual = await harness.controller.verifySourceCredential("work-item-963", { ...args, record });
+  assert.equal(actual.session_id, harness.store.readByAlias("work-item-963").session_id);
+  assert.equal(actual.source_start_digest, prospective.source_start_digest);
+  assert.deepEqual(actual.subject, prospective.subject);
+  const wrong = acceptedDecision(); wrong.landing_unit.branch = "topic/not-approved";
+  await assert.rejects(harness.controller.verifySourceCredential("work-item-963", { ...args, decision: wrong, record }), { code: "delivery_art_source_credential_session_mismatch" });
 });
 
 test("ambiguous aliases and concurrent mutations fail closed", async () => {

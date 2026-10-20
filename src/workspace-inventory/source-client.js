@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireRecordAuthorityFreshness } from "../record-authority-freshness.js";
 import { inventoryDigest, inventoryError, inventoryManifest } from "./contracts.js";
+import { inventorySourceFiles, inventorySourceDigest } from "./source-files.js";
 
 const execute = promisify(execFile);
 const INTAKE_REGISTER = "contracts/intake-register.yaml";
@@ -83,10 +84,10 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
     if (!review.merged || !review.human_reviewed || !SHA.test(review.merge_commit)) {
       throw inventoryError("review_unproven", "Merged inventory promotion requires exact-head human review evidence.");
     }
-    const files = await provider.readMergedFiles(review, record.preparation.inventory_path);
+    const files = await provider.readMergedFiles(review, record.preparation.inventory_path, record.preparation);
     const readback = await sandbox(record.evaluation.authority_revision, async ({ directory, source }) => {
-      await writeFile(path.join(source, INTAKE_REGISTER), files.intakeText);
-      await writeFile(path.join(source, record.preparation.inventory_path), files.inventoryText);
+      await restoreMergedFiles(source, record.preparation, files.sourceFiles ?? {
+        [INTAKE_REGISTER]: files.intakeText, [record.preparation.inventory_path]: files.inventoryText });
       return ownerCommand("readback", source, directory, {
         readback: record.preparation.readback,
         at: clock().toISOString(),
@@ -100,10 +101,10 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
     if (!review.merged || !review.human_reviewed || !SHA.test(review.merge_commit)) {
       throw inventoryError("review_unproven", "Merged inventory lifecycle change requires exact-head human review evidence.");
     }
-    const files = await provider.readMergedLifecycleFiles(review, record.preparation.inventory_path);
+    const files = await provider.readMergedLifecycleFiles(review, record.preparation.inventory_path, record.preparation);
     const mergedState = await sandbox(record.evaluation.authority_revision, async ({ directory, source }) => {
-      await writeFile(path.join(source, record.preparation.inventory_path), files.inventoryText);
-      await writeFile(path.join(source, INVENTORY_HISTORY), files.historyText);
+      await restoreMergedFiles(source, record.preparation, files.sourceFiles ?? {
+        [record.preparation.inventory_path]: files.inventoryText, [INVENTORY_HISTORY]: files.historyText });
       return ownerCommand("lifecycle-readback", source, directory, {
         target: record.request.target,
         action: record.request.action,
@@ -113,6 +114,29 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
       });
     });
     return { review, mergedState };
+  }
+
+  async function restoreMergedFiles(source, preparation, observed) {
+    const expected = inventorySourceFiles(preparation);
+    if (inventoryDigest(observed) !== inventoryDigest(expected) ||
+        (preparation.source_files && preparation.content_digest !== inventorySourceDigest(preparation))) {
+      throw inventoryError("readback_invalid", "Merged source is missing or differs from the complete approved registration.");
+    }
+    for (const [relative, text] of Object.entries(expected)) await writeFile(path.join(source, relative), text);
+  }
+
+  async function verifyPreparedFiles(source, preparation) {
+    const changed = [...(await git(source, "diff", "--name-only")).split("\n"),
+      ...(await git(source, "ls-files", "--others", "--exclude-standard")).split("\n")].filter(Boolean).sort();
+    const files = inventorySourceFiles(preparation);
+    if (JSON.stringify(changed) !== JSON.stringify(Object.keys(files).sort())) {
+      throw inventoryError("source_change_invalid", "Inventory changed files differ from the complete bounded owner preparation.");
+    }
+    for (const [relative, text] of Object.entries(files)) {
+      if (await readFile(path.join(source, relative), "utf8") !== text) {
+        throw inventoryError("source_change_invalid", "Inventory source bytes differ from their owner preparation.");
+      }
+    }
   }
 
   return {
@@ -211,16 +235,15 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
           branch: promotionBranch(record),
           at: record.history.find((event) => event.status === "preparing").at,
         });
-        const changed = (await git(source, "diff", "--name-only")).split("\n").filter(Boolean).sort();
-        const expected = [INTAKE_REGISTER, INVENTORY_PATHS[record.request.target.kind]].sort();
-        if (JSON.stringify(changed) !== JSON.stringify(expected) || result.inventory_path !== INVENTORY_PATHS[record.request.target.kind]) {
-          throw inventoryError("source_change_invalid", "Inventory promotion may change only the intake register and selected active inventory.");
+        if (result.inventory_path !== INVENTORY_PATHS[record.request.target.kind]) {
+          throw inventoryError("source_change_invalid", "Inventory promotion changed the selected inventory path.");
         }
+        await verifyPreparedFiles(source, result);
         return {
           ...result,
           branch: promotionBranch(record),
           base_commit: revision,
-          content_digest: inventoryDigest({ intake: result.intake_text, inventory: result.inventory_text }),
+          content_digest: inventorySourceDigest(result),
         };
       });
     },
@@ -267,18 +290,16 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
           branch: lifecycleBranch(record),
           at: record.history.find((event) => event.status === "preparing").at,
         });
-        const changed = (await git(source, "diff", "--name-only")).split("\n").filter(Boolean).sort();
-        const expected = [INVENTORY_HISTORY, INVENTORY_PATHS[record.request.target.kind]].sort();
-        if (JSON.stringify(changed) !== JSON.stringify(expected) ||
-            result.inventory_path !== INVENTORY_PATHS[record.request.target.kind] ||
+        if (result.inventory_path !== INVENTORY_PATHS[record.request.target.kind] ||
             result.history_path !== INVENTORY_HISTORY) {
-          throw inventoryError("source_change_invalid", "Inventory lifecycle may change only the selected active inventory and append-only history.");
+          throw inventoryError("source_change_invalid", "Inventory lifecycle changed the selected inventory or history path.");
         }
+        await verifyPreparedFiles(source, result);
         return {
           ...result,
           branch: lifecycleBranch(record),
           base_commit: revision,
-          content_digest: inventoryDigest({ inventory: result.inventory_text, history: result.history_text }),
+          content_digest: inventorySourceDigest(result),
         };
       });
     },

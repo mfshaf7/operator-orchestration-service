@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { createDeliveryArtLifecycleSourceAdapter } from "./lifecycle-cli-adapters.js";
 import { createDeliveryArtSourceExecutorServer } from "./source-executor.js";
+import { createPrototypeSourceAdapter } from "../source-authoring/prototype-source-adapter.js";
+import { createRepositoryOwnerBootstrapSourceAdapter } from "../repository-owner-bootstrap/source-adapter.js";
 import {
   createConfiguredAgentSourceIdentityAdapter,
   createDeliveryArtWorkSessionSourceAdapter,
@@ -38,11 +40,14 @@ if (existsSync(socketPath)) {
   rmSync(socketPath);
 }
 
+const agentSourceIdentity = createConfiguredAgentSourceIdentityAdapter();
 const server = createDeliveryArtSourceExecutorServer({
   adapters: {
+    bootstrapSource: createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, stateRoot: path.join(resultStoreRoot, "owner-bootstrap") }),
+    prototypeSource: createPrototypeSourceAdapter({ workspaceRoot, agentSourceIdentity }),
     lifecycleSource: createDeliveryArtLifecycleSourceAdapter({ providerId: executorId }),
     workSource: createDeliveryArtWorkSessionSourceAdapter({
-      agentSourceIdentity: createConfiguredAgentSourceIdentityAdapter(),
+      agentSourceIdentity,
       workspaceRoot,
     }),
   },

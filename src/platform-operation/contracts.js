@@ -1,10 +1,20 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
+import {
+  assertSourceCredentialOperationReceipt as assertSourceCredentialReceipt,
+  assertSourceCredentialTimestamp,
+  normalizeSourceCredentialOperationInput as normalizeSourceCredentialInput,
+  SOURCE_CREDENTIAL_ACTIONS,
+} from "./source-credentials.js";
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const URI = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+
+export function platformOperationIdFor(commandId) {
+  return `platform-operation:${canonicalDigest({ command_id: commandId }).slice(7, 31)}`;
+}
 
 export const PLATFORM_OPERATION_ACTIONS = Object.freeze([
   "dev-integration.request-profile",
@@ -17,6 +27,7 @@ export const PLATFORM_OPERATION_ACTIONS = Object.freeze([
   "dev-integration.promote-check",
   "governed-release.execute-step",
   "governed-release.change-runtime-lifecycle",
+  ...SOURCE_CREDENTIAL_ACTIONS,
 ]);
 
 export const PLATFORM_OPERATION_STATES = Object.freeze([
@@ -162,7 +173,8 @@ export function normalizePlatformOperationCommand(value) {
     subject: normalizeSubject(value.subject),
     capability_id: identifier(value.capability_id, "capability_id"),
     action: enumValue(value.action, PLATFORM_OPERATION_ACTIONS, "action"),
-    input: boundedInput(value.input),
+    input: SOURCE_CREDENTIAL_ACTIONS.includes(value.action)
+      ? normalizeSourceCredentialInput(value.input) : boundedInput(value.input),
     requested_at: timestamp(value.requested_at, "requested_at"),
     intent_digest: digest(value.intent_digest, "intent_digest"),
     approval: normalizeApproval(value.approval),
@@ -170,7 +182,9 @@ export function normalizePlatformOperationCommand(value) {
   if (command.schema_version !== 1) {
     invalid("schema_version", "must be 1");
   }
-  const expectedKind = command.action.startsWith("dev-integration.")
+  const expectedKind = SOURCE_CREDENTIAL_ACTIONS.includes(command.action)
+    ? "dev-integration-profile"
+    : command.action.startsWith("dev-integration.")
     ? command.action === "dev-integration.request-profile"
       ? "profile-request"
       : "dev-integration-profile"
@@ -179,6 +193,10 @@ export function normalizePlatformOperationCommand(value) {
       : "product-release";
   if (command.subject.kind !== expectedKind) {
     invalid("subject.kind", `must be ${expectedKind} for ${command.action}`);
+  }
+  if (SOURCE_CREDENTIAL_ACTIONS.includes(command.action) &&
+      (command.input.source_intent.operator_id !== command.actor_ref || command.capability_id !== command.action)) {
+    invalid("input.source_intent", "must bind the accountable actor and exact source capability");
   }
   const expectedDigest = canonicalDigest(platformOperationIntent(command));
   if (command.intent_digest !== expectedDigest) {
@@ -241,8 +259,8 @@ export function assertPlatformOperationProjection(value, command = null) {
   boolean(value.retryable, "operation.retryable");
   boolean(value.cancel_available, "operation.cancel_available");
   assertBlocker(value.blocker, "operation.blocker");
-  assertFailure(value.failure, "operation.failure");
-  assertReceipt(value.receipt, "operation.receipt");
+  assertFailure(value.failure, "operation.failure", value.action);
+  assertReceipt(value.receipt, "operation.receipt", value.action, command);
   nullableIdentifier(value.safe_log_ref, "operation.safe_log_ref");
   timestamp(value.updated_at, "operation.updated_at");
   if (!Array.isArray(value.events) || value.events.length > 1024) {
@@ -393,24 +411,33 @@ function assertBlocker(value, label) {
   identifier(value.next_action, `${label}.next_action`);
 }
 
-function assertFailure(value, label) {
+function assertFailure(value, label, action) {
   if (value === null) return;
   plainObject(value, label);
-  exactFields(value, FAILURE_FIELDS, label);
+  const sourceRetry = SOURCE_CREDENTIAL_ACTIONS.includes(action) &&
+    ["platform_source_issuance_uncertain", "platform_source_revocation_expiry_pending"].includes(value.code);
+  exactFields(value, sourceRetry ? new Set([...FAILURE_FIELDS, "retry_after"]) : FAILURE_FIELDS, label);
   identifier(value.code, `${label}.code`);
   text(value.detail, `${label}.detail`, 2048);
   identifier(value.owner, `${label}.owner`);
+  if (sourceRetry) assertSourceCredentialTimestamp(value.retry_after, `${label}.retry_after`);
 }
 
-function assertReceipt(value, label) {
+function assertReceipt(value, label, action, command) {
   if (value === null) return;
   plainObject(value, label);
-  exactFields(value, RECEIPT_FIELDS, label);
+  const sourceSuccess = SOURCE_CREDENTIAL_ACTIONS.includes(action) && value.outcome === "succeeded";
+  exactFields(value, sourceSuccess ? new Set([...RECEIPT_FIELDS, "source_credential"]) : RECEIPT_FIELDS, label);
   identifier(value.receipt_ref, `${label}.receipt_ref`);
   enumValue(value.outcome, ["succeeded", "failed", "cancelled"], `${label}.outcome`);
   timestamp(value.recorded_at, `${label}.recorded_at`);
   identifier(value.source_version, `${label}.source_version`);
   enumValue(value.effect, ["verified", "none", "partial"], `${label}.effect`);
+  if (sourceSuccess) {
+    if (value.effect !== "verified") invalid(`${label}.effect`, "must be verified for a successful source credential effect");
+    const receipt = assertSourceCredentialReceipt(value.source_credential, command);
+    if (receipt.action !== action) invalid(`${label}.source_credential.action`, "must match its operation");
+  }
 }
 
 function assertEvent(value, label, expectedSequence) {

@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 parser = argparse.ArgumentParser()
-parser.add_argument("command", choices=("prepare", "readback", "state"))
+parser.add_argument("command", choices=("prepare", "readback", "state", "proposed-source-owner"))
 parser.add_argument("--source-root", type=Path, required=True)
 parser.add_argument("--input", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
@@ -20,8 +20,13 @@ from workspace_intake import (
     load_yaml,
 )
 
-value = json.loads(args.input.read_text())
-if args.command == "state":
+value = json.loads(sys.stdin.read() if str(args.input) == "-" else args.input.read_text())
+if args.command == "proposed-source-owner":
+    from workspace_repo_registration import proposed_source_owner_authority
+    result = proposed_source_owner_authority(
+        args.source_root, value["target"]["name"], value["expected_provider_repository"],
+    )
+elif args.command == "state":
     target = value["target"]
     result = current_state(args.source_root, target["kind"], target["name"])
 elif args.command == "prepare":
@@ -44,4 +49,8 @@ else:
         "observed_at": value["at"], "record": record,
         "record_digest": canonical_digest(record), "register_digest": canonical_digest(register),
     })
-args.output.write_text(json.dumps(result, ensure_ascii=False))
+encoded = json.dumps(result, ensure_ascii=False)
+if str(args.output) == "-":
+    sys.stdout.write(encoded)
+else:
+    args.output.write_text(encoded)

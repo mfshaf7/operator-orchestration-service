@@ -10,6 +10,10 @@
     "provider_principal": "mfshaf7-agent-gary[bot]",
     "app_id": 4907049,
     "installation_id": 160815600,
+    "installation_accounts": [
+      { "login": "mfshaf7", "id": 244414185, "type": "User", "installation_id": 160815600 },
+      { "login": "mfshaf7-workspace", "id": 322605984, "type": "Organization", "installation_id": 172173010 }
+    ],
     "git_author_name": "Agent Gary",
     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
     "human_reviewer_id": "mfshaf7"
@@ -17,9 +21,9 @@
   "authority": {
     "platform_definition": {
       "repo": "platform-engineering",
-      "revision": "58c66e6320484fba3eb9f46de5461863b835f71d",
+      "revision": "72c3b13cf20329aaff34146c587fe2969b9d9a03",
       "path": "security/agent-source-identity.yaml",
-      "digest": "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01"
+      "digest": "sha256:5d5012280d8abb5494b5604d6540e195027562966fe0ec204d593925d34b0a85"
     },
     "repository_inventory": {
       "repo": "workspace-governance",

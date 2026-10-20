@@ -14,10 +14,12 @@ completed ART items are historical evidence, not live feature flags.
 - [Proposal Target Application](proposal-target-application-operator-surface.md)
 - [Workspace Intake](workspace-intake-operator-surface.md)
 - [Workspace Inventory](workspace-inventory-operator-surface.md)
+- [Repository Owner Bootstrap](repository-owner-bootstrap-operator-surface.md)
 - [Lifecycle Transition Journal](lifecycle-transition-operator-surface.md)
 
 ## Prototype
 
+- [Prototype Source Authoring](prototype-source-authoring-operator-surface.md)
 - [Prototype Landing](prototype-landing-operator-surface.md)
 - [Prototype Maturity](prototype-maturity-operator-surface.md)
 - [Prototype Delivery Application](prototype-delivery-application.md)
@@ -37,6 +39,7 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Shared Runtime Controls
 
+- [Platform Operations And Source Authorization](platform-operation-adapter.md)
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
 - [Agent Console Orchestration](agent-console-operator-surface.md)
 - [Agent Action Enforcement](agent-action-enforcement.md)

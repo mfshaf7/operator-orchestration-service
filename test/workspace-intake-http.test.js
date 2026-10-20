@@ -49,3 +49,18 @@ test("unconfigured runtime, wrong credential and shared-secret fallback cannot i
   assert.equal((await invoke(createApp({ config: config() }), { secret: "wrong" })).code, 401);
   assert.equal((await invoke(createApp({ config: config(true), workspaceIntakeService: { submit() { throw new Error("must not execute"); } } }))).code, 403);
 });
+
+test("retained request listing is authenticated, exact-selector and read-only", async () => {
+  const calls = [];
+  const app = createApp({ config: config(), workspaceIntakeService: {
+    list: async input => { calls.push(input); return { schema_version: 1, workflow_id: "workspace-intake", records: [], revision: 0, updated_at: null, next_cursor: null }; },
+    submit: () => { throw new Error("Listing must not submit."); },
+  } });
+  const url = "/v1/workspace-intake/requests?target_kind=repo&target_name=example-repository&custody_request_id=repository-custody-request%3Aexample";
+  assert.equal((await invoke(app, { method: "GET", url, body: "" })).code, 200);
+  assert.deepEqual(calls, [{ callerId: caller, input: { target: { kind: "repo", name: "example-repository" }, custody_request_id: "repository-custody-request:example" } }]);
+  assert.equal((await invoke(app, { method: "GET", url: `${url}&force=true`, body: "" })).code, 400);
+  assert.equal((await invoke(app, { method: "GET", url: `${url}&target_name=second`, body: "" })).code, 400);
+  assert.equal((await invoke(app, { method: "GET", url, body: "", secret: "wrong" })).code, 401);
+  assert.equal(calls.length, 1);
+});

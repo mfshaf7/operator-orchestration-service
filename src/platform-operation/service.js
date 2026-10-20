@@ -5,8 +5,12 @@ import {
   assertPlatformOperationProjection,
   normalizePlatformOperationCommand,
   normalizePlatformOperationControl,
+  platformOperationIntent,
+  platformOperationIdFor,
 } from "./contracts.js";
 import { PlatformOperationStoreError } from "./store.js";
+import { SOURCE_CREDENTIAL_ACTIONS } from "./source-credentials.js";
+import { sourceCredentialUsable } from "./source-credential-authority.js";
 
 const TERMINAL_STATES = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -16,6 +20,7 @@ export function createPlatformOperationService({
   operatorBindings,
   providerClient,
   securityDecision,
+  sourceCredentialAuthority = null,
   store,
 }) {
   async function catalog({ callerId }) {
@@ -36,6 +41,9 @@ export function createPlatformOperationService({
         }
         const ownerCatalog = await providerClient.getCatalog();
         assertCommandAdmission(command, ownerCatalog);
+        if (SOURCE_CREDENTIAL_ACTIONS.includes(command.action)) {
+          await requireSourceAuthority().assertAuthorized({ callerId, operatorId: command.actor_ref, command });
+        }
         const now = clock().toISOString();
         let record = {
           schema_version: 1,
@@ -53,6 +61,7 @@ export function createPlatformOperationService({
         try {
           const providerOperation = await providerClient.submit(command);
           record = updateFromProvider(record, providerOperation, clock);
+          await observeSourceCredential(record);
         } catch (error) {
           record = blockedForProvider(record, error, clock);
         }
@@ -83,6 +92,7 @@ export function createPlatformOperationService({
         try {
           const providerOperation = await providerClient.readByCommand(current.command);
           const record = updateFromProvider(current, providerOperation, clock);
+          await observeSourceCredential(record);
           put(record);
           emitAudit(audit, record, callerId, "reconciled");
           return publicProjection(record, { reconciled: true });
@@ -136,6 +146,12 @@ export function createPlatformOperationService({
         } else {
           assertControlAvailable(current, controlRequest);
         }
+        if (SOURCE_CREDENTIAL_ACTIONS.includes(current.command.action)) {
+          if (controlRequest.action === "cancel") {
+            throw new HttpError(409, "platform_source_revoke_required", "Use exact source-intent revocation, not generic worker cancellation.");
+          }
+          await requireSourceAuthority().assertAuthorized({ callerId, operatorId: controlRequest.operator_id, command: current.command });
+        }
         const providerOperationId = current.provider_operation?.operation_id;
         if (!providerOperationId) {
           throw new HttpError(
@@ -169,6 +185,7 @@ export function createPlatformOperationService({
             controlRequest,
           );
           record = updateFromProvider(record, providerOperation, clock);
+          await observeSourceCredential(record);
           record = updateControlStatus(record, controlRequest.idempotency_key, "confirmed", clock);
         } catch (error) {
           record = blockedForProvider(record, error, clock);
@@ -191,7 +208,109 @@ export function createPlatformOperationService({
     }
   }
 
-  return { catalog, control, get, list, submit };
+  function requireSourceAuthority() {
+    if (!sourceCredentialAuthority) throw new HttpError(503, "platform_source_authority_unavailable", "Canonical source credential authorization is not configured.");
+    return sourceCredentialAuthority;
+  }
+  async function observeSourceCredential(record) {
+    if (SOURCE_CREDENTIAL_ACTIONS.includes(record.command.action)) {
+      await requireSourceAuthority().observe({ command: record.command, projection: record.provider_operation });
+    }
+  }
+  // This is called only by an actual approved source action, never by GET,
+  // preflight, preparation, or a background credential timer.
+  async function ensureSourceCredential({ callerId, operatorId, previousIntentId = null, ...scope }) {
+    assertOperator(operatorBindings, callerId, operatorId);
+    let binding = await requireSourceAuthority().leaseContext({ callerId, operatorId, ...scope });
+    let receipt = binding.credential_receipt;
+    const confirmSuccessor = () => {
+      if (previousIntentId) requireSourceAuthority().assertApprovedSuccessor({ callerId, operatorId, ...scope, previousIntentId });
+    };
+    if (sourceCredentialUsable(binding, clock())) { confirmSuccessor(); return; }
+    let operation;
+    if (!receipt) {
+      // A lost issue acknowledgement is reconciled by its original identity;
+      // do not replace an uncertain mint with a newly named renewal command.
+      operation = await get({ callerId, operationId: operationIdFor({ command_id: binding.approval.command_id }) });
+    } else {
+      const command = await derivedSourceCommand(binding, "agent-source.renew");
+      operation = await submit({ callerId, input: command });
+      if (!["succeeded", "failed", "cancelled"].includes(operation.state)) operation = await get({ callerId, operationId: operation.operation_id });
+    }
+    const retryAfter = operation.provider_operation.failure?.retry_after;
+    if (operation.state === "failed" && operation.provider_operation.retryable && (!retryAfter || Date.parse(retryAfter) <= clock().getTime())) {
+      const key = canonicalDigest({ operation_id: operation.operation_id, attempt: operation.provider_operation.attempt }).slice(7, 39);
+      operation = await control({ callerId, operationId: operation.operation_id, input: {
+        schema_version: 1, control_id: `source-retry:${key}`, idempotency_key: `source-retry:${key}`,
+        action: "retry", operator_id: operatorId, reason: "Continue the same still-approved source credential intent without expanding its scope.",
+        requested_at: operation.updated_at,
+      } });
+    }
+    binding = await requireSourceAuthority().leaseContext({ callerId, operatorId, ...scope });
+    receipt = binding.credential_receipt;
+    if (sourceCredentialUsable(binding, clock())) { confirmSuccessor(); return; }
+    throw new HttpError(409, "platform_source_credential_pending", "The exact source credential operation must complete before this source command can start.", {
+      operation_id: operation.operation_id, next_action: operation.next_action,
+      retry_after: operation.provider_operation.failure?.retry_after ?? null,
+    });
+  }
+  async function derivedSourceCommand(binding, action) {
+    const suffix = canonicalDigest({ source_intent_digest: binding.source_intent_digest, session_id: binding.session_id,
+      action, prior_receipt_digest: action === "agent-source.revoke" ? null : binding.credential_receipt?.receipt_digest ?? null,
+    }).slice(7, 39);
+    const existing = store.get(operationIdFor({ command_id: `source-command:${suffix}` }));
+    if (existing) return normalizePlatformOperationCommand(existing.command);
+    const ownerCatalog = assertPlatformOperationCatalog(await providerClient.getCatalog());
+    const subjects = ownerCatalog.subjects.filter(subject => subject.capabilities.some(capability => capability.capability_id === action && capability.action === action));
+    if (subjects.length !== 1) throw new HttpError(409, "platform_source_capability_ambiguous", "The current owner catalog must identify one exact source credential capability subject.");
+    const subject = subjects[0];
+    const command = {
+      schema_version: 1, command_id: `source-command:${suffix}`, idempotency_key: `source-command:${suffix}`,
+      correlation_id: binding.source_intent.intent_id, causation_id: binding.approval.command_id,
+      actor_ref: binding.source_intent.operator_id,
+      subject: { kind: subject.kind, ref: subject.ref, expected_source_version: subject.source_version },
+      capability_id: action, action, input: { source_intent: binding.source_intent, session_id: binding.session_id },
+      requested_at: action === "agent-source.revoke" ? binding.approval.decided_at : binding.credential_receipt.recorded_at,
+    };
+    command.intent_digest = canonicalDigest(platformOperationIntent(command));
+    // This is execution under the retained explicit source scope, not a newly
+    // invented human approval. The original decision and time remain visible.
+    command.approval = { decision: "approved", operator_id: binding.approval.operator_id,
+      decision_ref: binding.approval.decision_ref, decided_at: binding.approval.decided_at, intent_digest: command.intent_digest };
+    return normalizePlatformOperationCommand(command);
+  }
+  return {
+    catalog, control, get, list, submit,
+    ensureSourceCredential,
+    async withSourceLease({ callerId, operatorId, ...scope }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      return requireSourceAuthority().withSourceLease({ callerId, operatorId, ...scope });
+    },
+    async stopSourceCredential({ callerId, operatorId, ...scope }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      const binding = await requireSourceAuthority().leaseContext({ callerId, operatorId, ...scope, stopping: true });
+      await requireSourceAuthority().requestStop({ callerId, operatorId, intentId: binding.source_intent.intent_id });
+      const command = await derivedSourceCommand(binding, "agent-source.revoke");
+      return submit({ callerId, input: command });
+    },
+    async prepareSourceCredential({ callerId, input }) {
+      const operatorId = assertCaller(operatorBindings, callerId);
+      return requireSourceAuthority().prepare({ callerId, operatorId, input });
+    },
+    async readSourcePreparation({ callerId, intentId }) {
+      const operatorId = assertCaller(operatorBindings, callerId);
+      return requireSourceAuthority().read({ callerId, operatorId, intentId });
+    },
+    async stopUnissuedSourcePreparation({ callerId, operatorId, intentId }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      return requireSourceAuthority().stopUnissued({ callerId, operatorId, intentId });
+    },
+    async listSourcePreparations({ callerId, limit = 100 }) {
+      const operatorId = assertCaller(operatorBindings, callerId);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "platform_source_preparation_limit_invalid", "Source preparation limit must be between 1 and 200.");
+      return { workflow_id: "source-credential-preparation-list", preparations: requireSourceAuthority().list({ callerId, operatorId, limit }) };
+    },
+  };
 }
 
 function updateControlStatus(record, idempotencyKey, status, clock) {
@@ -400,7 +519,7 @@ function nextAction(operation) {
 }
 
 function operationIdFor(command) {
-  return `platform-operation:${canonicalDigest({ command_id: command.command_id }).slice(7, 31)}`;
+  return platformOperationIdFor(command.command_id);
 }
 
 function assertCaller(bindings, callerId) {
@@ -411,6 +530,7 @@ function assertCaller(bindings, callerId) {
       "The authenticated caller is not admitted to the Platform operation surface.",
     );
   }
+  return bindings[callerId];
 }
 
 function assertOperator(bindings, callerId, operatorId) {

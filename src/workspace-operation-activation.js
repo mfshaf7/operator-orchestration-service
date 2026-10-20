@@ -2,8 +2,8 @@ const COMMIT = /^[0-9a-f]{40}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 
 export const workspaceOperationActivation = Object.freeze({
-  authorityCommit: "e3864940dd6961426de93fa5cdb2215a86a5aca1",
-  readinessCommit: "0d0b686ea78397d91f64b498d78a4aa6651e1c05",
+  authorityCommit: "5746fc7bf2b68cf1e21ce8a3981fc716b05e7eb2",
+  readinessCommit: "f789a19c06f0896774a09ee8942c88c518c7bd70",
   contractWorkRef: "openproject://work_packages/1206",
   orchestrationWorkRef: "openproject://work_packages/1208",
   consoleWorkRef: "openproject://work_packages/1209",

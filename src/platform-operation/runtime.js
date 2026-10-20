@@ -3,8 +3,9 @@ import { assertPlatformOperationSecurityDecision } from "./contracts.js";
 import { createPlatformOperationProviderClient } from "./provider-client.js";
 import { createPlatformOperationService } from "./service.js";
 import { createPlatformOperationStore } from "./store.js";
+import { createSourceCredentialAuthority } from "./source-credential-authority.js";
 
-export function createPlatformOperationRuntime({ audit, config, fetchImpl } = {}) {
+export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourceCredentialResolvers } = {}) {
   if (!config?.enabled) return null;
   if (config.profile !== "dev-integration") {
     throw new HttpError(
@@ -21,6 +22,7 @@ export function createPlatformOperationRuntime({ audit, config, fetchImpl } = {}
     );
   }
   const securityDecision = assertPlatformOperationSecurityDecision(config);
+  const store = createPlatformOperationStore({ root: config.stateRoot });
   return createPlatformOperationService({
     audit,
     operatorBindings: config.operatorBindings,
@@ -32,6 +34,9 @@ export function createPlatformOperationRuntime({ audit, config, fetchImpl } = {}
       fetchImpl,
     }),
     securityDecision,
-    store: createPlatformOperationStore({ root: config.stateRoot }),
+    sourceCredentialAuthority: createSourceCredentialAuthority({
+      providerCallerId: config.providerCallerId, resolvers: sourceCredentialResolvers, store,
+    }),
+    store,
   });
 }

@@ -19,16 +19,21 @@ const ARTIFACT_TYPE = "delivery_art_source_action_result";
 const REPLAYABLE_ACTIONS = new Set([
   "lifecycle.acquire-evidence",
   "work.apply-source-realization",
+  "prototype.apply-source-realization",
+  "bootstrap.apply-source-realization",
+  "bootstrap.ensure-owned-worktree",
 ]);
 
 function isReplayableResult(action, result) {
   if (!REPLAYABLE_ACTIONS.has(action)) return false;
+  if (action === "bootstrap.ensure-owned-worktree") return typeof result?.path === "string" && Array.isArray(result.resources) &&
+    result.resources.length === 3 && result.resources.every(resource => resource.ownership_provenance === "session-created");
   if (action === "lifecycle.acquire-evidence") {
     return result?.artifact_type === "delivery_art_owner_evidence_receipt" &&
       Array.isArray(result.results) &&
       result.results.every((entry) => entry?.result === "pass");
   }
-  if (action === "work.apply-source-realization") {
+  if (["work.apply-source-realization", "prototype.apply-source-realization", "bootstrap.apply-source-realization"].includes(action)) {
     return result?.schema_version === 1 &&
       result?.outcome === "committed" &&
       /^source-realization-receipt:/.test(result?.receipt_id ?? "") &&
@@ -53,6 +58,14 @@ function privateDirectory(root) {
 }
 
 function contextBinding(context) {
+  if (context.bootstrap_request_id) return {
+    caller_id: context.caller_id, operator_id: context.operator_id, session_id: context.session_id ?? null,
+    owner_repo: context.owner_repo, bootstrap_request_id: context.bootstrap_request_id,
+  };
+  if (context.prototype_id) return {
+    caller_id: context.caller_id, operator_id: context.operator_id, session_id: context.session_id ?? null,
+    prototype_id: context.prototype_id, source_request_id: context.source_request_id,
+  };
   return {
     caller_id: context.caller_id,
     operator_id: context.operator_id,

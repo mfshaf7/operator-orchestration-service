@@ -15,6 +15,7 @@ import path from "node:path";
 
 import { canonicalDigest } from "./canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+import { createCanonicalSourceRepositoryReader } from "./source-repository-admission.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
   DeliveryArtEvidenceAcquisitionError,
@@ -126,6 +127,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   changeDirectory = (target) => process.chdir(target),
   currentDirectory = () => process.cwd(),
   execFileSyncImpl = execFileSync,
+  worktreeRelativePath = deliveryArtWorktreeRelativePath,
   workspaceRoot,
 } = {}) {
   if (!workspaceRoot) {
@@ -133,7 +135,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function canonicalRepo(ownerRepo) {
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(String(ownerRepo))) {
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(String(ownerRepo))) {
       throw new Error(`Owner repository name is invalid: ${ownerRepo}.`);
     }
     const repoRoot = path.join(workspaceRoot, ownerRepo);
@@ -153,7 +155,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function expectedWorktreePath(session) {
-    return path.join(workspaceRoot, deliveryArtWorktreeRelativePath(session));
+    return path.join(workspaceRoot, worktreeRelativePath(session));
   }
 
   function localBranchHead(repoRoot, branch) {
@@ -662,6 +664,13 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     return agentSourceIdentity.inspectRepositoryAdmission({ session });
   }
 
+  async function inspectSourceCredentialBinding(session) {
+    if (typeof agentSourceIdentity?.sourceIntentBinding !== "function") {
+      throw new Error("The admitted source identity metadata adapter is unavailable.");
+    }
+    return agentSourceIdentity.sourceIntentBinding({ session });
+  }
+
   async function inspectConfiguredPath(
     session,
     { conformanceCases = [], requiredEvidenceKinds = [] } = {},
@@ -877,7 +886,13 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   async function captureRealizationContext(session, { requestedPaths = [] } = {}) {
-    const worktree = await ensureWorktree(session);
+    const worktree = await resolveWorktree(session);
+    if (!worktree) {
+      const error = new Error("Prepare or reconstruct the managed worktree through authorized work continuation before capturing source context.");
+      error.code = "delivery_art_source_realization_worktree_missing";
+      throw error;
+    }
+    workspaceRelativePath(worktree);
     const headCommit = command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree);
     const status = command(
       execFileSyncImpl,
@@ -1489,6 +1504,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectConfiguredPath,
     inspectRepositoryAdmission,
+    inspectSourceCredentialBinding,
     inspectResourceOwnership,
     inspectPullRequest,
     inspectAgentSource,
@@ -1509,13 +1525,23 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
 export function createConfiguredAgentSourceIdentityAdapter({
   env = process.env,
+  credentialPurpose = null,
+  bootstrapBoundary = null,
 } = {}) {
   const enabled = ["1", "true", "yes", "on"].includes(
     String(env.OOS_AGENT_SOURCE_IDENTITY_ENABLED ?? "").trim().toLowerCase(),
   );
   return createAgentSourceIdentityAdapter({
     enabled,
+    credentialPurpose,
+    bootstrapBoundary,
     credentialRoot: resolveAgentSourceCredentialRoot(env),
+    ...(enabled && !bootstrapBoundary && env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED === "true"
+      ? { repositoryReader: createCanonicalSourceRepositoryReader({
+        authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
+        python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3",
+      }) }
+      : {}),
     ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
       ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }
       : {}),

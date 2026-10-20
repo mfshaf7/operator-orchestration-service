@@ -70,6 +70,13 @@ const workItemId = {
   pattern: "^(?:work-item-)?[1-9][0-9]*$",
 };
 
+const sourceAuthorization = {
+  type: "object", additionalProperties: false, required: ["intent_ref", "session_id"],
+  properties: { intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
+    session_id: { type: "string", minLength: 1 }, revision: { type: "string", format: "date-time" },
+    state: { enum: ["revocation-pending", "revocation-required", "revoked"] }, operation_ref: { type: ["string", "null"] } },
+};
+
 const components = {
   DeliveryArtArchitecturePacketDraftDecisionV1: {
     type: "object",
@@ -308,6 +315,7 @@ const components = {
         properties: {
           command_id: commandId,
           expected_session_revision: nullableRevision,
+          source_intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
           decision: { $ref: "#/components/schemas/DeliveryArtWorkSessionDecisionV1" },
         },
       },
@@ -325,6 +333,7 @@ const components = {
         properties: {
           command_id: commandId,
           expected_session_revision: { type: "string", format: "date-time" },
+          source_intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
         },
       },
     },
@@ -341,6 +350,7 @@ const components = {
         properties: {
           command_id: commandId,
           expected_session_revision: { type: "string", format: "date-time" },
+          source_intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
           recovery: {
             type: "object",
             additionalProperties: false,
@@ -760,6 +770,7 @@ const components = {
     ],
     properties: {
       workflow_id: { const: "delivery-art-work-session" },
+      source_authorization: sourceAuthorization,
       delivery_id: {
         oneOf: [
           { type: "string", pattern: "^delivery-[1-9][0-9]*$" },
@@ -802,6 +813,11 @@ const components = {
       },
       lifecycle_context: {
         $ref: "#/components/schemas/DeliveryArtLifecycleContextStatusV1",
+      },
+      source_authorization: {
+        type: "object", additionalProperties: false, required: ["intent_ref", "session_id"],
+        properties: { intent_ref: { type: "string", pattern: "^source-intent:" }, session_id: { type: "string" },
+          state: { enum: ["revoked", "revocation-pending", "revocation-required"] }, operation_ref: { type: ["string", "null"] } },
       },
       closeout: {
         $ref: "#/components/schemas/DeliveryArtLandingUnitCloseoutV1",
@@ -893,6 +909,7 @@ const components = {
     properties: {
       schema_version: { const: 1 },
       workflow_id: { const: "delivery-art-source-realization" },
+      source_authorization: sourceAuthorization,
       session_id: { type: "string", minLength: 1 },
       work_item_id: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
       revision: nullableRevision,
@@ -1227,6 +1244,7 @@ const sourceRealizationOperation = ({ action, description, schemaName }) => ({
             required: ["realization"],
             properties: {
               realization: { $ref: `#/components/schemas/${schemaName}` },
+              source_intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
             },
           },
           example: sourceRealizationRequestExamples[action],

@@ -23,7 +23,7 @@ jobs:
           node-version: "22"
 
       - name: Install governance validator dependencies
-        run: python3 -m pip install pyyaml
+        run: python3 -m pip install pyyaml 'jsonschema[format-nongpl]==4.23.0'
 
       - name: Install broker dependencies
         run: npm ci
@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          cid="$(docker run -d --rm -p 18080:8080 \
+          cid="$(docker run -d --rm -p 127.0.0.1:18080:8080 \
             -e OPENPROJECT_BASE_URL=http://127.0.0.1:9999 \
             -e OPENPROJECT_API_TOKEN=test-token \
             -e OPENPROJECT_IDEA_TYPE_ID=1 \
@@ -84,8 +84,12 @@ jobs:
             -e OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID=2 \
             oos-api:test)"
           trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
-          sleep 2
-          curl --fail --silent http://127.0.0.1:18080/healthz | grep -q '"status":"live"'
+          if ! curl --fail --silent --show-error --retry 30 --retry-all-errors \
+            --retry-delay 1 --retry-max-time 30 --max-time 2 \
+            http://127.0.0.1:18080/healthz | grep -q '"status":"live"'; then
+            docker logs --tail 40 "$cid"
+            exit 1
+          fi
 
           docker run --rm oos-orchestration-worker:test \
             node src/orchestration-worker.js status |

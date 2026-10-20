@@ -312,6 +312,7 @@ export function createDeliveryArtWorkSessionRuntime({
   config,
   deliveryService,
   env = process.env,
+  sourceCredentials = null,
   store = createDeliveryArtWorkSessionRuntimeStore({ env }),
 } = {}) {
   const executorConfig = config?.deliveryArt?.workSession;
@@ -320,6 +321,7 @@ export function createDeliveryArtWorkSessionRuntime({
   }
 
   const sourceExecutor = createDeliveryArtSourceExecutorClient({
+    requireSourceLease: true,
     executorId: executorConfig.executorId,
     secret: executorConfig.executorSecret,
     socketPath: executorConfig.executorSocketPath,
@@ -421,6 +423,7 @@ export function createDeliveryArtWorkSessionRuntime({
     executor: sourceExecutor.executor,
     lifecycleContext,
     sourceRealization,
+    sourceCredentials,
     store,
   });
 }

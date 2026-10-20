@@ -6,7 +6,7 @@ import { createWorkspaceIntakeService } from "./service.js";
 import { createWgcfWorkspaceIntakeClient } from "./wgcf-client.js";
 import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 
-export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl }) {
+export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl, custodySourceReader, sourceOwnerReadinessReader }) {
   if (!config?.enabled) return null;
   if (!isWorkspaceOperationRuntimeEnabled(intakeManifest, config.profile)) {
     throw intakeError("activation_required", "Workspace Intake routine operation awaits the Console, Security, and Platform activation chain.", 503);
@@ -16,6 +16,8 @@ export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl }) {
   }
   return createWorkspaceIntakeService({
     audit,
+    custodySourceReader,
+    sourceOwnerReadinessReader,
     store: createWorkspaceIntakeStore({ root: config.stateRoot }),
     sourceClient: createWorkspaceIntakeSourceClient({ authorityRoot: config.authorityRoot, python: config.python,
       provider: createWorkspaceIntakeGitHubClient({ owner: config.owner, repositoryId: config.repositoryId, tokenFile: config.tokenFile, fetchImpl }),

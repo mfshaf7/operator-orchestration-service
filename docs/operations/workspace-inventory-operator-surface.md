@@ -8,11 +8,12 @@ runtime, or grant release authority.
 ## Availability
 
 The promotion, lifecycle, and read-only registry workflows are pinned to the
-merged Workspace Governance authority and WGCF readiness manifests from ART
-#1206 and #1207. OOS durable orchestration source is ready for the Console
-adapter, but routine mutation remains inactive. The Console adapter (#1209),
-Security decision (#1216), Platform composition (#1217), and composed
-operating proof (#1210) remain mandatory and ordered.
+reviewed Workspace Governance authority and WGCF readiness manifests in the
+existing #1206/#1207 operation chain. Routine availability comes from the exact
+activated Console/OOS/WGCF, Security decision, Platform composition and composed
+operating evidence, not this document or source readiness. This complete
+registration extension requires its own exact composed acceptance before use;
+it does not deactivate or recertify a previously accepted composition.
 
 The same closed runtime boundary applies to promotion and lifecycle changes.
 Source readiness, a prepared review, or a WGCF receipt does not activate normal
@@ -44,8 +45,9 @@ exact-repository provider identity, and a human owns review and merge.
    durable WGCF readiness receipt and, only when ready, prepares the owner
    mutation and opens or recovers one review.
 6. At `review-required`, inspect the returned review URL. The review must
-   contain exactly the admitted intake removal and one matching active
-   inventory addition. Complete exact-head validation and human review, then
+   contain the admitted intake removal, one matching active inventory addition
+   and the exact owner-derived registration companions described below.
+   Complete full owner validation, exact-head validation and human review, then
    merge through the provider. OOS has no merge endpoint.
 7. Continue again. OOS proves the reviewed head is in canonical `main`, reads
    the merged authority, and checks the active record against the approved
@@ -95,8 +97,8 @@ independent from posture.
    acknowledgement.
 4. POST `{}` to
    `/v1/workspace-inventory/lifecycle/requests/{request_id}/continue`. OOS reads
-   durable WGCF readiness, prepares exactly the selected inventory file plus
-   `contracts/workspace-inventory-history.yaml`, and opens or recovers one review.
+   durable WGCF readiness, prepares the selected inventory, append-only history
+   and exact owner-derived registration companions, and opens or recovers one review.
 5. At `review-required`, inspect and approve the exact head, then merge through
    the repository provider. OOS cannot merge it.
 6. Continue again. OOS proves the exact reviewed head is canonical, reconstructs
@@ -111,11 +113,24 @@ review; a concurrent merge is reconciled as success.
 ## Runtime Boundary
 
 The source adapter invokes only the pinned Workspace Governance owner command
-inside a temporary Git checkout. A promotion preparation may modify exactly
-`contracts/intake-register.yaml` and the selected active inventory file. A
-lifecycle preparation may modify exactly the selected active inventory file and
-`contracts/workspace-inventory-history.yaml`. Neither writes canonical `main`
-directly.
+inside a temporary Git checkout. Promotion binds its Intake/Inventory pair;
+lifecycle binds its Inventory/history pair. Both include only changed outputs
+from the existing generated metadata family. A qualified source-only repository
+also carries its exact minimal repo rule, bounded data-only routing index and
+conservative context declarations. Instructions outside that index, existing
+control/custom rules and raw-context policy are not writable routine data.
+Provider custody, admitted class/Security classification, real owner purpose
+and source-only boundaries remain explicit. No CI framework, Security decision,
+context parity, raw projection or runtime authority is invented by promotion.
+
+The private owner-produced file map binds the complete preparation digest.
+OOS compares it with actual changed and new source files; the provider creates
+one Git tree and verifies every path, regular file mode and exact byte at review
+and merged readback. Missing companions cannot become success. Retained older
+pair-only preparations keep their original recovery boundary, not new authority.
+Neither route writes canonical `main` directly. Unsupported control/Security
+owner registrations and core-owner posture changes return readiness findings
+requiring explicit reviewed owner source rather than failing after mutation.
 
 The registry projection uses the same isolated exact-revision read boundary.
 It flattens validated active records and derives candidates only from admitted
@@ -144,5 +159,5 @@ npm run test:workspace-inventory-source -- --authority-root <committed-workspace
 
 The contract tests also reject stale authority, stale WGCF custody, and
 premature runtime activation. The source tests use temporary repositories and a simulated provider. They
-prove exact two-file mutation, review-head denial, restart recovery, reviewed
+prove complete bounded owner-file mutation, review-head denial, restart recovery, reviewed
 merge readback, and replay-stable evidence without changing a live repository.

@@ -220,6 +220,12 @@ test("source realization stages CGG-bound output before exact acceptance and cre
   assert.equal(completed.state, "source-created");
   assert.equal(completed.next_action.code, "work-session-continue-required");
   assert.equal(getApplyCount(), 1);
+  const historical = await service.readCompletedCommand({ action: "continue", callerId: "governance-operations-console", operatorId: "operator:workspace-owner", request: acceptRequest, workItemId: "work-item-1285" });
+  assert.equal(historical.replayed, true);
+  assert.equal(historical.source_receipt, undefined);
+  assert.equal(historical.attempt.source_receipt.outcome, "committed");
+  await assert.rejects(service.readCompletedCommand({ action: "continue", callerId: "another-caller", operatorId: "operator:workspace-owner", request: acceptRequest, workItemId: "work-item-1285" }), { code: "delivery_art_source_realization_identity_mismatch" });
+  await assert.rejects(service.readCompletedCommand({ action: "continue", callerId: "governance-operations-console", operatorId: "operator:workspace-owner", request: { ...acceptRequest, accepted_change_set_digest: `sha256:${"f".repeat(64)}` }, workItemId: "work-item-1285" }), { code: "delivery_art_source_realization_replay_conflict" });
   const replayedAcceptance = await service.continue({
     callerId: "governance-operations-console",
     operatorId: "operator:workspace-owner",

@@ -1,9 +1,11 @@
 import { assertIntake, bindIntake, createIntakeEvaluation, intakeDigest, intakeError, intakeReference } from "./contracts.js";
 import { persistWorkflowFailure } from "../workflow-progress.js";
+import { custodyRequestFromIntakeSource, repositoryCustodyIntakeCandidate, repositoryCustodyIntakeAuthority } from "../repository-custody/intake-source.js";
 import {
   assertWorkspaceIntakeRequestCandidate,
   assertWorkspaceIntakeSourceCaller,
   assertWorkspaceIntakeSourceCandidate,
+  bindWorkspaceIntakeSourceCandidate,
 } from "./source-candidate.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "requires-action"]);
@@ -17,7 +19,8 @@ const TARGET_NAME = /^[a-z0-9][a-z0-9._-]*$/;
 const TARGET_KINDS = new Set(["repo", "product", "component"]);
 
 function preparationTarget(input) {
-  if (!input || Array.isArray(input) || Object.keys(input).join(",") !== "target") {
+  if (!input || Array.isArray(input) || !Object.hasOwn(input, "target") ||
+      Object.keys(input).some((key) => !["target", "repository_custody"].includes(key))) {
     throw intakeError("preparation_invalid", "Preparation requires exactly one target.", 400);
   }
   const target = input.target;
@@ -63,7 +66,63 @@ function assertCaller(record, callerId) {
   }
 }
 
-export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, clock = () => new Date(), audit }) {
+export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, sourceOwnerReadinessReader = null, clock = () => new Date(), audit }) {
+  async function list({ callerId, input }) {
+    if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "custody_request_id", "cursor"].includes(key)) ||
+        typeof input.custody_request_id !== "string" || input.custody_request_id.length > 256 || !input.custody_request_id.trim() ||
+        (input.cursor !== undefined && !/^[0-9a-f]{64}$/.test(input.cursor))) {
+      throw intakeError("list_invalid", "Request listing requires one exact repository custody selector and an optional opaque cursor.", 400);
+    }
+    const selected = preparationTarget({ target: input.target });
+    if (selected.kind !== "repo") throw intakeError("list_invalid", "Custody request listing requires a repository target.", 400);
+    if (typeof custodySourceReader !== "function") throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
+    const target = { ...selected, record_id: `repo:${selected.name}` };
+    const custody = repositoryCustodyIntakeAuthority({ result: await custodySourceReader(input.custody_request_id, { callerId }), target });
+    const retained = (await store.list()).filter(record => record.caller_id === callerId &&
+      record.request.target.kind === target.kind && record.request.target.name === target.name &&
+      custodyRequestFromIntakeSource(record.request.source) === input.custody_request_id);
+    retained.sort((left, right) => Date.parse(right.request.requested_at) - Date.parse(left.request.requested_at) ||
+      right.request.request_id.localeCompare(left.request.request_id));
+    const cursorFor = record => intakeDigest({ caller_id: callerId, target,
+      custody_request_id: input.custody_request_id, request_id: record.request.request_id }).slice(7);
+    let offset = 0;
+    if (input.cursor !== undefined) {
+      offset = retained.findIndex(record => cursorFor(record) === input.cursor) + 1;
+      if (!offset) throw intakeError("cursor_invalid", "Request cursor does not belong to this caller and custody target.", 400);
+    }
+    const page = retained.slice(offset, offset + 25);
+    const records = page.map(record => {
+      assertCaller(record, callerId);
+      if (record.request.source.digest !== custody.digest || !record.source_attestation) {
+        throw intakeError("storage_invalid", "Retained request does not bind its canonical custody receipt.", 503);
+      }
+      const candidate = bindWorkspaceIntakeSourceCandidate({ schema_version: 1, artifact_type: "workspace-intake-source-candidate",
+        source: record.request.source, target, requested_record: record.request.requested_record,
+        evidence_refs: record.source_attestation.evidence_refs });
+      if (candidate.candidate_digest !== record.source_attestation.candidate_digest) throw intakeError("storage_invalid", "Retained candidate binding is invalid.", 503);
+      return { request_id: record.request.request_id, requested_at: record.request.requested_at,
+        updated_at: record.history.at(-1).at, status: record.status, revision: record.history.length,
+        classification: record.request.requested_classification, candidate };
+    });
+    // Stay below the existing Console response budget, including its source
+    // envelope. Count and byte bounds both apply; never skip an omitted row.
+    while (records.length && Buffer.byteLength(JSON.stringify(records), "utf8") > 524288) records.pop();
+    if (page.length && !records.length) throw intakeError("list_record_large", "A retained request exceeds the bounded list projection.", 503);
+    return { schema_version: 1, workflow_id: "workspace-intake", target,
+      revision: retained.reduce((total, record) => total + record.history.length, 0),
+      pending_request_count: retained.filter(record => !TERMINAL.has(record.status)).length,
+      updated_at: retained.map(record => record.history.at(-1).at).sort().at(-1) ?? null,
+      custody_request_id: input.custody_request_id, records,
+      next_cursor: offset + records.length < retained.length ? cursorFor(page[records.length - 1]) : null };
+  }
+  async function custodyCandidate(callerId, requestId, target, requestedRecord) {
+    if (typeof custodySourceReader !== "function") {
+      throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
+    }
+    return repositoryCustodyIntakeCandidate({
+      result: await custodySourceReader(requestId, { callerId }), target, requestedRecord,
+    });
+  }
   async function transition(transaction, record, status, details = null) {
     transaction.assertHeld();
     record.status = status;
@@ -84,14 +143,42 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
       }
       let attestation = null;
       if (evaluation.request.source.class !== "direct") {
+        const custodyId = custodyRequestFromIntakeSource(evaluation.request.source);
+        if (custodyId !== null) {
+          const candidate = await custodyCandidate(callerId, custodyId, evaluation.request.target, evaluation.request.requested_record);
+          assertWorkspaceIntakeRequestCandidate(evaluation.request, candidate);
+          // This explicit mutating submit retains the attestation. Read-only
+          // preparation never writes a candidate or workflow record.
+          await tx.putCandidate({ candidate, attested_at: clock().toISOString(),
+            attested_by: "operator-orchestration-service" });
+        }
         attestation = tx.getCandidate(evaluation.request.source.ref);
         if (!attestation) {
           throw intakeError("source_candidate_not_found", "Source-owner attestation was not found.", 404);
         }
         assertWorkspaceIntakeRequestCandidate(evaluation.request, attestation.candidate);
       }
+      const domain = evaluation.request.requested_record ?? {}, behavior = domain.validation_behavior;
+      let sourceOwnerReadiness = null;
+      if (evaluation.request.requested_classification === "admitted" && evaluation.request.target.kind === "repo" &&
+          domain.provider_repository && domain.requires_security_bindings === false &&
+          behavior?.posture === "covered-by-owner-repo" && behavior.wgcf_graph_role === "product-runtime-source") {
+        if (typeof sourceOwnerReadinessReader !== "function") throw intakeError("source_owner_readiness_unavailable", "Source-only admission requires its actual completed owner controls and applicable current profile.", 503);
+        sourceOwnerReadiness = await sourceOwnerReadinessReader({ callerId, ownerRepo: evaluation.request.target.name, providerRepository: domain.provider_repository });
+        const { receipt_digest: proofDigest, ...proofBody } = sourceOwnerReadiness ?? {};
+        if (sourceOwnerReadiness?.schema_version !== 1 || sourceOwnerReadiness.scope !== "source-owner-controls-readiness" ||
+            proofDigest !== intakeDigest(proofBody) || !/^[0-9a-f]{40}$/.test(sourceOwnerReadiness.fetched_base ?? "") ||
+            !/^[0-9a-f]{40}$/.test(sourceOwnerReadiness.canonical_checkout_commit ?? "") ||
+            !/^sha256:[0-9a-f]{64}$/.test(sourceOwnerReadiness.evidence_profile_digest ?? "") ||
+            !/^oos:\/\/repository-owner-bootstrap\/requests\/[^/]+$/.test(sourceOwnerReadiness.source_request_ref ?? "") ||
+            !Number.isFinite(Date.parse(sourceOwnerReadiness.source_request_revision ?? "")) ||
+            sourceOwnerReadiness.owner_repo !== evaluation.request.target.name || sourceOwnerReadiness.app_acceptance !== false ||
+            sourceOwnerReadiness.inventory_admission !== false || sourceOwnerReadiness.runtime_activation !== false ||
+            intakeDigest(sourceOwnerReadiness.provider_repository) !== intakeDigest(domain.provider_repository)) throw intakeError("source_owner_readiness_invalid", "Owner-controls evidence does not bind this exact source-only entrant.");
+      }
       const record = {
         caller_id: callerId, binding_digest: binding, evaluation, request: evaluation.request,
+        ...(sourceOwnerReadiness ? { source_owner_readiness: structuredClone(sourceOwnerReadiness) } : {}),
         source_attestation: attestation ? {
           candidate_digest: attestation.candidate.candidate_digest,
           evidence_refs: [...attestation.candidate.evidence_refs],
@@ -130,6 +217,16 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
 
   async function prepare({ callerId, input }) {
     const target = preparationTarget(input);
+    let candidate = null;
+    if (input.repository_custody !== undefined) {
+      const custody = input.repository_custody;
+      if (!custody || Array.isArray(custody) || Object.keys(custody).sort().join(",") !== "request_id,requested_record" ||
+          typeof custody.request_id !== "string" || !custody.request_id.trim()) {
+        throw intakeError("preparation_invalid", "Repository custody preparation requires exactly request_id and requested_record.", 400);
+      }
+      candidate = await custodyCandidate(callerId, custody.request_id,
+        { ...target, record_id: `${target.kind}:${target.name}` }, custody.requested_record);
+    }
     const state = assertPreparationState(await sourceClient.state(target), target);
     const result = {
       schema_version: 1,
@@ -143,6 +240,7 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
         branch: "main",
       },
       canonical_mutation: false,
+      ...(candidate ? { source_candidate: candidate } : {}),
     };
     audit?.emit({
       actor: callerId,
@@ -236,6 +334,7 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
   }
 
   return {
+    list,
     attest,
     prepare,
     submit,

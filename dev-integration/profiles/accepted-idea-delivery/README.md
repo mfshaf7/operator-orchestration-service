@@ -122,6 +122,17 @@ projection is pending; `status` fails closed until the exact Secret, mount,
 repository owner, and repository id are present. No Intake or Inventory request
 may be treated as ready from broker health alone.
 
+The composed host source executor also consumes this same Platform-managed
+canonical record cache, selected from the reviewed complete-runtime policy.
+It requires the existing freshness checkpoint and exact WG control pin for
+every source admission/action; it does not fetch, mutate, or resurrect Intake.
+New owners resolve their provider identity from active Inventory and promotion
+lineage, whose admitted Intake entry has been atomically consumed. Missing or
+stale record authority denies composed source actions. Standalone ART and
+engineering recovery retain the original eleven-owner fixed-set lane; they
+cannot authorize a new organization owner. This adds no service, activation
+manifest, token-in-environment projection, or model permission.
+
 ## Delivery ART Custody Posture
 
 This persistent profile carries the OOS work-session and source-executor

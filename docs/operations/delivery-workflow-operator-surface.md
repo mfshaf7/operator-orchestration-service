@@ -868,8 +868,16 @@ exact-head, approval, check, and durable Review Packet gates remain mandatory.
 Credentials, private keys, and provider authorization headers are excluded
 from work-session state, logs, command results, and Review Packets. After a
 restart, missing, expired, rotated, revoked, suspended, or mismatched projected
-credentials fail closed and must be repaired through the Platform-owned
-identity operator surface.
+credentials fail closed. The normal Console source-authorization and recovery
+procedure is owned by the [Platform Operation Adapter](platform-operation-adapter.md#source-authorization-through-the-console):
+prepare canonical scope before a session exists, explicitly approve issue and
+bounded renewal/terminal revocation, then pass `command.source_intent_ref` to
+the real start. OOS retains that reference on the actual session and checks
+the owner's rotation window and live approval before normal source effects.
+The engineering-only Platform identity operator procedure remains recovery,
+not a hidden prerequisite for completing the normal Console path. These new
+controls still require exact-source Security acceptance and coherent activation;
+their presence in source is not live Console qualification.
 
 Owner-repo maintenance outside an accepted ART initiative uses the same source
 identity adapter without inventing an ART item. After Platform projects the
@@ -879,6 +887,17 @@ validation. Both commands derive the protected credential slot internally,
 verify the exact repository, branch, base, provider scope, and Agent Gary
 identity, and reject ambient human credential fallback. Operators must not
 locate credential files or invoke `git push` or `gh pr create` manually.
+
+Workflow-file maintenance additionally requires the operator's separate Gary
+Workflows grant and Platform `deliver --purpose workflow-maintenance
+--approval-ref <operator-approval-ref>`. Pass the same two arguments on each
+maintenance command. The private projection must match that exact purpose and
+approval as well as the existing repository, Landing Unit, branch and base.
+Ordinary work-session and realization consumers do not opt in and reject this
+projection. Normal tokens keep their original permissions. Revoke the exact
+maintenance credential after publication; do not repurpose it for app/model
+work or use a human token to bypass a missing grant. The explicit purpose is an
+engineering CI-edit boundary, not a universal requirement for every project.
 
 Before operating-readiness issuance or immutable Review Packet finalization,
 OOS generates and validates every covered work item's completion payload using

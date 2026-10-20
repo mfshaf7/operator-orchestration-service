@@ -56,6 +56,8 @@ import { DeliveryCloseoutServiceError } from "./delivery-closeout/service.js";
 import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
 import { DeliveryArtLifecycleContextError } from "./delivery-art/lifecycle-context.js";
 import { DeliveryArtLifecycleContextUpstreamError } from "./delivery-art/lifecycle-context-client.js";
+import { DeliveryArtSourceRealizationError } from "./delivery-art/source-realization.js";
+import { DeliveryArtSourceExecutorError } from "./delivery-art/source-executor.js";
 import {
   CONSOLE_SOURCE_PROJECTION_MEDIA_TYPE,
   ConsoleSourceAuthorityError,
@@ -1945,8 +1947,10 @@ async function handleGetDeliveryArtWorkSession({
   sendSourceProjection(response, request, result, () => ({
     recordRef: `openproject://work_packages/${workItemId.replace(/^work-item-/, "")}`,
     sourceOwner: "workspace-delivery-art",
-    sourceRevision: result.updated_at,
-    sourceTimestamp: result.updated_at,
+    sourceRevision: result.source_authorization?.revision ? sourceRevisionDigest(result) : result.updated_at,
+    sourceTimestamp: result.source_authorization?.revision
+      ? [result.updated_at, result.session_revision, result.source_authorization.revision].filter(value => Number.isFinite(Date.parse(value))).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)
+      : result.updated_at,
   }));
 }
 
@@ -2055,6 +2059,7 @@ async function handleDeliveryArtSourceRealization({
     callerId: caller.id,
     operatorId,
     request: body.realization,
+    ...(body.source_intent_ref === undefined ? {} : { sourceIntentRef: body.source_intent_ref }),
     signal: controller.signal,
     workItemId,
   }));
@@ -3620,7 +3625,24 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
     return;
   }
   assertDeliveryMutationAuthority(caller);
-  if (action === "prepare") {
+  if (action === "list") {
+    const parameters = new URL(request.url, "http://localhost").searchParams;
+    const keys = [...parameters.keys()];
+    if (new Set(keys).size !== keys.length || keys.some(key => !["target_kind", "target_name", "custody_request_id", "cursor"].includes(key))) {
+      throw new HttpError(400, "workspace_intake_list_invalid", "Request list parameters are invalid.");
+    }
+    const result = await workspaceIntakeService.list({ callerId: caller.id, input: {
+      target: { kind: parameters.get("target_kind"), name: parameters.get("target_name") },
+      custody_request_id: parameters.get("custody_request_id"),
+      ...(parameters.has("cursor") ? { cursor: parameters.get("cursor") } : {}),
+    } });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `oos://workspace-intake/requests?${parameters.toString()}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: result.updated_at ?? new Date().toISOString(),
+      eventSequence: result.revision,
+    }));
+  } else if (action === "prepare") {
     sendJson(response, 200, await workspaceIntakeService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
   } else if (action === "read") {
     const result = await workspaceIntakeService.project(requestId, { callerId: caller.id });
@@ -3718,6 +3740,64 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
       throw new HttpError(400, "workspace_inventory_lifecycle_command_invalid", "Continue and cancel require an empty object.");
     }
     sendJson(response, 200, await service.advance({ callerId: caller.id, requestId, action }));
+  }
+}
+
+async function handleRepositoryOwnerBootstrap({ action, config, repositoryOwnerBootstrapService, request, response, requestId = null, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository owner bootstrap");
+  assertDeliveryMutationAuthority(caller);
+  if (!repositoryOwnerBootstrapService) throw new HttpError(503, "repository_owner_bootstrap_not_active", "Owner bootstrap awaits its exact reviewed composition; no fixture, credential or CLI fallback is substituted.");
+  try {
+  if (["list", "read", "draft"].includes(action)) {
+    const query = [...url.searchParams.keys()];
+    if ((action !== "list" && query.length) || new Set(query).size !== query.length || query.some(key => !["owner_repo", "limit"].includes(key))) {
+      throw new HttpError(400, "repository_owner_bootstrap_query_invalid", "Use only the exact owner and bounded list limit.");
+    }
+    const args = action === "list" ? { callerId: caller.id, ownerRepo: url.searchParams.get("owner_repo"), limit: Number(url.searchParams.get("limit") ?? "25") }
+      : { callerId: caller.id, requestId };
+    const result = await repositoryOwnerBootstrapService[action](args);
+    const times = action === "list" ? result.records.map(record => record.updated_at).sort() : [];
+    sendSourceProjection(response, request, result, () => ({ sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
+      recordRef: action === "list" ? `oos://repository-owner-bootstrap/${args.ownerRepo}` : `oos://repository-owner-bootstrap/requests/${requestId}${action === "draft" ? "/draft" : ""}` }));
+    return;
+  }
+  const input = await readJsonBody(request, { canonical: true, maxBytes: action === "create" ? 73_728 : 65_536 });
+  sendJson(response, action === "create" ? 201 : 200, await repositoryOwnerBootstrapService[action]({ callerId: caller.id, requestId, input }));
+  } catch (error) {
+    if (error instanceof DeliveryArtSourceExecutorError) throw new HttpError(error.statusCode, "repository_owner_bootstrap_upstream_rejected",
+      "The isolated source owner did not complete this operation; inspect the same retained bootstrap request before retrying.",
+      { owner_code: /^[a-z0-9_.:-]{1,128}$/.test(error.code ?? "") ? error.code : "owner_rejected", retryable: Number(error.statusCode) >= 500 });
+    throw error;
+  }
+}
+
+async function handlePrototypeSource({ action, config, prototypeAuthoringService, request, response, requestId = null, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype source authoring");
+  if (!prototypeAuthoringService) throw new HttpError(503, "prototype_source_authoring_not_active", "Prototype source authoring awaits its reviewed composition and activation; no fixture or CLI fallback is substituted.");
+  try {
+    if (["list", "read", "draft"].includes(action)) {
+      const args = action === "list" ? { callerId: caller.id, limit: Number(url.searchParams.get("limit") ?? "100") } : { callerId: caller.id, requestId };
+      const result = await prototypeAuthoringService[action](args);
+      const times = action === "list" ? result.requests.map(record => record.updated_at).sort() : [];
+      sendSourceProjection(response, request, result, () => ({
+        recordRef: action === "list" ? "oos://prototype-source-requests" : `oos://prototype-source-requests/${requestId}${action === "draft" ? "/draft" : ""}`,
+        sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+        sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
+      }));
+      return;
+    }
+    assertDeliveryMutationAuthority(caller);
+    const input = await readJsonBody(request, { canonical: true, maxBytes: 65_536 });
+    sendJson(response, 200, await prototypeAuthoringService[action]({ callerId: caller.id, requestId, input }));
+  } catch (error) {
+    if (error instanceof DeliveryArtLifecycleContextUpstreamError || error instanceof DeliveryArtSourceRealizationError || error instanceof DeliveryArtSourceExecutorError) {
+      throw new HttpError(error.statusCode, "prototype_source_authoring_upstream_rejected", "The existing context, isolated-source or governed-model owner did not complete this operation; inspect the same retained Prototype request before retrying.",
+        { owner_code: /^[a-z0-9_.:-]{1,128}$/.test(error.code ?? "") ? error.code : "owner_rejected", retryable: Number(error.statusCode) >= 500 });
+    }
+    throw error;
   }
 }
 
@@ -5346,6 +5426,7 @@ async function handlePlatformOperation({
   action,
   config,
   operationId = null,
+  intentId = null,
   platformOperationService,
   request,
   response,
@@ -5359,6 +5440,15 @@ async function handlePlatformOperation({
     );
   }
   const caller = authenticateCaller(request, config);
+  if (action === "source-preparation-list") {
+    const limit = Number(url?.searchParams.get("limit") ?? "100");
+    sendJson(response, 200, await platformOperationService.listSourcePreparations({ callerId: caller.id, limit }));
+    return;
+  }
+  if (action === "source-preparation-read") {
+    sendJson(response, 200, await platformOperationService.readSourcePreparation({ callerId: caller.id, intentId }));
+    return;
+  }
   if (action === "catalog") {
     sendJson(response, 200, await platformOperationService.catalog({ callerId: caller.id }));
     return;
@@ -5379,6 +5469,12 @@ async function handlePlatformOperation({
     return;
   }
   const body = await readJsonBody(request);
+  if (action === "source-preparation-create") {
+    assertObject(body.preparation, "preparation");
+    if (Object.keys(body).length !== 1) throw new HttpError(400, "platform_source_preparation_invalid", "Only the closed preparation request is admitted.");
+    sendJson(response, 201, await platformOperationService.prepareSourceCredential({ callerId: caller.id, input: body.preparation }));
+    return;
+  }
   if (action === "submit") {
     assertObject(body.command, "command");
     sendJson(response, 202, await platformOperationService.submit({
@@ -5415,6 +5511,8 @@ export function createApp({
   proposalTargetApplicationService = null,
   productPublicationService = null,
   prototypeLandingService = null,
+  prototypeAuthoringService = null,
+  repositoryOwnerBootstrapService = null,
   prototypeMaturityService = null,
   prototypeClosureService = null,
   prototypeClosureOwnerReadbackService = null,
@@ -5871,6 +5969,10 @@ export function createApp({
         await handleWorkspaceIntake({ action: "submit", config, workspaceIntakeService, request, response });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/v1/workspace-intake/requests") {
+        await handleWorkspaceIntake({ action: "list", config, workspaceIntakeService, request, response });
+        return;
+      }
       if (request.method === "GET" && /^\/v1\/workspace-intake\/requests\/[^/]+$/.test(url.pathname)) {
         await handleWorkspaceIntake({ action: "read", config, workspaceIntakeService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
         return;
@@ -5933,6 +6035,87 @@ export function createApp({
       if (request.method === "GET" && url.pathname === "/v1/prototypes") {
         await handlePrototypeLanding({ action: "records", config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response });
         return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/repository-owner-bootstrap/preparations") {
+        await handleRepositoryOwnerBootstrap({ action: "prepare", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/repository-owner-bootstrap/requests") {
+        await handleRepositoryOwnerBootstrap({ action: "create", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/repository-owner-bootstrap/requests") {
+        await handleRepositoryOwnerBootstrap({ action: "list", config, repositoryOwnerBootstrapService, request, response, url }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "read", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/draft$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "draft", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/session$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "start", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/existing-checkout$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "materializeExisting", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/cancel-unapplied$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "cancelUnapplied", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/accept$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "accept", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/recover$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "recover", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/publish$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "publish", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/review$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "review", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/merge$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "merge", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/close$/.test(url.pathname)) {
+        await handleRepositoryOwnerBootstrap({ action: "close", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/prototype-source-requests") {
+        await handlePrototypeSource({ action: "list", config, prototypeAuthoringService, request, response, url }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/prototype-source-requests") {
+        await handlePrototypeSource({ action: "create", config, prototypeAuthoringService, request, response, url }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "read", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+\/draft$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "draft", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/session$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "startSession", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/generate$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "generate", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/accept$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "accept", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/recover$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "recover", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/cancel-attempt$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "cancelAttempt", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/publish$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "publish", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/review$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "review", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/merge$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "merge", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/close$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "close", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
       }
       if (request.method === "POST" && url.pathname === "/v1/prototype-landings/preparations") {
         await handlePrototypeLanding({ action: "prepare", config, prototypeLandingService, request, response });
@@ -6411,6 +6594,22 @@ export function createApp({
           request,
           response,
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/platform-operations/source-preparations") {
+        await handlePlatformOperation({ action: "source-preparation-list",
+          config, platformOperationService, request, response, url });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/platform-operations/source-preparations") {
+        await handlePlatformOperation({ action: "source-preparation-create",
+          config, platformOperationService, request, response, url });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/platform-operations\/source-preparations\/[^/]+$/.test(url.pathname)) {
+        await handlePlatformOperation({ action: "source-preparation-read", intentId: decodeURIComponent(url.pathname.split("/")[4]),
+          config, platformOperationService, request, response });
         return;
       }
 

@@ -7,8 +7,9 @@ repository, deploy runtime, or promote product maturity.
 ## Availability
 
 The OOS workflow is pinned to the merged Workspace Governance authority and
-WGCF readiness manifests from ART #1206 and #1207. Its durable orchestration
-source is ready for the Console adapter, but normal operation is not active.
+WGCF readiness manifests from ART #1206 and #1207. The manifest's
+`ready-for-console-adapter` state is source readiness, not standalone routine
+operation authority. Availability depends on the accepted runtime composition.
 The Console adapter (#1209), Security decision (#1216), Platform composition
 (#1217), and composed operating proof (#1210) remain mandatory and ordered.
 Do not interpret source readiness, a prepared review, or a WGCF receipt as
@@ -27,6 +28,69 @@ caller. This is the current authenticated service-caller boundary, not a claim
 that end-user identity delegation has already been implemented.
 
 ## Procedure
+
+### Preparing From An Existing Custody Result
+
+The source-qualified owner-admission extension consumes the exact WG/WGCF
+bundles on its review branch. Those producer pins are engineering proof, not
+merged runtime authority: replace them with actual canonical merged commits
+in the coordinated acceptance window before activation. Do not bypass bundle
+digests, caller bindings or the existing exact activation chain.
+
+For a repository already provisioned or linked through Repository Custody,
+the existing preparation API additionally accepts:
+
+```json
+{
+  "target": { "kind": "repo", "name": "selected-owner" },
+  "repository_custody": {
+    "request_id": "<actual retained custody request id>",
+    "requested_record": {
+      "kind": "repo",
+      "repo_class": "<operator-selected class>",
+      "requires_security_bindings": false,
+      "security_owner": null,
+      "notes": "<operator-reviewed classification context>"
+    }
+  }
+}
+```
+
+OOS reads its retained, integrity-checked successful custody result and derives
+the provider/full-name/numeric-ID binding. The target must match the custody
+request's selected workspace owner. A caller cannot substitute provider
+coordinates or turn a failed custody result into provenance. The returned
+optional `source_candidate` binds the exact custody receipt, provider readback,
+target and requested record. Preparation remains read-only: it creates neither
+an attestation nor an acknowledged Intake request. The existing body bound is
+4 KiB; no token, provider response or arbitrary file is accepted.
+
+Use that exact source/target/requested-record in the existing explicit Intake
+request and decision. At submit, OOS rereads custody, independently reconstructs
+and compares the source candidate, then retains its own immutable attestation
+inside the existing Intake store before acknowledgement. This is an explicit
+write, not a hidden preparation effect. The classification still needs the
+normal WGCF decision, human source review/merge and canonical readback.
+Custody alone is not proposed/admitted status, active Inventory or permission
+to issue ordinary source credentials. Direct, Prototype and Delivery source
+adapters retain their existing semantics; the Console cannot claim to be the
+authenticated OOS source owner at the generic attestation endpoint.
+
+### Classification And Reviewed Source
+
+For a new source-only repository requesting `admitted` with explicit provider
+binding and `covered-by-owner-repo` / `product-runtime-source` validation,
+complete the existing [owner bootstrap/checkout workflow](repository-owner-bootstrap-operator-surface.md)
+first. OOS rereads the actual current owner profile and requires completed
+canonical checkout/control evidence before acknowledging the admission. Missing
+or changed owner controls are a named prerequisite, not permission to create a
+dummy passing profile or defer the failure until cross-repo CI. Existing valid
+controls take the non-source checkout path without a fake PR. This proves only
+owner controls: normal WGCF evaluation, explicit classification review and
+Inventory promotion remain separate, and no app/runtime acceptance is inferred.
+Proposed/out-of-scope and legacy/non-source classification keep their existing
+semantics. Private/client source readiness is not qualified by the current
+public synthetic source adapter.
 
 1. POST one target kind and name to `/v1/workspace-intake/preparations`. Retain
    the returned exact authority revision, canonical target, register digest,
@@ -62,6 +126,22 @@ findings, history, the review, and terminal evidence without advancing work.
 The API contract and examples are in [OpenAPI](../api/openapi.json).
 
 ## Recovery
+
+For repository-custody candidates, the Console reopens retained requests via
+`GET /v1/workspace-intake/requests?target_kind=repo&target_name=<owner>&custody_request_id=<exact-id>`.
+This read verifies the matching successful custody authority and returns only
+that caller/target/custody's original candidates and progress locators, newest
+first. It never creates a journal, attests a candidate, submits a classification
+or advances a workflow. The original request's existing GET/continue/cancel
+actions remain the recovery path; do not manufacture a new classification to
+replace a lost acknowledgement.
+
+Pages contain at most 25 records and at most 512 KiB of projected record data.
+Use the returned opaque `next_cursor` for the same selector. The durable-history
+revision and pending-request count cover the entire selected set, not just the
+visible page. A pending original request therefore blocks the Console's new
+classification preparation even when that request is on a later page. An
+unavailable/corrupt read remains unavailable, not an empty-history fallback.
 
 | Situation | Operator action |
 | --- | --- |
