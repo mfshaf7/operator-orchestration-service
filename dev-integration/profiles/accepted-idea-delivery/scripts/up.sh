@@ -477,6 +477,7 @@ spec:
             - |
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
+              cp -R /source/templates /runtime/
               install -d /runtime/scripts
               install -m 0644 \
                 /source/scripts/workspace_intake_source.py \
@@ -686,6 +687,7 @@ spec:
             - |
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
+              cp -R /source/templates /runtime/
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -762,6 +764,7 @@ spec:
             - |
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
+              cp -R /source/templates /runtime/
               cd /runtime
               npm ci --omit=dev
           volumeMounts:

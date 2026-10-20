@@ -72,6 +72,18 @@ in-progress source Landing Unit, not a completed Console capability.
 
 ## Live Verification
 
+- October20 active-profile correction: production image builds/health passed,
+  but the actual dev-integration init-container copy omitted trusted bootstrap
+  templates from its runtime volume, causing API import ENOENT before health.
+  All three existing source-mounted preparations now copy those same owner
+  assets. The regression test executes their actual copy stanzas, verifies the
+  exact trusted digest, loads real entry modules, checks loopback API health,
+  and confirms missing assets still fail closed. This is source/runtime-shape
+  repair under the existing operating-truth candidate, not another ART item.
+  Fresh committed CI, exact-head review, updated composed Security acceptance
+  and normal activation are required; no live container injection or app proof
+  is implied by this source change.
+
 The slice results below are engineering checkpoints, not claims of current
 runtime availability. Final canonical-pin qualification and exact composed
 Security acceptance supersede the earlier source-preparation merge holds.
