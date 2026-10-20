@@ -26555,7 +26555,7 @@
                     "template": {
                       "id": "source-owner-bootstrap-v1",
                       "owner_repo": "operator-orchestration-service",
-                      "digest": "sha256:de96a57f839052adfd81bc4f44335b15b5ea7828a93a87292124a53a2a10a643"
+                      "digest": "sha256:2851c40596af2fd55c7d09a2e7d91689e1db1f2cd943fee90ef3892ae29fba80"
                     },
                     "evidence_profile_digest": "sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65",
                     "application_markers": [
@@ -26601,9 +26601,9 @@
                         "path": "contracts/delivery-art-work-session/source-bootstrap.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:de96a57f839052adfd81bc4f44335b15b5ea7828a93a87292124a53a2a10a643\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
+                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:2851c40596af2fd55c7d09a2e7d91689e1db1f2cd943fee90ef3892ae29fba80\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:9fe75440088089467c80479f041b9acca2324a66756aa537f1101d5bc20c860e"
+                        "content_digest": "sha256:5b6ba9ce2bbe85d99b41babedc4674b7376ea4998ef6dd181069fabd4db64360"
                       },
                       {
                         "path": "Makefile",
@@ -26642,14 +26642,14 @@
                     "app_import": false,
                     "canonical_mutation": false,
                     "runtime_activation": false,
-                    "plan_digest": "sha256:82e71d4566212b7ed0ef87540a8cfb3e8e81ff5235b4162058426ba3faac4ae2"
+                    "plan_digest": "sha256:ed53996ecb6cd367e70483d256afb4090915de5ea3d9a7f7e5417172728783a6"
                   },
                   "authorization": "preparation-only",
                   "credential_issued": false,
                   "checkout_created": false,
                   "canonical_mutation": false,
                   "runtime_activation": false,
-                  "preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828"
+                  "preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908"
                 }
               }
             }
@@ -26848,7 +26848,7 @@
                     ]
                   }
                 },
-                "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                 "workflow_approval_ref": null,
                 "requested_at": "2026-10-19T10:00:00.000Z"
               }
@@ -26923,7 +26923,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -27176,7 +27176,7 @@
                           ]
                         }
                       },
-                      "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                      "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                       "workflow_approval_ref": null,
                       "requested_at": "2026-10-19T10:00:00.000Z"
                     },
@@ -27249,7 +27249,7 @@
                             ]
                           }
                         },
-                        "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                        "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                         "workflow_approval_ref": null,
                         "requested_at": "2026-10-19T10:00:00.000Z"
                       },
@@ -27519,7 +27519,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28018,7 +28018,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28270,7 +28270,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28526,7 +28526,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28781,7 +28781,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29037,7 +29037,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29295,7 +29295,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29553,7 +29553,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29811,7 +29811,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30064,7 +30064,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:2d24de9bcf20b3ecbcffd12f89de0096af1fc410ae9f71d8c703477734250828",
+                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
