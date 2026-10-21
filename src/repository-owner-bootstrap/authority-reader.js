@@ -18,6 +18,7 @@ export function createCanonicalProposedSourceOwnerReader({ authorityRoot, python
   const git = (root, ...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
     env: environment, encoding: "utf8", timeout: 60_000, maxBuffer: 4_194_304, stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+  // Bundle provenance is a required ancestor of Platform's current approved baseline.
   const freshness = () => requireRecordAuthorityFreshnessSync({ authorityRoot, git, ownerRepo: "workspace-governance",
     reviewedRevision: intakeManifest.files["workspace-intake.yaml"].commit, clock });
   return ({ ownerRepo, providerRepository, intakeEntryRef }) => {

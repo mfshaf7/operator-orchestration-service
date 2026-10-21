@@ -3,14 +3,13 @@ import { lstatSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { HttpError } from "./errors.js";
 
-function assertCheckpoint(value, ownerRepo, now, reviewedRevision = null) {
+function assertCheckpoint(value, ownerRepo, now) {
   const observed = Date.parse(value.observed_at);
   const expires = Date.parse(value.valid_until);
   if (value.schema_version !== 1 || value.owner_repo !== ownerRepo ||
       value.trusted_ref !== "refs/remotes/origin/main" ||
       !/^[0-9a-f]{40}$/.test(value.reviewed_revision) ||
       !/^[0-9a-f]{40}$/.test(value.record_revision) ||
-      (reviewedRevision !== null && value.reviewed_revision !== reviewedRevision) ||
       !Number.isFinite(observed) || !Number.isFinite(expires) ||
       observed > now + 30000 || expires <= now || expires <= observed || expires - observed > 600000) {
     throw new Error("stale or mismatched checkpoint");
@@ -45,19 +44,23 @@ export async function requireRecordAuthorityFreshness({
 
 // The host source executor has synchronous Git admission/review interfaces.
 // Reuse the same checkpoint predicate, not another freshness contract or lane.
+// The caller's bundled revision is the required contract baseline. Platform
+// independently owns the checkpoint's current accepted implementation baseline.
+// A legitimate reviewed baseline advance must not require repinning old bundles.
 export function requireRecordAuthorityFreshnessSync({ authorityRoot, git, ownerRepo,
-  reviewedRevision, clock = () => new Date() }) {
+  reviewedRevision: requiredRevision, clock = () => new Date() }) {
   try {
-    if (!/^[0-9a-f]{40}$/.test(reviewedRevision ?? "")) throw new Error("reviewed source required");
+    if (!/^[0-9a-f]{40}$/.test(requiredRevision ?? "")) throw new Error("required contract source missing");
     const file = path.join(authorityRoot, ".git", "console-record-authority.json");
     const info = lstatSync(file);
     if (!info.isFile() || info.size > 2048) throw new Error("invalid checkpoint file");
     const value = JSON.parse(readFileSync(file, "utf8"));
-    assertCheckpoint(value, ownerRepo, clock().getTime(), reviewedRevision);
+    assertCheckpoint(value, ownerRepo, clock().getTime());
     if (git(authorityRoot, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}") !== value.record_revision ||
         git(authorityRoot, "rev-parse", "HEAD") !== value.record_revision ||
         git(authorityRoot, "status", "--porcelain", "--untracked-files=normal")) throw new Error("unproven record source");
-    git(authorityRoot, "merge-base", "--is-ancestor", reviewedRevision, value.record_revision);
+    git(authorityRoot, "merge-base", "--is-ancestor", requiredRevision, value.reviewed_revision);
+    git(authorityRoot, "merge-base", "--is-ancestor", value.reviewed_revision, value.record_revision);
     return value;
   } catch {
     throw unavailable();

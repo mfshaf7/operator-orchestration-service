@@ -14,6 +14,7 @@ export function createCanonicalSourceRepositoryReader({ authorityRoot, python = 
   const git = (root, ...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
     env: sourceEnv, encoding: "utf8", timeout: 60000, maxBuffer: 4194304, stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+  // Source activation requires this contract baseline, not an obsolete exact control pin.
   const freshness = () => requireRecordAuthorityFreshnessSync({ authorityRoot, git,
     ownerRepo: "workspace-governance", reviewedRevision: inventoryManifest.source_activation.authority.commit, clock });
   return ({ ownerRepo, legacyRepository }) => {
