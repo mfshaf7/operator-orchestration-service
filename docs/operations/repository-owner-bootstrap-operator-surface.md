@@ -30,6 +30,13 @@ credential issuance. Ordinary Delivery/Prototype credentials still deny this
 state. Control-plane or Security-bound registration needs its real review,
 not this source-only shortcut.
 
+The host's proposed-owner and ordinary-source readers use the same fresh
+Platform-owned record checkpoint. A bundled contract revision is a required
+ancestor of Platform's current accepted baseline, not an exact replacement for
+it. That approved baseline must be an ancestor of the exact clean cached main;
+expiry, changed HEAD/ref or unrelated/older authority still blocks. Do not edit
+the checkpoint or repin contract bundles to bypass a missing Platform refresh.
+
 ## Prepare and inspect
 
 1. Complete the existing canonical custody and proposed Intake decisions.
