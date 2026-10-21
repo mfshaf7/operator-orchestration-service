@@ -60,6 +60,7 @@ export function createWorkspaceInventoryStore({ root }) {
       return await operation({
         assertHeld: lock.assertHeld,
         get(requestId) { return structuredClone(data.records[key(requestId)] ?? null); },
+        list() { return structuredClone(Object.values(data.records)); },
         async put(record) {
           lock.assertHeld();
           const id = key(record.request.request_id);
@@ -80,6 +81,10 @@ export function createWorkspaceInventoryStore({ root }) {
   }
   return {
     transact,
+    async list() {
+      // An absent journal is empty, not permission to create its directory.
+      return structuredClone(Object.values((await load()).records));
+    },
     async get(requestId) {
       await initialize();
       return structuredClone((await load()).records[key(requestId)] ?? null);

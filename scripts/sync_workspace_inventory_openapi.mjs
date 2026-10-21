@@ -120,6 +120,24 @@ const schemas = {
 };
 for (const [name, schema] of Object.entries(schemas)) source = upsertOpenApiComponent(source, name, schema);
 
+for (const [schemaName, workflowId, lifecycle] of [
+  ["WorkspaceInventoryRequestPage", "workspace-inventory-promotion", false],
+  ["WorkspaceInventoryLifecycleRequestPage", "workspace-inventory-lifecycle", true],
+]) {
+  source = upsertOpenApiComponent(source, schemaName, object({
+    schema_version: { const: 1 }, workflow_id: { const: workflowId },
+    target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName, record_id: text }),
+    revision: { type: "integer", minimum: 0 }, pending_request_count: { type: "integer", minimum: 0 },
+    updated_at: nullable(date), next_cursor: nullable({ type: "string", pattern: "^[0-9a-f]{64}$" }),
+    canonical_mutation: { const: false }, records: { type: "array", maxItems: 25,
+      items: object({ request_id: text, requested_at: date, updated_at: date,
+        status: { enum: ["accepted", "evaluating", "preparing", "review-required", "cancelling", "cancelled", "rejected", "blocked", "stale", "succeeded"] },
+        revision: { type: "integer", minimum: 1 },
+        ...(lifecycle ? { action: { enum: ["update", "suspend", "restore", "retire"] } } : {}),
+      }) },
+  }));
+}
+
 const lifecycleSchemas = {
   WorkspaceInventoryLifecyclePreparationCommand: object({
     target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName }),
@@ -279,7 +297,26 @@ source = upsertOpenApiPath(source, "/v1/workspace-inventory/preparations", { pos
     ...Object.fromEntries([400, 401, 403, 409, 413, 502, 503].map((status) => [String(status), { description: "Bounded validation, authorization or dependency failure." }])),
   },
 } });
-source = upsertOpenApiPath(source, "/v1/workspace-inventory/promotions", { post: {
+function journalOperation(commonFields, lifecycle) {
+  return { ...commonFields, operationId: lifecycle ? "listWorkspaceInventoryLifecycleRequests" : "listWorkspaceInventoryPromotions",
+    summary: "Read caller-owned original requests for one exact Inventory target",
+    description: "Read-only, newest-first, bounded discovery with total pending count across all pages. Reopen via the existing exact GET; no preparation, replacement request or workflow mutation.",
+    parameters: [
+      { name: "target_kind", in: "query", required: true, schema: { enum: ["repo", "product", "component"] } },
+      { name: "target_name", in: "query", required: true, schema: targetName },
+      { name: "cursor", in: "query", required: false, schema: { type: "string", pattern: "^[0-9a-f]{64}$" } },
+    ], responses: {
+      "200": { description: "Caller/target/family-bound request locators, not a canonical mutation.", content: { "application/json": {
+        schema: ref(lifecycle ? "WorkspaceInventoryLifecycleRequestPage" : "WorkspaceInventoryRequestPage"),
+        example: { schema_version: 1, workflow_id: lifecycle ? "workspace-inventory-lifecycle" : "workspace-inventory-promotion",
+          target: { kind: "component", name: "inventory-proof", record_id: "component:inventory-proof" },
+          revision: 0, pending_request_count: 0, updated_at: null, next_cursor: null, records: [], canonical_mutation: false },
+      } } },
+      ...Object.fromEntries([400, 401, 403, 409, 502, 503].map(status => [String(status), { description: "Invalid selector/cursor, denied caller or unavailable retained state." }])),
+    } };
+}
+
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/promotions", { get: journalOperation(common, false), post: {
   ...common,
   operationId: "submitWorkspaceInventoryPromotion",
   summary: "Acknowledge one immutable active-inventory promotion",
@@ -381,7 +418,7 @@ source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/preparatio
     ...Object.fromEntries([400, 401, 403, 409, 413, 502, 503].map((status) => [String(status), { description: "Bounded validation, authorization or dependency failure." }])),
   },
 } });
-source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/requests", { post: {
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/requests", { get: journalOperation(lifecycleCommon, true), post: {
   ...lifecycleCommon,
   operationId: "submitWorkspaceInventoryLifecycle",
   summary: "Acknowledge one immutable inventory lifecycle request",

@@ -44,6 +44,50 @@ export function inventoryError(code, message, status = 409) {
   return new HttpError(status, `workspace_inventory_${code}`, message);
 }
 
+export function projectInventoryRequestJournal({ records, callerId, input, workflowId }) {
+  if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "cursor"].includes(key)) ||
+      !input.target || Array.isArray(input.target) || Object.keys(input.target).sort().join(",") !== "kind,name" ||
+      !["repo", "product", "component"].includes(input.target.kind) ||
+      typeof input.target.name !== "string" || !/^[a-z0-9][a-z0-9._-]*$/.test(input.target.name) ||
+      (input.cursor !== undefined && (typeof input.cursor !== "string" || !/^[0-9a-f]{64}$/.test(input.cursor)))) {
+    throw inventoryError("list_invalid", "Request discovery requires one exact target and an optional matching cursor.", 400);
+  }
+  const target = { ...input.target, record_id: `${input.target.kind}:${input.target.name}` };
+  const terminal = new Set(["succeeded", "cancelled", "rejected", "blocked", "stale"]);
+  const selected = records.filter(record => record.caller_id === callerId &&
+    record.request?.target?.record_id === target.record_id);
+  for (const record of selected) {
+    if (record.binding_digest !== inventoryDigest({ caller_id: callerId, evaluation: record.evaluation }) ||
+        inventoryDigest(record.request) !== inventoryDigest(record.evaluation.request) ||
+        record.request.target.kind !== target.kind || record.request.target.name !== target.name ||
+        !Array.isArray(record.history) || !record.history.length) {
+      throw inventoryError("storage_invalid", "Retained request binding is invalid.", 503);
+    }
+  }
+  selected.sort((a, b) => Date.parse(b.request.requested_at) - Date.parse(a.request.requested_at) ||
+    b.request.request_id.localeCompare(a.request.request_id));
+  const cursorFor = record => inventoryDigest({ caller_id: callerId, workflow_id: workflowId,
+    target, request_id: record.request.request_id }).slice(7);
+  let offset = 0;
+  if (input.cursor !== undefined) {
+    offset = selected.findIndex(record => cursorFor(record) === input.cursor) + 1;
+    if (!offset) throw inventoryError("cursor_invalid", "Cursor does not belong to this caller, family and target.", 400);
+  }
+  const page = selected.slice(offset, offset + 25);
+  const rows = page.map(record => ({ request_id: record.request.request_id,
+    requested_at: record.request.requested_at, updated_at: record.history.at(-1).at,
+    status: record.status, revision: record.history.length,
+    ...(workflowId === "workspace-inventory-lifecycle" ? { action: record.request.action } : {}) }));
+  while (rows.length && Buffer.byteLength(JSON.stringify(rows), "utf8") > 32768) rows.pop();
+  if (page.length && !rows.length) throw inventoryError("list_record_large", "Request locator exceeds its projection bound.", 503);
+  return { schema_version: 1, workflow_id: workflowId, target,
+    revision: selected.reduce((sum, record) => sum + record.history.length, 0),
+    pending_request_count: selected.filter(record => !terminal.has(record.status)).length,
+    updated_at: selected.map(record => record.history.at(-1).at).sort().at(-1) ?? null,
+    records: rows, next_cursor: offset + rows.length < selected.length ? cursorFor(page[rows.length - 1]) : null,
+    canonical_mutation: false };
+}
+
 function compareKeys(a, b) {
   const left = Array.from(a, (character) => character.codePointAt(0));
   const right = Array.from(b, (character) => character.codePointAt(0));
