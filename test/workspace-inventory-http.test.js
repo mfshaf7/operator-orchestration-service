@@ -84,6 +84,32 @@ test("registry reads require caller-bound identity but not mutation authority", 
   assert.equal(JSON.parse(output).callerId, "registry-reader");
 });
 
+test("Inventory original-request discovery is caller-bound, GET-only and strict about selectors", async () => {
+  const calls = [];
+  const list = async input => {
+    calls.push(input);
+    return { revision: 0, updated_at: null, records: [], pending_request_count: 0, canonical_mutation: false };
+  };
+  const app = createApp({ config: config(), workspaceInventoryService: { list, lifecycle: { list } } });
+  for (const endpoint of ["promotions", "lifecycle/requests"]) {
+    const url = `/v1/workspace-inventory/${endpoint}?target_kind=component&target_name=inventory-proof`;
+    const read = await invoke(app, { url, method: "GET", body: "" });
+    assert.equal(read.code, 200);
+    assert.equal(read.body.canonical_mutation, false);
+    assert.deepEqual(calls.at(-1), { callerId: caller, input: { target: { kind: "component", name: "inventory-proof" } } });
+    assert.equal((await invoke(app, { url: `${url}&cursor=${"a".repeat(64)}`, method: "GET", body: "" })).code, 200);
+    assert.equal(calls.at(-1).input.cursor, "a".repeat(64));
+    const count = calls.length;
+    for (const extra of ["&target_name=another", "&force=true"]) {
+      assert.equal((await invoke(app, { url: url + extra, method: "GET", body: "" })).code, 400);
+    }
+    assert.equal((await invoke(app, { url, method: "GET", body: "", secret: "wrong" })).code, 401);
+    assert.equal(calls.length, count);
+    assert.equal((await invoke(createApp({ config: config() }), { url, method: "GET", body: "" })).code, 503);
+    assert.equal((await invoke(createApp({ config: config(true), workspaceInventoryService: { list, lifecycle: { list } } }), { url, method: "GET", body: "" })).code, 403);
+  }
+});
+
 test("Workspace Inventory lifecycle exposes prepare, submit, read, continue and cancel APIs", async () => {
   const calls = [];
   const lifecycle = {

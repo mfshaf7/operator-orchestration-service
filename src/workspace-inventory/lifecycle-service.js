@@ -4,6 +4,7 @@ import {
   inventoryDigest,
   inventoryError,
   inventoryReference,
+  projectInventoryRequestJournal,
 } from "./contracts.js";
 import { persistWorkflowFailure } from "../workflow-progress.js";
 
@@ -265,6 +266,10 @@ export function createWorkspaceInventoryLifecycleService({ store, readinessClien
 
   return {
     prepare,
+    async list({ callerId, input }) {
+      return projectInventoryRequestJournal({ records: await store.list(), callerId, input,
+        workflowId: "workspace-inventory-lifecycle" });
+    },
     submit,
     advance,
     async project(requestId, { callerId }) {

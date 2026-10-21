@@ -58,6 +58,27 @@ GET `/v1/workspace-inventory/promotions/{request_id}` reads caller-owned
 progress without advancing it. The API and examples are in
 [OpenAPI](../api/openapi.json).
 
+### Original Request Discovery
+
+After an interrupted acknowledgement, browser restart or closed dialog, read
+`GET /v1/workspace-inventory/promotions?target_kind=<kind>&target_name=<name>`.
+Lifecycle uses the same selector at `/v1/workspace-inventory/lifecycle/requests`.
+Each authenticated caller sees only its selected target and workflow family,
+newest first, at most25 safe locators and32KiB of row data. The opaque
+`next_cursor` belongs to that caller, family and target. The journal revision
+and pending count cover every matching request, including later pages.
+
+These reads do not initialize absent storage, prepare source, evaluate readiness
+or advance work. Corrupt/unavailable retained state is an error, never empty
+history. Reopen the returned exact request ID through its existing GET, then
+explicitly continue/check review or cancel that original. Request locators are
+opaque owner-returned identifiers, not authorization or new command templates.
+Do not mint another promotion after a lost acknowledgement. Console must finish
+fresh journal discovery and direct pending work to its original request before
+offering a new explicit promotion or lifecycle review. Generic OOS idempotency
+and concurrency semantics remain unchanged; this is no global single-request
+policy or new canonical authority.
+
 ## States And Recovery
 
 | State or condition | Operator action |

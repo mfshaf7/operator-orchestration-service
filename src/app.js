@@ -3662,6 +3662,16 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
   }
 }
 
+function workspaceInventoryJournalInput(request) {
+  const parameters = new URL(request.url, "http://localhost").searchParams;
+  const keys = [...parameters.keys()];
+  if (new Set(keys).size !== keys.length || keys.some(key => !["target_kind", "target_name", "cursor"].includes(key))) {
+    throw new HttpError(400, "workspace_inventory_list_invalid", "Request discovery parameters are invalid.");
+  }
+  return { target: { kind: parameters.get("target_kind"), name: parameters.get("target_name") },
+    ...(parameters.has("cursor") ? { cursor: parameters.get("cursor") } : {}) };
+}
+
 async function handleWorkspaceInventory({ action, config, workspaceInventoryService, request, response, requestId }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Workspace Inventory promotion");
@@ -3679,7 +3689,14 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
     return;
   }
   assertDeliveryMutationAuthority(caller);
-  if (action === "prepare") {
+  if (action === "list") {
+    const result = await workspaceInventoryService.list({ callerId: caller.id, input: workspaceInventoryJournalInput(request) });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `oos://workspace-inventory/promotions?${new URL(request.url, "http://localhost").searchParams}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: result.updated_at ?? new Date().toISOString(), eventSequence: result.revision,
+    }));
+  } else if (action === "prepare") {
     sendJson(response, 200, await workspaceInventoryService.prepare({
       callerId: caller.id,
       input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
@@ -3715,7 +3732,14 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
     throw new HttpError(503, "workspace_inventory_lifecycle_not_active", "Workspace Inventory lifecycle is not activated.");
   }
   assertDeliveryMutationAuthority(caller);
-  if (action === "prepare") {
+  if (action === "list") {
+    const result = await service.list({ callerId: caller.id, input: workspaceInventoryJournalInput(request) });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `oos://workspace-inventory/lifecycle/requests?${new URL(request.url, "http://localhost").searchParams}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceTimestamp: result.updated_at ?? new Date().toISOString(), eventSequence: result.revision,
+    }));
+  } else if (action === "prepare") {
     sendJson(response, 200, await service.prepare({
       callerId: caller.id,
       input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
@@ -5994,6 +6018,10 @@ export function createApp({
         await handleWorkspaceInventory({ action: "prepare", config, workspaceInventoryService, request, response });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/promotions") {
+        await handleWorkspaceInventory({ action: "list", config, workspaceInventoryService, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/promotions") {
         await handleWorkspaceInventory({ action: "submit", config, workspaceInventoryService, request, response });
         return;
@@ -6013,6 +6041,10 @@ export function createApp({
 
       if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/lifecycle/preparations") {
         await handleWorkspaceInventoryLifecycle({ action: "prepare", config, workspaceInventoryService, request, response });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/lifecycle/requests") {
+        await handleWorkspaceInventoryLifecycle({ action: "list", config, workspaceInventoryService, request, response });
         return;
       }
       if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/lifecycle/requests") {

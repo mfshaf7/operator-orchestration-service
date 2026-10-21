@@ -11371,6 +11371,101 @@
       }
     },
     "/v1/workspace-inventory/promotions": {
+      "get": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Read-only, newest-first, bounded discovery with total pending count across all pages. Reopen via the existing exact GET; no preparation, replacement request or workflow mutation.",
+        "x-oos-surface": "workspace-inventory",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-promotion",
+        "operationId": "listWorkspaceInventoryPromotions",
+        "summary": "Read caller-owned original requests for one exact Inventory target",
+        "parameters": [
+          {
+            "name": "target_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "repo",
+                "product",
+                "component"
+              ]
+            }
+          },
+          {
+            "name": "target_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller/target/family-bound request locators, not a canonical mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryRequestPage"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-promotion",
+                  "target": {
+                    "kind": "component",
+                    "name": "inventory-proof",
+                    "record_id": "component:inventory-proof"
+                  },
+                  "revision": 0,
+                  "pending_request_count": 0,
+                  "updated_at": null,
+                  "next_cursor": null,
+                  "records": [],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "401": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "403": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "409": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "502": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "503": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          }
+        }
+      },
       "post": {
         "tags": [
           "Workspace Inventory"
@@ -12314,6 +12409,101 @@
       }
     },
     "/v1/workspace-inventory/lifecycle/requests": {
+      "get": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Read-only, newest-first, bounded discovery with total pending count across all pages. Reopen via the existing exact GET; no preparation, replacement request or workflow mutation.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "listWorkspaceInventoryLifecycleRequests",
+        "summary": "Read caller-owned original requests for one exact Inventory target",
+        "parameters": [
+          {
+            "name": "target_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "repo",
+                "product",
+                "component"
+              ]
+            }
+          },
+          {
+            "name": "target_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller/target/family-bound request locators, not a canonical mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequestPage"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "target": {
+                    "kind": "component",
+                    "name": "inventory-proof",
+                    "record_id": "component:inventory-proof"
+                  },
+                  "revision": 0,
+                  "pending_request_count": 0,
+                  "updated_at": null,
+                  "next_cursor": null,
+                  "records": [],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "401": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "403": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "409": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "502": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          },
+          "503": {
+            "description": "Invalid selector/cursor, denied caller or unavailable retained state."
+          }
+        }
+      },
       "post": {
         "tags": [
           "Workspace Inventory"
@@ -79435,6 +79625,273 @@
           "requested_at",
           "reason"
         ]
+      },
+      "WorkspaceInventoryRequestPage": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "target",
+          "revision",
+          "pending_request_count",
+          "updated_at",
+          "next_cursor",
+          "canonical_mutation",
+          "records"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-inventory-promotion"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_request_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_mutation": {
+            "const": false
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": [
+                "request_id",
+                "requested_at",
+                "updated_at",
+                "status",
+                "revision"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "requested_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "enum": [
+                    "accepted",
+                    "evaluating",
+                    "preparing",
+                    "review-required",
+                    "cancelling",
+                    "cancelled",
+                    "rejected",
+                    "blocked",
+                    "stale",
+                    "succeeded"
+                  ]
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleRequestPage": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "target",
+          "revision",
+          "pending_request_count",
+          "updated_at",
+          "next_cursor",
+          "canonical_mutation",
+          "records"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-inventory-lifecycle"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_request_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_mutation": {
+            "const": false
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": [
+                "request_id",
+                "requested_at",
+                "updated_at",
+                "status",
+                "revision",
+                "action"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "requested_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "enum": [
+                    "accepted",
+                    "evaluating",
+                    "preparing",
+                    "review-required",
+                    "cancelling",
+                    "cancelled",
+                    "rejected",
+                    "blocked",
+                    "stale",
+                    "succeeded"
+                  ]
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "action": {
+                  "enum": [
+                    "update",
+                    "suspend",
+                    "restore",
+                    "retire"
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
