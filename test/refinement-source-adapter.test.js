@@ -194,6 +194,10 @@ test("Refinement missing fields stay bound to target identity, not numeric objec
   assert.equal(field.target_statuses["1004"], "missing");
   assert.equal(field.target_statuses["1002"], "complete");
   assert.equal(packet.status, "drafting");
+  const gate = packet.readiness_gates.find((gate) => gate.label === "Metadata Review");
+  assert.equal(gate.status, "open");
+  assert.equal(gate.oos_route, "POST /v1/delivery-work-items/bulk-update",
+    "the existing Console metadata draft review must be able to resolve its native editable gate");
 });
 
 test("Refinement receipt persistence replays identical output without duplicate comments", async () => {

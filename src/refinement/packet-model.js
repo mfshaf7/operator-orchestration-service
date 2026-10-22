@@ -202,6 +202,7 @@ export function buildRefinementPacket({
       {
         gate_id: `${packageRef}-metadata-review`,
         label: "Metadata Review",
+        oos_route: BULK_UPDATE_ROUTE,
         detail: metadataComplete
           ? "Every required metadata target has a current value."
           : "Required metadata still needs an operator decision.",
