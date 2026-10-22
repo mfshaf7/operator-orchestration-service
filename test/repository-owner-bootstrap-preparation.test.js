@@ -89,7 +89,7 @@ test("unauthorized callers and browser-supplied coordinates or file maps fail be
 
 test("missing or mismatched custody and nonproposed or privileged authority fail before target source reads", async t => {
   for (const changeAuthority of [
-    value => { value.classification = "admitted"; }, value => { value.classification = "out-of-scope"; },
+    value => { value.classification = "retired"; }, value => { value.classification = "out-of-scope"; },
     value => { value.inventory_posture = "active"; }, value => { value.source_bootstrap_eligible = false; },
     value => { value.ordinary_source_eligible = true; }, value => { value.model_writes_allowed = true; },
     value => { value.provider_repository = { ...value.provider_repository, provider_repository_id: "42" }; },
@@ -102,6 +102,16 @@ test("missing or mismatched custody and nonproposed or privileged authority fail
   const h = await harness(t, { readCustody: value => ({ ...value, request: { ...value.request, request_id: "another-request" } }) });
   await assert.rejects(h.service.prepare({ callerId, operatorId, input: h.input }), /different retained request/);
   assert.ok(!h.calls.includes("source"));
+});
+
+test("admitted authority can prepare the same finite controls without gaining ordinary source or Inventory authority", async t => {
+  const h = await harness(t, { changeAuthority: value => { value.classification = "admitted"; value.intake_entry_ref.version = 2; } });
+  const prepared = await h.service.prepare({ callerId, operatorId, input: h.input });
+  assert.equal(prepared.owner_authority.classification, "admitted");
+  assert.equal(prepared.owner_authority.ordinary_source_eligible, false);
+  assert.equal(prepared.plan.app_import, false);
+  assert.equal(prepared.plan.canonical_mutation, false);
+  await h.service.verify({ callerId, operatorId, preparation: prepared });
 });
 
 test("selected Intake changes during provider inspection and unqualified private source cannot produce a preparation", async t => {

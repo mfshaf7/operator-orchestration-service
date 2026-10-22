@@ -18,7 +18,7 @@ const repository = `mfshaf7-workspace/${owner}`;
 const nativeGit = (root, ...args) => String(execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args],
   { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 })).trim();
 
-function harness(t, { existingControls = false } = {}) {
+function harness(t, { existingControls = false, repairControls = false } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-native-owner-bootstrap-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const workspaceRoot = path.join(root, "workspace"); mkdirSync(workspaceRoot);
@@ -42,10 +42,18 @@ function harness(t, { existingControls = false } = {}) {
     { id: "tests", kind: "tests", name: "Actual selected app tests", executable: "node", args: ["app/test.mjs"], fidelity: "pure-unit", conformance_binding: "matching-fidelity", timeout_seconds: 30 },
     { id: "validations", kind: "validations", name: "Actual diff validation", executable: "git", args: ["diff", "--check"], fidelity: "real-git", conformance_binding: "none", timeout_seconds: 30 },
   ] };
-  if (existingControls) {
-    writeFileSync(path.join(providerRoot, "AGENTS.md"), "Independent existing owner controls; preserve these.\n");
-    mkdirSync(path.join(providerRoot, "contracts/delivery-art-work-session"), { recursive: true });
-    writeFileSync(path.join(providerRoot, "contracts/delivery-art-work-session/evidence-profile.json"), JSON.stringify(profile));
+  if (existingControls || repairControls) {
+    const seed = planSourceOwnerBootstrap({ authority, fetchedBase: base, profile, applicationMarkers: ["app/main.mjs"], withCi: false,
+      observedFiles: Object.fromEntries(sourceOwnerBootstrapPaths(false).map(name => [name, name === "README.md" ? readFileSync(path.join(providerRoot, name), "utf8") : null])) });
+    for (const file of seed.files) {
+      if (repairControls && [".github/CODEOWNERS", ".github/pull_request_template.md"].includes(file.path)) continue;
+      mkdirSync(path.dirname(path.join(providerRoot, file.path)), { recursive: true });
+      writeFileSync(path.join(providerRoot, file.path), file.content);
+    }
+    writeFileSync(path.join(providerRoot, "AGENTS.md"), repairControls ? "Independent existing owner controls; preserve these.\n"
+      : seed.files.find(file => file.path === "AGENTS.md").content.replace(/^# .* owner guidance/, "# Independent existing owner guidance"));
+    writeFileSync(path.join(providerRoot, "Makefile"), "validate:\n\t@false # Independent project commands must never run during host bootstrap proof\n");
+    if (repairControls) { authority.classification = "admitted"; authority.intake_entry_ref.version = 2; }
     nativeGit(providerRoot, "add", "."); nativeGit(providerRoot, "commit", "-m", "fixture: independent existing owner controls");
     base = nativeGit(providerRoot, "rev-parse", "HEAD");
   }
@@ -181,6 +189,28 @@ test("native bootstrap creates a canonical checkout only after proposed checks, 
   assert.equal(h.calls.pushes, 1, "No out-of-plan source may reach the provider");
 });
 
+test("native admitted-owner repair commits only missing review files and append-only guidance, replays exact source, and never executes independent project controls", async t => {
+  const h = harness(t, { repairControls: true });
+  const owned = await h.adapter.ensureOwnedWorktree(h.input);
+  const beforeAgents = readFileSync(path.join(owned.path, "AGENTS.md"), "utf8");
+  const beforeMakefile = readFileSync(path.join(owned.path, "Makefile"), "utf8");
+  const change = bootstrapSourceChangeSet(h.plan, h.session);
+  assert.deepEqual(change.operations.map(file => [file.path, file.action]), [
+    [".github/CODEOWNERS", "create"], [".github/pull_request_template.md", "create"], ["AGENTS.md", "replace"],
+  ]);
+  const first = await h.adapter.applySourceRealization({ ...h.input, change_set: change });
+  const replay = await h.adapter.applySourceRealization({ ...h.input, change_set: change });
+  assert.equal(first.head_commit, replay.head_commit);
+  assert.equal(readFileSync(path.join(owned.path, "Makefile"), "utf8"), beforeMakefile);
+  assert.ok(readFileSync(path.join(owned.path, "AGENTS.md"), "utf8").startsWith(beforeAgents));
+  assert.equal((await h.adapter.validateSource({ ...h.input, expected_head: first.head_commit })).result, "pass");
+  assert.equal((await h.adapter.publishAgentSource(h.input)).pushed_head, first.head_commit);
+  assert.equal(readFileSync(path.join(owned.path, "app/test.mjs"), "utf8"), 'throw new Error("App tests must not be executed or called passing by bootstrap");\n');
+  h.setEligible(false);
+  await assert.rejects(h.adapter.publishAgentSource(h.input), /authority/);
+  assert.equal(h.calls.pushes, 1, "Lost eligibility cannot publish or borrow this exact credential again");
+});
+
 test("native bootstrap exact-head human review, squash merge and owned cleanup retain canonical source and deny stale approval", async t => {
   const h = harness(t), owned = await h.adapter.ensureOwnedWorktree(h.input);
   const committed = await h.adapter.applySourceRealization({ ...h.input, change_set: bootstrapSourceChangeSet(h.plan, h.session) });
@@ -234,7 +264,7 @@ test("independently valid owner controls materialize and reuse the exact public 
   const canonical = path.join(h.workspaceRoot, owner);
   assert.equal(nativeGit(canonical, "rev-parse", "HEAD"), ready.canonical_commit);
   assert.equal(nativeGit(canonical, "branch", "--format=%(refname:short)"), "main");
-  assert.equal(readFileSync(path.join(canonical, "AGENTS.md"), "utf8"), "Independent existing owner controls; preserve these.\n");
+  assert.equal(readFileSync(path.join(canonical, "AGENTS.md"), "utf8"), readFileSync(path.join(h.providerRoot, "AGENTS.md"), "utf8"));
   assert.deepEqual(await h.adapter.materializeExistingOwner(h.input), ready);
   const reopened = await h.adapter.materializeExistingOwner({ ...h.input, bootstrap_request_id: "bootstrap-request:reinspect-existing-owner" });
   assert.equal(reopened.canonical_commit, ready.canonical_commit);

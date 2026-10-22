@@ -24,7 +24,7 @@ it does not adopt, reopen or mutate the terminal custody request.
 
 The current source adapter qualifies only public synthetic repositories on
 `main`. Private/client source is explicitly unqualified; no visibility change
-or ambient credential fallback occurs. Current proposed source-only Intake
+or ambient credential fallback occurs. Current proposed or admitted source-only Intake
 and absence from active/retired Inventory are mandatory before checkout or
 credential issuance. Ordinary Delivery/Prototype credentials still deny this
 state. Control-plane or Security-bound registration needs its real review,
@@ -71,10 +71,23 @@ payloads into the metadata list. URL-encode request ids as one path segment.
 
 ## Existing owner controls
 
-When current regular guidance and a valid fetched-base owner profile already
-exist, the preparation returns `existing_owner_controls`, no source plan and
+When current regular guidance, review controls and a valid fetched-base owner
+profile already exist, preparation returns `existing_owner_controls`, no source plan and
 no source session. Preserve those controls. A different requested profile is
 rejected rather than silently replacing existing owner policy.
+
+An admitted owner absent from active/retired Inventory may use this same
+workflow for missing control repair; ordinary source remains denied. The finite
+plan creates absent CODEOWNERS and PR review template and appends missing
+`## Review guidelines` to the exact original AGENTS bytes, with a replacement
+digest. Existing profile, README, application source, Makefile, schema, scripts
+and workflow bytes are preserved. An existing incomplete review section or PR
+template blocks for explicit owner review rather than being overwritten.
+This is not a general migration or application-authoring permission.
+
+Optional bootstrap CI remains explicit. Active workspace registration separately
+requires the existing PR-control policy, including a pull-request validation
+workflow. Omitting CI at bootstrap does not waive that later promotion gate.
 
 `POST .../requests/{request_id}/existing-checkout` binds the current revision,
 command id and time. It materializes or verifies only the exact public
@@ -92,7 +105,8 @@ checkout. This proves owner controls, not app readiness or Inventory admission.
    Select this real bootstrap request, not an invented ART or Prototype id.
 2. `POST .../requests/{request_id}/session` with its approved source-intent
    reference and immutable command. Current proposed authority is rechecked
-   after provider I/O and before target checkout. The canonical owner checkout
+   (proposed or admitted, never active/retired Inventory) after provider I/O and
+   before target checkout. The canonical owner checkout
    remains durable; only its review worktree/branches are disposable resources.
 3. `GET .../draft` returns the exact trusted control change set. Render it as
    inert text. `POST .../accept` binds the current source revision and exact
@@ -103,9 +117,11 @@ checkout. This proves owner controls, not app readiness or Inventory admission.
    prevent duplicate commits and lost-ack cleanup ambiguity. Unknown or dirty
    source is never deleted to manufacture recovery.
 5. `POST .../publish` runs native validation on an isolated snapshot of the
-   exact committed trusted controls and publishes through Gary's existing
+   exact committed control data using current trusted validator bytes and
+   publishes through Gary's existing
    provider adapter. Existing project code, shadow imports and app commands
-   are not executed by this bootstrap host check. Every committed path, byte,
+   and preserved independent validation commands are not executed by this
+   bootstrap host check. Every committed path, byte,
    mode, template, base and source identity is rechecked before push.
 6. `POST .../review`, then `POST .../merge`, bind the retained PR URL and head.
    Human review is separate from accepting source bytes and from Gary's

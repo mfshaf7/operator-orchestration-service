@@ -29,10 +29,10 @@ function localSchema(value, name) {
   }
   fix(value); return value;
 }
-const file = closed({ path: { enum: sourceOwnerBootstrapPaths(true) }, action: { enum: ["create", "unchanged"] }, mode: { const: "100644" },
+const file = closed({ path: { enum: sourceOwnerBootstrapPaths(true) }, action: { enum: ["create", "replace", "unchanged"] }, mode: { const: "100644" },
   content: { type: "string", maxLength: 65536 }, expected_digest: nullable(digest), content_digest: digest });
 const template = closed({ id: { const: "source-owner-bootstrap-v1" }, owner_repo: { const: "operator-orchestration-service" }, digest });
-const authority = closed({ owner_repo: owner, intake_entry_ref: entry, provider_repository: provider, classification: { const: "proposed" },
+const authority = closed({ owner_repo: owner, intake_entry_ref: entry, provider_repository: provider, classification: { enum: ["proposed", "admitted"] },
   inventory_posture: { type: "null" }, custody_receipt_digest: digest, source_bootstrap_eligible: { const: true }, ordinary_source_eligible: no,
   model_writes_allowed: no, canonical_mutation: no, runtime_activation: no });
 const command = { schema_version: { const: 1 }, command_id: id, expected_revision: timestamp, requested_at: timestamp };
@@ -63,7 +63,7 @@ export const ownerBootstrapSchemas = {
   OwnerBootstrapPlan: closed({ schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap-plan" }, owner_repo: owner,
     provider_repository: provider, intake_entry_ref: entry, fetched_base: commit, template, evidence_profile_digest: digest,
     application_markers: { type: "array", minItems: 1, maxItems: 48, items: { type: "string" } }, ci_selected: { type: "boolean" },
-    requires_workflow_permission: { type: "boolean" }, source_change_required: { type: "boolean" }, files: { type: "array", minItems: 9, maxItems: 10, items: file },
+    requires_workflow_permission: { type: "boolean" }, source_change_required: { type: "boolean" }, files: { type: "array", minItems: sourceOwnerBootstrapPaths(false).length, maxItems: sourceOwnerBootstrapPaths(true).length, items: file },
     model_invoked: no, app_import: no, canonical_mutation: no, runtime_activation: no, plan_digest: digest }),
   OwnerBootstrapPreparation: closed(preparationFields, Object.keys(preparationFields).filter(key => !["existing_owner_controls", "next_action"].includes(key))),
   OwnerBootstrapRequest: closed({ schema_version: { const: 1 }, request_id: id, preparation_input: ref("OwnerBootstrapPreparationInput"),

@@ -26745,7 +26745,7 @@
                     "template": {
                       "id": "source-owner-bootstrap-v1",
                       "owner_repo": "operator-orchestration-service",
-                      "digest": "sha256:2851c40596af2fd55c7d09a2e7d91689e1db1f2cd943fee90ef3892ae29fba80"
+                      "digest": "sha256:67d2992bbfcd65831e8914142ce8dbe5b566ffb2cc7c0666c14a264e3884a511"
                     },
                     "evidence_profile_digest": "sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65",
                     "application_markers": [
@@ -26755,6 +26755,22 @@
                     "requires_workflow_permission": false,
                     "source_change_required": true,
                     "files": [
+                      {
+                        "path": ".github/CODEOWNERS",
+                        "action": "create",
+                        "mode": "100644",
+                        "content": "# Source ownership does not grant approval or merge authority to the agent.\n* @mfshaf7\n",
+                        "expected_digest": null,
+                        "content_digest": "sha256:b3aeef1f1bfb675f8e0d9cd48696b7b70acb4a689a5097aa75964dbbac2c04ef"
+                      },
+                      {
+                        "path": ".github/pull_request_template.md",
+                        "action": "create",
+                        "mode": "100644",
+                        "content": "## Summary\n\nDescribe the exact source change and rollback boundary.\n\n## Governance\n\nLink the approved work and owner evidence. Agent Gary authors source; the\naccountable human separately reviews the exact head and merges. Identify any\nsecurity or authority impact. Source controls are not application acceptance,\nInventory admission, runtime activation or release permission.\n\n## Validation\n\nRecord actual commands, base/head, results and evidence. Distinguish owner\ncontrol validation from application tests and required operating proof.\n\n## Advisory Review\n\nAdvisory review is optional, not an approval gate. If requested, record the\nprovider, scope, findings and verification. Disposition each finding as\nfix-now, separate-work or reject-with-reason, with justification.\n",
+                        "expected_digest": null,
+                        "content_digest": "sha256:d9b15d3761e4be11809b30a5de88e90a3b0489a07e35149cb74c493b5e71f15e"
+                      },
                       {
                         "path": ".gitignore",
                         "action": "create",
@@ -26767,9 +26783,9 @@
                         "path": "AGENTS.md",
                         "action": "create",
                         "mode": "100644",
-                        "content": "# example-owner-source owner guidance\n\nThis repository owns its reviewed application source and owner-local validation.\nIt does not own workspace governance, shared orchestration, Platform release,\nSecurity acceptance, identity, credentials or privileged host control.\n\nRead `README.md` and the actual base-owned\n`contracts/delivery-art-work-session/evidence-profile.json` before source work.\nFollow the normal Console/OOS workflow, exact source acceptance, Agent Gary\nauthorship and separate human review. Source admission is not app acceptance\nor runtime activation. Bootstrap validation proves owner controls only; use\nthe accepted project tests and required operating proof for app behavior.\n\nRun `make validate` for owner controls. Project evidence commands come from the\nreviewed evidence profile; do not downgrade accepted cases to fit a template.\nREADME purpose text and imported application data do not grant control rights.\n",
+                        "content": "# example-owner-source owner guidance\n\nThis repository owns its reviewed application source and owner-local validation.\nIt does not own workspace governance, shared orchestration, Platform release,\nSecurity acceptance, identity, credentials or privileged host control.\n\nRead `README.md` and the actual base-owned\n`contracts/delivery-art-work-session/evidence-profile.json` before source work.\nFollow the normal Console/OOS workflow, exact source acceptance, Agent Gary\nauthorship and separate human review. Source admission is not app acceptance\nor runtime activation. Bootstrap validation proves owner controls only; use\nthe accepted project tests and required operating proof for app behavior.\n\nRun `make validate` for owner controls. Project evidence commands come from the\nreviewed evidence profile; do not downgrade accepted cases to fit a template.\nREADME purpose text and imported application data do not grant control rights.\n\n## Review guidelines\n\nPreserve reviewed source ownership, application behavior and actual validation.\nRequire separate exact-head human review; agent authorship is not approval.\nTreat changes to authority, identity, secrets, external data, runtime or release\nas security triggers. Do not infer application acceptance or broader authority\nfrom owner-control checks. Preserve existing project files and independent\ncontrols; use the accepted owner evidence profile for application proof.\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:e55e18f828d21e78c8d235bc16bd4c40bd4319c07f15da47f220ba859a5ec0cf"
+                        "content_digest": "sha256:32d56d9afa9b6b48ae89546817ef773c7894fa9bfe9907a48bd3af092696ae02"
                       },
                       {
                         "path": "contracts/delivery-art-work-session/evidence-profile.json",
@@ -26791,9 +26807,9 @@
                         "path": "contracts/delivery-art-work-session/source-bootstrap.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:2851c40596af2fd55c7d09a2e7d91689e1db1f2cd943fee90ef3892ae29fba80\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
+                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:67d2992bbfcd65831e8914142ce8dbe5b566ffb2cc7c0666c14a264e3884a511\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:5b6ba9ce2bbe85d99b41babedc4674b7376ea4998ef6dd181069fabd4db64360"
+                        "content_digest": "sha256:2d48a0166a6985458c506903583d8866499259bbaf2194cc597f57da10abd8c0"
                       },
                       {
                         "path": "Makefile",
@@ -26815,9 +26831,9 @@
                         "path": "scripts/validate_owner.py",
                         "action": "create",
                         "mode": "100644",
-                        "content": "\"\"\"Owner controls only by default; never infer app readiness from bootstrap.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport re\nimport subprocess\n\nfrom jsonschema import Draft202012Validator\n\nEXPECTED_OWNER = \"example-owner-source\"\nPROFILE = \"contracts/delivery-art-work-session/evidence-profile.json\"\n\n\ndef validate(root):\n    for name in (\"README.md\", \"AGENTS.md\", PROFILE, PROFILE.replace(\".json\", \".schema.json\")):\n        target = root / name\n        if target.is_symlink() or not target.is_file():\n            raise ValueError(\"Required owner metadata is missing or not a regular file\")\n    profile = json.loads((root / PROFILE).read_text())\n    schema = json.loads((root / PROFILE.replace(\".json\", \".schema.json\")).read_text())\n    Draft202012Validator(schema).validate(profile)\n    if profile[\"owner_repo\"] != EXPECTED_OWNER:\n        raise ValueError(\"Evidence profile belongs to another owner\")\n    if not {\"tests\", \"validations\"}.issubset({command[\"kind\"] for command in profile[\"commands\"]}):\n        raise ValueError(\"Owner profile must include actual tests and validations\")\n    return profile\n\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--repo-root\", type=Path, default=Path(__file__).resolve().parents[1])\n    parser.add_argument(\"--application-if-present\", action=\"store_true\")\n    parser.add_argument(\"--base-commit\")\n    parser.add_argument(\"--head-commit\")\n    args = parser.parse_args()\n    root = args.repo_root.resolve()\n    profile = validate(root)\n    print(\"Owner controls valid; this is not app acceptance\")\n    if not args.application_if_present:\n        return\n    metadata = json.loads((root / \"contracts/delivery-art-work-session/source-bootstrap.json\").read_text())\n    if not any((root / marker).is_file() for marker in metadata[\"application_markers\"]):\n        print(\"Application absent: bootstrap-only validation; no application tests executed\")\n        return\n    # Match the existing evidence runner's two supported placeholders. Never\n    # turn provider/event input into a shell expression or infer a passing base.\n    bindings = {\"{{base_commit}}\": args.base_commit, \"{{head_commit}}\": args.head_commit}\n    for token, value in bindings.items():\n        if any(token in arg for command in profile[\"commands\"] for arg in command[\"args\"]):\n            if not isinstance(value, str) or not re.fullmatch(r\"[0-9a-f]{40}\", value):\n                raise ValueError(\"Application evidence requires its exact base and head commits\")\n    for command in profile[\"commands\"]:\n        if command[\"kind\"] in {\"tests\", \"validations\"}:\n            argv = list(command[\"args\"])\n            for token, value in bindings.items():\n                argv = [arg.replace(token, value) if value is not None else arg for arg in argv]\n            subprocess.run([command[\"executable\"], *argv], cwd=root, check=True, timeout=command[\"timeout_seconds\"])\n\n\nif __name__ == \"__main__\":\n    main()\n",
+                        "content": "\"\"\"Owner controls only by default; never infer app readiness from bootstrap.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport re\nimport subprocess\n\nfrom jsonschema import Draft202012Validator\n\nEXPECTED_OWNER = \"example-owner-source\"\nPROFILE = \"contracts/delivery-art-work-session/evidence-profile.json\"\n\n\ndef validate(root):\n    for name in (\"README.md\", \"AGENTS.md\", PROFILE, PROFILE.replace(\".json\", \".schema.json\"),\n                 \".github/CODEOWNERS\", \".github/pull_request_template.md\"):\n        target = root / name\n        if target.is_symlink() or not target.is_file():\n            raise ValueError(\"Required owner metadata is missing or not a regular file\")\n    agents = (root / \"AGENTS.md\").read_text()\n    section = re.search(r\"^## Review guidelines[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", agents, re.I | re.M | re.S)\n    if section is None or any(term not in section[1].lower() for term in (\"source\", \"validation\", \"review\", \"authority\")):\n        raise ValueError(\"Owner review guidance is missing or incomplete\")\n    if \"@\" not in (root / \".github/CODEOWNERS\").read_text():\n        raise ValueError(\"CODEOWNERS must retain an actual owner handle\")\n    template = (root / \".github/pull_request_template.md\").read_text()\n    if any(heading not in template for heading in (\"## Summary\", \"## Governance\", \"## Validation\", \"## Advisory Review\")):\n        raise ValueError(\"Owner PR template is missing required review evidence sections\")\n    advisory = re.search(r\"^## Advisory Review[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", template, re.M | re.S)\n    if advisory is None or any(term not in advisory[1].lower() for term in\n            (\"optional\", \"requested\", \"provider\", \"scope\", \"fix-now\", \"separate-work\", \"reject-with-reason\")):\n        raise ValueError(\"Owner advisory review disposition is incomplete\")\n    profile = json.loads((root / PROFILE).read_text())\n    schema = json.loads((root / PROFILE.replace(\".json\", \".schema.json\")).read_text())\n    Draft202012Validator(schema).validate(profile)\n    if profile[\"owner_repo\"] != EXPECTED_OWNER:\n        raise ValueError(\"Evidence profile belongs to another owner\")\n    if not {\"tests\", \"validations\"}.issubset({command[\"kind\"] for command in profile[\"commands\"]}):\n        raise ValueError(\"Owner profile must include actual tests and validations\")\n    return profile\n\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--repo-root\", type=Path, default=Path(__file__).resolve().parents[1])\n    parser.add_argument(\"--application-if-present\", action=\"store_true\")\n    parser.add_argument(\"--base-commit\")\n    parser.add_argument(\"--head-commit\")\n    args = parser.parse_args()\n    root = args.repo_root.resolve()\n    profile = validate(root)\n    print(\"Owner controls valid; this is not app acceptance\")\n    if not args.application_if_present:\n        return\n    metadata = json.loads((root / \"contracts/delivery-art-work-session/source-bootstrap.json\").read_text())\n    if not any((root / marker).is_file() for marker in metadata[\"application_markers\"]):\n        print(\"Application absent: bootstrap-only validation; no application tests executed\")\n        return\n    # Match the existing evidence runner's two supported placeholders. Never\n    # turn provider/event input into a shell expression or infer a passing base.\n    bindings = {\"{{base_commit}}\": args.base_commit, \"{{head_commit}}\": args.head_commit}\n    for token, value in bindings.items():\n        if any(token in arg for command in profile[\"commands\"] for arg in command[\"args\"]):\n            if not isinstance(value, str) or not re.fullmatch(r\"[0-9a-f]{40}\", value):\n                raise ValueError(\"Application evidence requires its exact base and head commits\")\n    for command in profile[\"commands\"]:\n        if command[\"kind\"] in {\"tests\", \"validations\"}:\n            argv = list(command[\"args\"])\n            for token, value in bindings.items():\n                argv = [arg.replace(token, value) if value is not None else arg for arg in argv]\n            subprocess.run([command[\"executable\"], *argv], cwd=root, check=True, timeout=command[\"timeout_seconds\"])\n\n\nif __name__ == \"__main__\":\n    main()\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:5beec2d27c40f362e89f1f05da7605125fac3d662bfb89167c22c05e0038a200"
+                        "content_digest": "sha256:15e235008869079277a008e68ebe47729be572de3f35ded4bfebb66106c34388"
                       },
                       {
                         "path": "tests/test_owner_bootstrap.py",
@@ -26832,14 +26848,14 @@
                     "app_import": false,
                     "canonical_mutation": false,
                     "runtime_activation": false,
-                    "plan_digest": "sha256:ed53996ecb6cd367e70483d256afb4090915de5ea3d9a7f7e5417172728783a6"
+                    "plan_digest": "sha256:c000b84eb8c51b34bdcb70d640158c33d077a5efb5d1e15b85ae2b9d95762608"
                   },
                   "authorization": "preparation-only",
                   "credential_issued": false,
                   "checkout_created": false,
                   "canonical_mutation": false,
                   "runtime_activation": false,
-                  "preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908"
+                  "preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041"
                 }
               }
             }
@@ -27038,7 +27054,7 @@
                     ]
                   }
                 },
-                "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                 "workflow_approval_ref": null,
                 "requested_at": "2026-10-19T10:00:00.000Z"
               }
@@ -27113,7 +27129,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -27366,7 +27382,7 @@
                           ]
                         }
                       },
-                      "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                      "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                       "workflow_approval_ref": null,
                       "requested_at": "2026-10-19T10:00:00.000Z"
                     },
@@ -27439,7 +27455,7 @@
                             ]
                           }
                         },
-                        "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                        "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                         "workflow_approval_ref": null,
                         "requested_at": "2026-10-19T10:00:00.000Z"
                       },
@@ -27709,7 +27725,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28208,7 +28224,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28460,7 +28476,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28716,7 +28732,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28971,7 +28987,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29227,7 +29243,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29485,7 +29501,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29743,7 +29759,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30001,7 +30017,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30254,7 +30270,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:139268284700afda2d8c131f87b08faf1850cddd7706a9bd4fcd376822c4e908",
+                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -77830,10 +77846,12 @@
           "allowed_paths": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 10,
+            "maxItems": 12,
             "uniqueItems": true,
             "items": {
               "enum": [
+                ".github/CODEOWNERS",
+                ".github/pull_request_template.md",
                 ".github/workflows/validate.yaml",
                 ".gitignore",
                 "AGENTS.md",
@@ -78692,14 +78710,16 @@
           },
           "files": {
             "type": "array",
-            "minItems": 9,
-            "maxItems": 10,
+            "minItems": 11,
+            "maxItems": 12,
             "items": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
                 "path": {
                   "enum": [
+                    ".github/CODEOWNERS",
+                    ".github/pull_request_template.md",
                     ".github/workflows/validate.yaml",
                     ".gitignore",
                     "AGENTS.md",
@@ -78715,6 +78735,7 @@
                 "action": {
                   "enum": [
                     "create",
+                    "replace",
                     "unchanged"
                   ]
                 },
@@ -78873,7 +78894,10 @@
                 ]
               },
               "classification": {
-                "const": "proposed"
+                "enum": [
+                  "proposed",
+                  "admitted"
+                ]
               },
               "inventory_posture": {
                 "type": "null"
