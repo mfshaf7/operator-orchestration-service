@@ -46,6 +46,7 @@ replacement workflow mechanisms.
 
 - changed workflow, adapter, or contract: accept the existing dedicated binding in both registered compositions; project current per-target forms, values, field kinds and allowed choices; scope typed fields and accepted effects to explicit ids; preserve source narratives and bind capabilities into packet revision
 - tests or validator added: full-composition positive/negative shell checks; native OpenProject reader-to-packet form contract test; typed apply/readback replay and reversed-id missing-field regression tests
+- follow-on native gate correction: the first cross-owner proof stopped at parser/editor projection. The actual Console Apply decision remained false for reviewed metadata because the open metadata-review gate omitted its existing Delivery metadata route. Bind that gate to the existing bulk-update route; verify unresolved denial, accepted draft resolution and blocked/stale denial through the actual Console decision, without CLI metadata pre-writes or a new mechanism.
 - related change records: None
 
 ## Artifact And Deployment Evidence
