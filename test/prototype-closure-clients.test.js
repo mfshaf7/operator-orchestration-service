@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { assertClosureReadiness, closureDigest, closureManifest, createClosureEvaluation } from "../src/prototype-closure/contracts.js";
 import { createPrototypeClosureGitHubClient } from "../src/prototype-closure/provider-client.js";
+import { createWgcfPrototypeClosureClient } from "../src/prototype-closure/wgcf-client.js";
 
 test("Prototype Closure pins controlled dev-integration activation", () => {
   assert.equal(closureManifest.runtime_activation, true);
 });
 
-test("Closure readiness binds record, evidence, contract, issuer and expiry", () => {
+test("Closure readiness binds record, evidence, contract, issuer and expiry", async (t) => {
   const request = {
     schema_version: 2, artifact_type: "prototype-closure-request",
     request_id: "closure:test", prototype_id: "sample", action: "retire-incubation",
@@ -43,6 +44,18 @@ test("Closure readiness binds record, evidence, contract, issuer and expiry", ()
   };
   const options = { implementationRef: "c".repeat(40), serviceIdentityRef: "spiffe://test/closure", now: new Date("2026-09-14T12:00:00.000Z") };
   assert.equal(assertClosureReadiness(body, evaluation, options), body);
+  const deadlines = [], methods = [];
+  t.mock.method(AbortSignal, "timeout", (ms) => { deadlines.push(ms); return new AbortController().signal; });
+  const client = createWgcfPrototypeClosureClient({ baseUrl: "http://127.0.0.1:1", callerId: "operator-orchestration-service",
+    callerSecret: "s".repeat(32), implementationRef: options.implementationRef, serviceIdentityRef: options.serviceIdentityRef,
+    clock: () => options.now, fetchImpl: async (_url, init) => {
+      methods.push(init.method);
+      assert.ok(init.signal instanceof AbortSignal);
+      return Response.json({ ...body, ledger: { ...body.ledger, resolution: init.method === "POST" ? "created" : "read" } });
+    } });
+  assert.equal((await client.evaluate(evaluation)).readiness.readiness_digest, readiness.readiness_digest);
+  assert.deepEqual(methods, ["POST", "GET"]);
+  assert.deepEqual(deadlines, [90_000, 90_000]);
   const tampered = structuredClone(body);
   tampered.readiness.record_digest = `sha256:${"d".repeat(64)}`;
   tampered.readiness.readiness_digest = closureDigest(tampered.readiness, { omit: "readiness_digest" });

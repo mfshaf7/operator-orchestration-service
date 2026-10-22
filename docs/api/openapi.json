@@ -16083,7 +16083,7 @@
       "post": {
         "tags": ["Prototype Closure"],
         "security": [{"CallerIdHeader": [], "CallerSecretHeader": []}],
-        "description": "WGCF-only read of current OOS baseline, Delivery application, or completed retirement evidence. Caller-specific WGCF authentication is required. Closure runtime activation remains disabled.",
+        "description": "WGCF-only read of current baseline, Delivery, Platform, retirement or native finalized source-import evidence. Caller-specific WGCF authentication and the commissioned dev-integration Closure composition are required. Source-only owner proof is limited to current Inventory-bound public synthetic repositories; it does not execute application code or authorize runtime/publication.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "workspace-governance-control-fabric",
         "x-oos-owner": "operator-orchestration-service",
@@ -16098,10 +16098,15 @@
               "schema": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["field", "ref", "prototype_id", "source_revision"],
+                "required": ["field", "prototype_id", "source_revision"],
                 "properties": {
-                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref", "prior_retirement_receipt_ref"]},
+                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref", "prior_retirement_receipt_ref", "runtime_disposition_plan_ref", "runtime_disposition_proof_ref", "durable_owner_acceptance_ref", "source_transfer_receipt_ref", "already_owned_source_proof_ref"]},
                   "ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "owner_ref": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+                  "subject_ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "operator_id": {"type": "string", "minLength": 1, "maxLength": 128},
+                  "retirement_reason": {"type": "string", "maxLength": 1024},
+                  "durable_owner_acceptance_ref": {"type": "string", "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$"},
                   "prototype_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
                   "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
                   "source_packet_ref": {"type": "string", "minLength": 1, "maxLength": 512},

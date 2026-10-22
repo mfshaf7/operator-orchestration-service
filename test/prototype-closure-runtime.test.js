@@ -52,6 +52,8 @@ test("owner evidence dispatch uses the exact owner and denies missing readers", 
   assert.deepEqual(observed, [{
     field: "source_transfer_receipt_ref", ref: "owner://transfer/1",
     owner_ref: "durable-owner", prototype_id: "sample", source_revision: "a".repeat(40),
+    subject_ref: undefined, operator_id: undefined, source_packet_ref: null,
+    accepted_delivery_target_receipt_ref: null, durable_owner_acceptance_ref: null,
   }]);
   await assert.rejects(
     readEvidence({ field: "source_transfer_receipt_ref", ref: "owner://transfer/1", ownerRef: "unconfigured-owner", request }),
@@ -106,4 +108,22 @@ test("owner-backed composition supplies local owner readers including Platform",
   } finally {
     await rm(stateRoot, { recursive: true, force: true });
   }
+});
+
+test("normal runtime wires the native durable owner reader without injecting a fixture owner", async (t) => {
+  const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-closure-normal-owner-runtime-"));
+  t.after(() => rm(stateRoot, { recursive: true, force: true }));
+  const service = createPrototypeClosureRuntime({
+    config: config(stateRoot), maturityStateRoot: stateRoot,
+    deliveryApplicationService: { async readAcceptedReceipt() { throw new Error("unexpected before Inventory admission"); } },
+    artifactService: { async resolveArtifact() { throw new Error("unexpected before Inventory admission"); } },
+    inventoryAuthorityRoot: path.join(stateRoot, "missing-wg-authority"),
+    callerOperatorBindings: { "console-caller": "operator:reviewer" },
+  });
+  await assert.rejects(service.ownerReadback.read({ field: "durable_owner_acceptance_ref",
+    ref: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`, prototype_id: "sample-tool",
+    owner_ref: "sample-app", source_revision: "b".repeat(40), subject_ref: "repo://sample-org/sample-app",
+    source_packet_ref: "record://delivery-packets/sample-tool", operator_id: "console-caller",
+    accepted_delivery_target_receipt_ref: `oos://receipts/prototype-delivery-application/${"c".repeat(64)}`,
+  }), { code: "record_authority_unavailable" }, "Normal composition must reach canonical Inventory, not a missing owner seam");
 });

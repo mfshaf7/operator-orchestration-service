@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +8,8 @@ import { requireRecordAuthorityFreshness } from "../record-authority-freshness.j
 import { parse as parseYaml } from "yaml";
 import { assertClosureArtifact, closureDigest, closureError, closureManifest } from "./contracts.js";
 import { prototypeMaturityDigest } from "../prototype-maturity/contracts.js";
+import { parseCanonicalJson } from "../delivery-art/canonical-json.js";
+import { assertDeliveryIngressContract, prototypeDeliveryPacketDigest } from "../delivery-ingress/contracts.js";
 
 const execute = promisify(execFile);
 const SHA = /^[0-9a-f]{40}$/;
@@ -15,6 +18,9 @@ const gitEnv = {
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
+  GIT_NO_REPLACE_OBJECTS: "1",
+  GIT_GRAFT_FILE: "/dev/null",
+  GIT_OPTIONAL_LOCKS: "0",
 };
 
 export function createPrototypeClosureSourceClient({ authorityRoot, provider, python = "python3" }) {
@@ -172,6 +178,71 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return observed;
   }
 
+  async function readImportSource({ prototypeId, sourceRevision, packetRef, packetDigest, prototypeSourceRevision }) {
+    const matched = /^record:\/\/delivery-packets\/([a-z0-9][a-z0-9._-]*)$/.exec(packetRef ?? "");
+    if (!matched || typeof prototypeId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prototypeId) ||
+        prototypeId.length > 128 || !SHA.test(sourceRevision ?? "") || !SHA.test(prototypeSourceRevision ?? "") ||
+        !/^sha256:[0-9a-f]{64}$/.test(packetDigest ?? "")) throw closureError("import_source_invalid", "Read the exact accepted Prototype packet and committed source.", 400);
+    if (await provider.mainRevision() !== sourceRevision) throw closureError("authority_stale", "Prototype source advanced before transfer inspection.", 503);
+    const result = await sandbox(sourceRevision, `prototype-import-proof-${prototypeId}`, async ({ source }) => {
+      const records = parseYaml(await git(source, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
+      const selected = records?.prototypes?.filter(record => record?.id === prototypeId);
+      if (selected?.length !== 1 || selected[0].lifecycle !== "graduating" ||
+          selected[0].source_custody !== "incubation-repo" || selected[0].project_phase !== "delivery-governed" ||
+          selected[0].data_mode !== "synthetic" || selected[0].delivery_packet_ref !== packetRef) {
+        throw closureError("import_source_unqualified", "Only the current accepted synthetic Prototype source is qualified for this readback.", 409);
+      }
+      const packetPath = `records/delivery-packets/${matched[1]}.json`;
+      const entry = await git(source, "ls-tree", "-l", "HEAD", "--", packetPath);
+      const [header, pathname] = entry.split("\t");
+      const parts = header?.trim().split(/\s+/);
+      if (pathname !== packetPath || parts?.length !== 4 || parts[0] !== "100644" || parts[1] !== "blob" ||
+          !SHA.test(parts[2]) || !/^\d+$/.test(parts[3]) || Number(parts[3]) > 1_048_576) throw closureError("import_packet_invalid", "Accepted Studio packet must be a bounded regular committed record.", 503);
+      const packet = parseCanonicalJson(await git(source, "show", `HEAD:${packetPath}`));
+      assertDeliveryIngressContract("prototype-delivery-packet.schema.json", packet, "Accepted Prototype packet");
+      if (packet.packet_ref !== packetRef || packet.packet_digest !== packetDigest ||
+          prototypeDeliveryPacketDigest(packet.content) !== packetDigest ||
+          packet.content.source.prototype_id !== prototypeId ||
+          packet.content.source.repository !== "workspace-prototype-studio" ||
+          packet.content.source.revision.head_commit !== prototypeSourceRevision) {
+        throw closureError("import_packet_changed", "Imported source does not match the owner-accepted Prototype packet.", 409);
+      }
+      await git(source, "merge-base", "--is-ancestor", prototypeSourceRevision, sourceRevision);
+      const prefix = `prototypes/${prototypeId}/`;
+      const filesAt = async revision => {
+        const rows = (await git(source, "ls-tree", "-rlz", "--full-tree", revision, "--", prefix)).split("\0").filter(Boolean);
+        if (!rows.length || rows.length > 128) throw closureError("import_source_unbounded", "Prototype source exceeds the qualified complete-file mapping.", 409);
+        let bytes = 0;
+        return rows.map(row => {
+          if (row.split("\t").length !== 2) throw closureError("import_source_invalid", "Prototype transfer paths must be unambiguous regular Git paths.", 409);
+          const [head, file] = row.split("\t"), [mode, type, blob, size] = head.trim().split(/\s+/);
+          if (typeof file !== "string" || !file.startsWith(prefix) || file.length > 512 ||
+              !/^(?!\/)(?!.*\/\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*(?:^|\/)\.git(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/.test(file) ||
+              !["100644", "100755"].includes(mode) || type !== "blob" || !SHA.test(blob ?? "") ||
+              !/^\d+$/.test(size ?? "") || Number(size) > 4 * 1024 * 1024 || (bytes += Number(size)) > 32 * 1024 * 1024) {
+            throw closureError("import_source_invalid", "Prototype transfer requires bounded regular source files.", 409);
+          }
+          return { source_path: file, git_mode: mode, git_blob: blob, size: Number(size) };
+        });
+      };
+      const approved = await filesAt(prototypeSourceRevision), current = await filesAt(sourceRevision);
+      if (JSON.stringify(approved) !== JSON.stringify(current)) throw closureError("import_source_changed", "Current Prototype files differ from its accepted Delivery packet source.", 409);
+      const files = [];
+      for (const file of approved) {
+        const { stdout: bytes } = await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", source,
+          "cat-file", "blob", file.git_blob], { env: gitEnv, encoding: "buffer", timeout: 15000, maxBuffer: 4 * 1024 * 1024 });
+        if (!Buffer.isBuffer(bytes) || bytes.length !== file.size ||
+            createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") !== file.git_blob) throw closureError("import_blob_invalid", "Studio source bytes differ from their committed object.", 503);
+        files.push({ ...file, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` });
+      }
+      if (await git(source, "status", "--short")) throw closureError("source_change_invalid", "Source transfer readback must not mutate Studio.", 503);
+      return { prototype_id: prototypeId, source_revision: sourceRevision, prototype_source_revision: prototypeSourceRevision,
+        source_packet_ref: packetRef, packet_digest: packetDigest, files };
+    });
+    if (await provider.mainRevision() !== sourceRevision) throw closureError("authority_stale", "Prototype source advanced during transfer inspection.", 503);
+    return result;
+  }
+
   async function ownerReadback({ field, ref, prototype_id: prototypeId,
     source_revision: revision, operator_id: operatorId, retirement_reason: reason }) {
     if (!["retention_plan_ref", "retained_source_readback_ref"].includes(field) ||
@@ -323,7 +394,7 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
   }
 
   return {
-    branch, state, readAt, readBaselineAt, snapshot, ownerReadback, prepare, openReview, observe,
+    branch, state, readAt, readBaselineAt, snapshot, readImportSource, ownerReadback, prepare, openReview, observe,
     readback, cancel,
   };
 }

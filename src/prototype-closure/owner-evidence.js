@@ -1,4 +1,5 @@
 import { closureError } from "./contracts.js";
+import { DURABLE_OWNER_FIELDS } from "./durable-owner-reader.js";
 
 const REQUIRED_OWNERS = [
   "workspace-prototype-studio",
@@ -19,7 +20,7 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
   }
 
   return async ({ field, ref, ownerRef, request, source }) => {
-    const reader = registered.get(ownerRef);
+    const reader = registered.get(ownerRef) ?? (DURABLE_OWNER_FIELDS.has(field) ? registered.get("requested-owner") : null);
     if (typeof reader?.read !== "function") {
       throw closureError("owner_reader_missing", `Closure has no reader for ${ownerRef}.`, 503);
     }
@@ -40,6 +41,14 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
       lookup.target_delivery_ref = request.target_delivery_ref ?? null;
       lookup.accepted_delivery_target_receipt_ref = request.accepted_delivery_target_receipt_ref ??
         source?.accepted_delivery_target_receipt_ref ?? null;
+    }
+    if (DURABLE_OWNER_FIELDS.has(field)) {
+      lookup.subject_ref = request.durable_repo_ref;
+      lookup.operator_id = request.operator_id;
+      lookup.source_packet_ref = source?.delivery_packet_ref ?? null;
+      lookup.accepted_delivery_target_receipt_ref = request.accepted_delivery_target_receipt_ref ??
+        source?.accepted_delivery_target_receipt_ref ?? null;
+      lookup.durable_owner_acceptance_ref = request.durable_owner_acceptance_ref ?? null;
     }
     const observed = await reader.read(lookup);
     if (!observed || observed.ref !== ref || observed.owner_ref !== ownerRef) {
