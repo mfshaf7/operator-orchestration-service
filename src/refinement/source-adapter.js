@@ -144,6 +144,7 @@ export function createRefinementSourceAdapter({ openProjectClient }) {
     }
     return buildRefinementPacket({
       deliveryTree: deliverySnapshot.tree,
+      fieldMetadata: deliverySnapshot.fieldMetadata,
       packageRef,
       source,
       workDesignCompletion: completion,

@@ -1,4 +1,5 @@
 import { OpenProjectError } from "../errors.js";
+import { REFINEMENT_METADATA_FIELDS } from "./packet-model.js";
 
 const FIELD_ARGUMENTS = Object.freeze({
   acceptance_criteria: "acceptanceCriteria",
@@ -20,7 +21,19 @@ const FIELD_ARGUMENTS = Object.freeze({
   sponsor: "sponsor",
   success_criteria: "successCriteria",
   target_pi: "targetPi",
+  execution_classification: "executionClassification",
+  pi_objective_type: "piObjectiveType",
+  actual_business_value: "actualBusinessValue",
+  pi_objective_review_outcome: "piObjectiveReviewOutcome",
+  roam_state: "roamState",
+  risk_owner: "riskOwner",
+  risk_review_date: "riskReviewDate",
+  risk_disposition: "riskDisposition",
 });
+
+if (REFINEMENT_METADATA_FIELDS.some((field) => !FIELD_ARGUMENTS[field.backendField])) {
+  throw new Error("Refinement metadata field has no existing Delivery writer argument.");
+}
 
 export class RefinementActivityError extends Error {
   constructor(code, message, { cause = null, retryable = false } = {}) {
@@ -63,6 +76,7 @@ function operationFields(packet, operation) {
 function argumentsFor(fields, request, targetNodeId) {
   return Object.fromEntries(
     fields.flatMap((field) => {
+      if (field.target_node_ids?.length && !field.target_node_ids.includes(String(targetNodeId))) return [];
       const argument = FIELD_ARGUMENTS[field.backend_field];
       if (!argument) return [];
       const value = acceptedValue(request, field, targetNodeId);
@@ -91,6 +105,7 @@ function flattenTree(node) {
 }
 
 function fieldHasAcceptedEffect(field, request, targetNodeId) {
+  if (field.target_node_ids?.length && !field.target_node_ids.includes(String(targetNodeId))) return false;
   const value = acceptedValue(request, field, targetNodeId);
   return field.required || value !== "";
 }

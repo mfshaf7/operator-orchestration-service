@@ -143,6 +143,35 @@ test("Work Design runtime readiness compares all projected values without disclo
   assert.equal(stale.stdout, "stale");
 });
 
+test("complete Console composition requires and consumes the dedicated Work Design binding", () => {
+  const full = { DEVINT_COMPOSITION_ID: "refinement-catalog" };
+  const accepted = runCommon("validate_work_design_composition_context", full);
+  assert.equal(accepted.status, 0, accepted.stderr);
+  const ready = runCommon("work_design_runtime_state", full);
+  assert.equal(ready.status, 0, ready.stderr);
+  assert.equal(ready.stdout, "ready");
+  assert.doesNotMatch(ready.stdout + ready.stderr, new RegExp(callerSecret));
+  const missing = runCommon("validate_work_design_composition_context", {
+    ...full, CGG_WORK_DESIGN_CALLER_SECRET: "",
+    CGG_REFINEMENT_CALLER_SECRET: "synthetic-refinement-binding",
+  });
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /refinement-catalog composition did not supply/);
+  const mismatch = runCommon("work_design_runtime_state", {
+    ...full, TEST_CALLER_ENCODED: Buffer.from("wrong-purpose-secret").toString("base64"),
+  });
+  assert.equal(mismatch.status, 0, mismatch.stderr);
+  assert.equal(mismatch.stdout, "mismatch");
+  const wrongCaller = runCommon("validate_work_design_composition_context", {
+    ...full, CGG_WORK_DESIGN_CALLER_ID: "different-service",
+  });
+  assert.equal(wrongCaller.status, 2);
+  const wrongEndpoint = runCommon("validate_work_design_composition_context", {
+    ...full, CGG_WORK_DESIGN_BASE_URL: "https://outside.example.test",
+  });
+  assert.equal(wrongEndpoint.status, 1);
+});
+
 test("OOS keeps the composition caller credential ephemeral and teardown-owned", () => {
   const upSource = readFileSync(upScript, "utf8");
   const downSource = readFileSync(downScript, "utf8");

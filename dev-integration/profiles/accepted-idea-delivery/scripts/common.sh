@@ -262,7 +262,8 @@ PY
 }
 
 is_work_design_composition() {
-  [[ "${DEVINT_COMPOSITION_ID:-}" == "${WORK_DESIGN_COMPOSITION_ID}" ]]
+  [[ "${DEVINT_COMPOSITION_ID:-}" == "${WORK_DESIGN_COMPOSITION_ID}" ]] ||
+    is_refinement_catalog_composition
 }
 
 validate_cluster_service_url() {
@@ -298,14 +299,14 @@ validate_work_design_composition_context() {
 
   if ! is_work_design_composition &&
     [[ -n "${context_base_url}" || -n "${caller_id}" || -n "${caller_secret}" ]]; then
-    echo "refused: Work Design runtime projections require the registered ${WORK_DESIGN_COMPOSITION_ID} composition." >&2
+    echo "refused: Work Design runtime projections require the registered ${WORK_DESIGN_COMPOSITION_ID} composition or ${REFINEMENT_CATALOG_COMPOSITION_ID}." >&2
     return 2
   fi
   if ! is_work_design_composition; then
     return
   fi
   if [[ -z "${context_base_url}" || -z "${gateway_base_url}" || -z "${caller_id}" || -z "${caller_secret}" ]]; then
-    echo "refused: the ${WORK_DESIGN_COMPOSITION_ID} composition did not supply every required OOS projection." >&2
+    echo "refused: the ${DEVINT_COMPOSITION_ID} composition did not supply every required OOS projection." >&2
     return 2
   fi
   if [[ "${caller_secret}" == *$'\n'* ]]; then

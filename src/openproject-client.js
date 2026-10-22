@@ -58,6 +58,7 @@ import {
   toIdeaId,
 } from "./idea-model.js";
 import { validatePlanApplyInput } from "./work-item-create-preflight.js";
+import { REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
 
 function joinUrl(baseUrl, path) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -6164,10 +6165,59 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "refinement_source_revision_missing",
         );
       }
+      const tree = state.buildTree(recordId);
+      const nodes = [];
+      const visit = (node) => { nodes.push(node); node.children.forEach(visit); };
+      visit(tree);
+      const fieldMetadata = {};
+      // Reuse actual current forms and the existing allowed-value resolver.
+      // Bounded batches avoid unbounded parallel form requests on large trees.
+      for (let offset = 0; offset < nodes.length; offset += 4) {
+        await Promise.all(nodes.slice(offset, offset + 4).map(async (node) => {
+          const payload = state.workPackagesById.get(node.id);
+          const form = await getWorkPackageFormPayload(node.id, payload.lockVersion);
+          const fields = buildCustomFieldSchemaMap(form);
+          const metadata = {};
+          node.description = payload.description?.raw ?? "";
+          const definitions = REFINEMENT_METADATA_FIELDS.filter((definition) =>
+            (definition.target === "initiative" ? node.id === recordId : node.id !== recordId || nodes.length === 1) &&
+            (!definition.targetTypes || definition.targetTypes.includes(node.type)));
+          for (const definition of definitions) {
+            const role = definition.backendField === "assignee_login" ? "assignee"
+              : definition.backendField === "responsible_login" ? "responsible" : null;
+            const entry = role ? { key: role, schema: form._embedded?.schema?.[role] }
+              : fields.get(definition.label);
+            const schema = entry?.schema;
+            let kind = definition.fieldKind;
+            if (["String", "Date", "User"].includes(schema?.type)) kind = "short_text";
+            else if (schema?.type === "Formattable") kind = "long_text";
+            else if (["Integer", "Float"].includes(schema?.type)) kind = "number";
+            else if (schema?.type === "CustomOption") kind = "select";
+            let allowedValues = [];
+            if (kind === "select" && schema) {
+              const options = await buildAllowedValueLinkMap({
+                baseUrl: config.baseUrl, executeRequest: executeRequestWithRetry,
+                fieldNames: [entry.key], formPayload: form, requestHeaders,
+              });
+              allowedValues = [...new Set([...options.values()].map((option) => option.title))].sort();
+            }
+            node[definition.backendField] = role === "assignee" ? workPackageAssigneeLogin(payload)
+              : role === "responsible" ? workPackageResponsibleLogin(payload)
+              : readCustomFieldValueFromSchemaEntry(payload, entry);
+            metadata[definition.backendField] = {
+              writable: Boolean(schema) && schema.writable !== false,
+              field_kind: kind,
+              ...(kind === "select" ? { allowed_values: allowedValues } : {}),
+            };
+          }
+          fieldMetadata[String(node.id)] = metadata;
+        }));
+      }
       return {
         deliveryRef: `openproject://work_packages/${recordId}`,
         sourceRevision: `version-${sourcePayload.lockVersion}`,
-        tree: state.buildTree(recordId),
+        tree,
+        fieldMetadata,
       };
     },
 
