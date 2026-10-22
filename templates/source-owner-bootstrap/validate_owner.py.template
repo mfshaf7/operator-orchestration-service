@@ -12,10 +12,24 @@ PROFILE = "contracts/delivery-art-work-session/evidence-profile.json"
 
 
 def validate(root):
-    for name in ("README.md", "AGENTS.md", PROFILE, PROFILE.replace(".json", ".schema.json")):
+    for name in ("README.md", "AGENTS.md", PROFILE, PROFILE.replace(".json", ".schema.json"),
+                 ".github/CODEOWNERS", ".github/pull_request_template.md"):
         target = root / name
         if target.is_symlink() or not target.is_file():
             raise ValueError("Required owner metadata is missing or not a regular file")
+    agents = (root / "AGENTS.md").read_text()
+    section = re.search(r"^## Review guidelines[^\S\n]*\n(.*?)(?=^## |\Z)", agents, re.I | re.M | re.S)
+    if section is None or any(term not in section[1].lower() for term in ("source", "validation", "review", "authority")):
+        raise ValueError("Owner review guidance is missing or incomplete")
+    if "@" not in (root / ".github/CODEOWNERS").read_text():
+        raise ValueError("CODEOWNERS must retain an actual owner handle")
+    template = (root / ".github/pull_request_template.md").read_text()
+    if any(heading not in template for heading in ("## Summary", "## Governance", "## Validation", "## Advisory Review")):
+        raise ValueError("Owner PR template is missing required review evidence sections")
+    advisory = re.search(r"^## Advisory Review[^\S\n]*\n(.*?)(?=^## |\Z)", template, re.M | re.S)
+    if advisory is None or any(term not in advisory[1].lower() for term in
+            ("optional", "requested", "provider", "scope", "fix-now", "separate-work", "reject-with-reason")):
+        raise ValueError("Owner advisory review disposition is incomplete")
     profile = json.loads((root / PROFILE).read_text())
     schema = json.loads((root / PROFILE.replace(".json", ".schema.json")).read_text())
     Draft202012Validator(schema).validate(profile)

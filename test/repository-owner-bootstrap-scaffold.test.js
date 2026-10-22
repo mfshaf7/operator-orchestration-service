@@ -79,7 +79,7 @@ test("an independently valid existing owner profile and guidance require no temp
   const before = structuredClone(observed);
   const ready = inspectExistingSourceOwnerControls({ ownerRepo: request.authority.owner_repo, fetchedBase: request.fetchedBase, observedFiles: observed });
   assert.deepEqual(observed, before);
-  assert.equal(ready.source_change_required, false);
+  assert.equal(ready.source_change_required, true, "A valid profile alone does not cover missing mandatory review controls");
   assert.equal(ready.app_acceptance, false);
   assert.equal(ready.inventory_admission, false);
   assert.deepEqual(ready.evidence_profile, request.profile);
@@ -91,7 +91,7 @@ test("an independently valid existing owner profile and guidance require no temp
 test("bootstrap refuses foreign profiles, nonproposed subjects, unsafe markers, unknown source and control overwrites", () => {
   const good = input();
   for (const mutate of [
-    value => { value.authority.classification = "admitted"; },
+    value => { value.authority.classification = "out-of-scope"; },
     value => { value.authority.ordinary_source_eligible = true; },
     value => { value.authority.model_writes_allowed = true; },
     value => { value.authority.provider_repository.provider_repository_id = "9007199254740993"; },
@@ -104,11 +104,39 @@ test("bootstrap refuses foreign profiles, nonproposed subjects, unsafe markers, 
     value => { value.applicationMarkers = ["app/main.js", "app/main.js"]; },
     value => { delete value.observedFiles["Makefile"]; },
     value => { value.observedFiles["app/main.js"] = "arbitrary app source"; },
-    value => { value.observedFiles["AGENTS.md"] = "Independent owner controls must not be overwritten"; },
+    value => { value.observedFiles["AGENTS.md"] = "## Review guidelines\nIncomplete independent policy\n"; },
   ]) {
     const candidate = structuredClone(good);
     mutate(candidate);
     assert.throws(() => planSourceOwnerBootstrap(candidate));
+  }
+});
+
+test("admitted pre-Inventory repair preserves every existing byte except an exact append-only review section", () => {
+  const request = input(true), initial = planSourceOwnerBootstrap(request);
+  request.authority.classification = "admitted";
+  request.authority.intake_entry_ref.version = 2;
+  request.observedFiles = Object.fromEntries(initial.files.map(file => [file.path, file.content]));
+  request.observedFiles["AGENTS.md"] = "# Independent owner guidance\nKeep this exact text.\n";
+  request.observedFiles["Makefile"] = "validate:\n\t@false # Independent validation must not be overwritten or executed on host\n";
+  request.observedFiles[".github/CODEOWNERS"] = null;
+  request.observedFiles[".github/pull_request_template.md"] = null;
+  const before = structuredClone(request), repair = planSourceOwnerBootstrap(request);
+  assert.deepEqual(request, before);
+  assert.deepEqual(repair.files.filter(file => file.action !== "unchanged").map(file => [file.path, file.action]), [
+    [".github/CODEOWNERS", "create"], [".github/pull_request_template.md", "create"], ["AGENTS.md", "replace"],
+  ]);
+  assert.ok(repair.files.find(file => file.path === "AGENTS.md").content.startsWith(request.observedFiles["AGENTS.md"]));
+  assert.match(repair.files.find(file => file.path === "AGENTS.md").expected_digest, /^sha256:[0-9a-f]{64}$/);
+  for (const file of repair.files.filter(file => file.action === "unchanged")) assert.equal(file.content, request.observedFiles[file.path]);
+  assert.equal(repair.requires_workflow_permission, false);
+  assert.equal(repair.app_import, false);
+  const observedFiles = Object.fromEntries(repair.files.map(file => [file.path, file.content]));
+  assert.equal(inspectExistingSourceOwnerControls({ ownerRepo: request.authority.owner_repo, fetchedBase: request.fetchedBase, observedFiles }).source_change_required, false);
+  assert.equal(planSourceOwnerBootstrap({ ...request, observedFiles }).source_change_required, false);
+  for (const path of [".github/CODEOWNERS", ".github/pull_request_template.md"]) {
+    const conflicting = structuredClone(request); conflicting.observedFiles[path] = "Independent incomplete policy";
+    assert.throws(() => planSourceOwnerBootstrap(conflicting), /explicit owner review/);
   }
 });
 

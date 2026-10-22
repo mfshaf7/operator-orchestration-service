@@ -275,7 +275,7 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
       const inspected = await sourceReader.inspect({ providerRepository, paths: sourceOwnerBootstrapPaths(true) });
       if (inspected.visibility !== "public" || inspected.default_branch !== "main") throw fail("owner_readiness_unqualified", "Private/client source readiness is not qualified by the current public route.");
       const controls = inspectExistingSourceOwnerControls({ ownerRepo, fetchedBase: inspected.fetched_base, observedFiles: inspected.observed_files });
-      if (!controls || controls.evidence_profile_digest !== native.evidence_profile_digest) throw fail("owner_controls_changed", "Current actual owner controls differ from the completed checkout proof; reinspect the existing owner without a dummy source PR.");
+      if (!controls || controls.source_change_required || controls.evidence_profile_digest !== native.evidence_profile_digest) throw fail("owner_controls_changed", "Current actual owner controls differ from the completed proof; reinspect the existing owner for bounded control repair before admission.");
       const body = { schema_version: 1, scope: "source-owner-controls-readiness", owner_repo: ownerRepo,
         provider_repository: structuredClone(providerRepository), fetched_base: inspected.fetched_base,
         canonical_checkout_commit: native.canonical_commit, evidence_profile_digest: controls.evidence_profile_digest,

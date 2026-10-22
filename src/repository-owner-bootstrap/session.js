@@ -35,7 +35,7 @@ export function bootstrapSourceSession({ requestDigest, requestId, callerId, ope
       plan.model_invoked !== false || plan.app_import !== false || plan.canonical_mutation !== false || plan.runtime_activation !== false) {
     fail("A bootstrap source session requires its exact trusted finite prepared plan and accountable operator.");
   }
-  const paths = plan.files.filter(file => file.action === "create").map(file => file.path).sort();
+  const paths = plan.files.filter(file => file.action !== "unchanged").map(file => file.path).sort();
   const subject = assertBootstrapCredentialSubject({ kind: "repository-bootstrap", owner_repo: plan.owner_repo,
     intake_entry_ref: plan.intake_entry_ref, custody_receipt_digest: preparation.custody_receipt_digest,
     template_digest: plan.template.digest, plan_digest: planDigest, decision_ref: preparation.decision_ref,
@@ -60,14 +60,15 @@ export function bootstrapSourceChangeSet(plan, session) {
   if (canonicalDigest(body) !== digest || digest !== session.subject.plan_digest ||
       plan.template?.digest !== SOURCE_OWNER_BOOTSTRAP_TEMPLATE.digest || plan.template.digest !== session.subject.template_digest ||
       plan.owner_repo !== session.owner_repo || plan.fetched_base !== session.landing_unit.base_commit) fail("The source plan no longer matches the exact approved bootstrap session.");
-  const changes = plan.files.filter(file => file.action === "create");
+  const changes = plan.files.filter(file => file.action !== "unchanged");
   if (canonicalDigest(changes.map(file => file.path).sort()) !== canonicalDigest(session.subject.allowed_paths) ||
-      changes.some(file => file.mode !== "100644" || file.expected_digest !== null || typeof file.content !== "string" ||
+      changes.some(file => file.mode !== "100644" || !["create", "replace"].includes(file.action) ||
+        (file.action === "create" ? file.expected_digest !== null : file.path !== "AGENTS.md" || !DIGEST.test(file.expected_digest ?? "")) || typeof file.content !== "string" ||
         !file.content.isWellFormed() || Buffer.byteLength(file.content) > 65_536)) fail("Bootstrap may create only its exact approved finite regular owner-control files.");
   const changeSet = { schema_version: 1, change_set_id: `owner-bootstrap-plan:${digest.slice(7)}`, session_id: session.session_id,
     base_commit: plan.fetched_base, objective_digest: session.objective_digest,
     commit_message: "chore: bootstrap reviewed source owner controls",
-    operations: changes.map(file => ({ action: "create", path: file.path, content: file.content, expected_digest: null })) };
+    operations: changes.map(file => ({ action: file.action, path: file.path, content: file.content, expected_digest: file.expected_digest })) };
   if (!validateDeliveryArtSourceRealizationChangeSet(changeSet).valid) fail("Bootstrap must retain the existing bounded native source change-set wire.");
   return changeSet;
 }

@@ -1,0 +1,8 @@
+## Review guidelines
+
+Preserve reviewed source ownership, application behavior and actual validation.
+Require separate exact-head human review; agent authorship is not approval.
+Treat changes to authority, identity, secrets, external data, runtime or release
+as security triggers. Do not infer application acceptance or broader authority
+from owner-control checks. Preserve existing project files and independent
+controls; use the accepted owner evidence profile for application proof.

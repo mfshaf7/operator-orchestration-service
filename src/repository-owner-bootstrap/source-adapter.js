@@ -8,7 +8,7 @@ import { createDeliveryArtWorkSessionSourceAdapter, createConfiguredAgentSourceI
 import { createPrivateFileTransactions } from "../persistence/private-file-transactions.js";
 import { bootstrapCredentialProjection } from "./credentials.js";
 import { assertBootstrapSourceSession, bootstrapSourceChangeSet, bootstrapWorktreeRelativePath } from "./session.js";
-import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths } from "./scaffold.js";
+import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, trustedSourceOwnerValidationFiles } from "./scaffold.js";
 import { createCanonicalProposedSourceOwnerReader } from "./authority-reader.js";
 import { createPublicBootstrapSourceReader } from "./source-reader.js";
 
@@ -159,10 +159,15 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
         mkdirSync(path.dirname(target), { recursive: true });
         writeFileSync(target, git(worktree, "show", `${input.expected_head}:${file.path}`), { mode: 0o600 });
       }
+      for (const [relative, content] of Object.entries(trustedSourceOwnerValidationFiles(binding.session.owner_repo))) {
+        const target = path.join(temporary, relative);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, content, { mode: 0o600 });
+      }
       const output = String(execute("make", ["validate"], { cwd: temporary, env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
         encoding: "utf8", timeout: 60_000, maxBuffer: 262_144, stdio: ["ignore", "pipe", "pipe"] }));
       const body = { schema_version: 1, scope: "trusted-owner-controls-only", session_id: binding.session.session_id,
-        source_revision: input.expected_head, fetched_base: input.plan.fetched_base, command: "make validate (isolated exact committed controls)",
+        source_revision: input.expected_head, fetched_base: input.plan.fetched_base, command: "make validate (current trusted validator; isolated exact committed control data)",
         result: "pass", log_digest: canonicalDigest(output), app_acceptance: false, runtime_activation: false };
       return { ...body, receipt_digest: canonicalDigest(body) };
     } finally { if (temporary) rmSync(temporary, { recursive: true, force: true }); }
@@ -195,12 +200,13 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       assertAuthority();
       const assertPlan = repoRoot => {
         const observedFiles = {};
-        for (const name of ["README.md", "AGENTS.md", PROFILE]) {
-          if (!git(repoRoot, "ls-tree", fetchedBase, "--", name).startsWith("100644 blob ")) fail("existing_controls_invalid", "Existing owner guidance/profile must remain exact regular fetched source.");
-          observedFiles[name] = git(repoRoot, "show", `${fetchedBase}:${name}`);
+        for (const name of sourceOwnerBootstrapPaths(true)) {
+          const row = git(repoRoot, "ls-tree", fetchedBase, "--", name);
+          if (row && !row.startsWith("100644 blob ")) fail("existing_controls_invalid", "Existing owner controls must remain exact regular fetched source.");
+          observedFiles[name] = row ? git(repoRoot, "show", `${fetchedBase}:${name}`) : null;
         }
         const ready = inspectExistingSourceOwnerControls({ ownerRepo: input.owner_repo, fetchedBase, observedFiles });
-        if (ready.evidence_profile_digest !== existing.evidence_profile_digest) fail("existing_controls_changed", "The actual existing owner validation profile changed after operator preparation.");
+        if (!ready || ready.source_change_required || ready.evidence_profile_digest !== existing.evidence_profile_digest) fail("existing_controls_changed", "The actual existing owner controls changed after operator preparation.");
       };
       await ensureCheckout({ providerRepository, fetchedBase, paths: sourceOwnerBootstrapPaths(true) }, {
         root, ownerRepo: input.owner_repo, sourceRequestId: input.bootstrap_request_id,

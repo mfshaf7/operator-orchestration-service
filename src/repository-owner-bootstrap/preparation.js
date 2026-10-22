@@ -53,7 +53,7 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
       input = structuredClone(input);
       const authority = () => authorityFor(callerId, input.owner_repo, input.custody_request_id);
       // Fail before touching target source when proposed/custody authority is
-      // missing, mismatched, admitted, retired, out of scope or privileged.
+      // missing, mismatched, active/retired, out of scope or privileged.
       const before = assertProposedSourceOwnerAuthority(await authority());
       if (before.owner_repo !== input.owner_repo || !/^sha256:[0-9a-f]{64}$/.test(before.custody_receipt_digest ?? "")) fail("The proposed authority does not bind this exact selected custody owner.");
       const source = await sourceReader.inspect({ providerRepository: before.provider_repository, paths: sourceOwnerBootstrapPaths(input.with_ci) });
@@ -62,7 +62,7 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
       if (existing && canonicalDigest(existing.evidence_profile) !== canonicalDigest(input.evidence_profile)) {
         fail("Existing owner controls are retained; select their actual validation profile rather than replacing it during bootstrap.");
       }
-      const plan = existing ? null : planSourceOwnerBootstrap({ authority: before, fetchedBase: source.fetched_base,
+      const plan = existing && !existing.source_change_required && (!input.with_ci || existing.ci_present) ? null : planSourceOwnerBootstrap({ authority: before, fetchedBase: source.fetched_base,
         profile: input.evidence_profile, applicationMarkers: input.application_markers,
         withCi: input.with_ci, observedFiles: source.observed_files });
       const after = assertProposedSourceOwnerAuthority(await authority());
@@ -71,7 +71,7 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
         caller_id: callerId, operator_id: operatorId, decision_ref: input.decision_ref,
         custody_request_id: input.custody_request_id, custody_receipt_digest: before.custody_receipt_digest,
         owner_authority: selected(before),
-        plan, ...(existing ? { existing_owner_controls: existing,
+        plan, ...(existing && !plan ? { existing_owner_controls: existing,
           next_action: "admit-existing-owner-controls-no-bootstrap-review" } : {}),
         authorization: "preparation-only", credential_issued: false, checkout_created: false,
         canonical_mutation: false, runtime_activation: false };

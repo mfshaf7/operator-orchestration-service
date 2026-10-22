@@ -26,9 +26,11 @@ function harness(t, { existingControls = false } = {}) {
   ] };
   const preparationInput = { owner_repo: owner, custody_request_id: "custody:fixture", evidence_profile: profile,
     application_markers: ["app/main.mjs"], with_ci: false, decision_ref: "operator:fixture-bootstrap" };
-  const observedFiles = Object.fromEntries(sourceOwnerBootstrapPaths(false).map(name => [name, name === "README.md" ? "# Actual project purpose\n" :
-    existingControls && name === "AGENTS.md" ? "Independent owner controls.\n" : existingControls && name.endsWith("/evidence-profile.json") ? JSON.stringify(profile) : null]));
-  const plan = existingControls ? null : planSourceOwnerBootstrap({ authority, fetchedBase: "1".repeat(40), profile, applicationMarkers: ["app/main.mjs"], withCi: false, observedFiles });
+  const blankFiles = Object.fromEntries(sourceOwnerBootstrapPaths(false).map(name => [name, name === "README.md" ? "# Actual project purpose\n" : null]));
+  const seed = planSourceOwnerBootstrap({ authority, fetchedBase: "1".repeat(40), profile, applicationMarkers: ["app/main.mjs"], withCi: false, observedFiles: blankFiles });
+  const completedFiles = Object.fromEntries(seed.files.map(file => [file.path, file.content]));
+  const observedFiles = existingControls ? completedFiles : blankFiles;
+  const plan = existingControls ? null : seed;
   const body = { schema_version: 1, workflow_id: "repository-owner-bootstrap-preparation", caller_id: callerId, operator_id: operatorId,
     decision_ref: preparationInput.decision_ref, custody_request_id: preparationInput.custody_request_id,
     custody_receipt_digest: `sha256:${"b".repeat(64)}`, owner_authority: authority, plan,
@@ -105,7 +107,7 @@ function harness(t, { existingControls = false } = {}) {
       calls.providerReads++;
       const actualProfile = { ...profile, ...(profileChanged ? { profile_id: "changed-actual-owner-profile-v2" } : {}) };
       return { fetched_base: pr.merge_commit ?? "1".repeat(40), visibility: "public", default_branch: "main", observed_files: {
-        "README.md": "# Actual owner purpose\n", "AGENTS.md": "Actual independently observed owner guidance.\n",
+        ...completedFiles, "README.md": "# Actual owner purpose\n",
         "contracts/delivery-art-work-session/evidence-profile.json": JSON.stringify(actualProfile) } };
     } },
     clock: () => new Date(NOW), enabled: true };

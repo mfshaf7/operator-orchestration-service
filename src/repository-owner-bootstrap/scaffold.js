@@ -11,11 +11,13 @@ const METADATA = "contracts/delivery-art-work-session/source-bootstrap.json";
 const CI = ".github/workflows/validate.yaml";
 const ASSETS = Object.freeze({ "AGENTS.md": "AGENTS.md.template", "README.md": "README.md.template",
   Makefile: "Makefile.template", ".gitignore": "gitignore.template", "scripts/validate_owner.py": "validate_owner.py.template",
-  "tests/test_owner_bootstrap.py": "test_owner_bootstrap.py.template", [CI]: "validate.yaml.template" });
+  "tests/test_owner_bootstrap.py": "test_owner_bootstrap.py.template", [CI]: "validate.yaml.template",
+  ".github/CODEOWNERS": "CODEOWNERS.template", ".github/pull_request_template.md": "pull_request_template.md.template" });
+const reviewGuidelines = readFileSync(new URL("review-guidelines.md.template", ROOT), "utf8");
 const schemaText = readFileSync(new URL(`../../${SCHEMA}`, import.meta.url), "utf8");
 const assets = Object.fromEntries(Object.entries(ASSETS).map(([target, asset]) => [target, readFileSync(new URL(asset, ROOT), "utf8")]));
 export const SOURCE_OWNER_BOOTSTRAP_TEMPLATE = Object.freeze({ id: "source-owner-bootstrap-v1", owner_repo: "operator-orchestration-service",
-  digest: canonicalDigest({ id: "source-owner-bootstrap-v1", assets, evidence_profile_schema: schemaText,
+  digest: canonicalDigest({ id: "source-owner-bootstrap-v1", assets, review_guidelines: reviewGuidelines, evidence_profile_schema: schemaText,
     engine: readFileSync(new URL("./scaffold.js", import.meta.url), "utf8") }) });
 export const SOURCE_OWNER_BOOTSTRAP_PATHS = Object.freeze([...Object.keys(ASSETS), PROFILE, SCHEMA, METADATA].sort());
 const SHA = /^[0-9a-f]{40}$/;
@@ -33,6 +35,34 @@ function ownerProfile(value, owner) {
   return profile;
 }
 
+function reviewSection(text) {
+  return typeof text === "string" ? /^## Review guidelines\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/im.exec(text)?.[1] ?? null : null;
+}
+function reviewControlsComplete(observedFiles) {
+  const section = reviewSection(observedFiles?.["AGENTS.md"]);
+  if (section !== null && ["source", "validation", "review", "authority"].some(term => !section.toLowerCase().includes(term))) {
+    fail("Existing review guidance is incomplete; preserve independent policy for explicit owner review.");
+  }
+  const codeowners = observedFiles?.[".github/CODEOWNERS"];
+  if (typeof codeowners === "string" && !codeowners.includes("@")) fail("Existing CODEOWNERS needs explicit owner review; do not replace it.");
+  const template = observedFiles?.[".github/pull_request_template.md"];
+  if (typeof template === "string") {
+    if (["## Summary", "## Governance", "## Validation", "## Advisory Review"].some(heading => !template.includes(heading)) ||
+        ["optional", "requested", "provider", "scope", "fix-now", "separate-work", "reject-with-reason"].some(term => !template.toLowerCase().includes(term))) {
+      fail("Existing PR review template needs explicit owner review; do not replace independent controls.");
+    }
+  }
+  return section !== null && typeof codeowners === "string" && typeof template === "string";
+}
+
+// Never execute preserved independent Makefiles, scripts or schema code on the
+// host. Only these current trusted bytes run in the isolated control snapshot;
+// actual guidance/profile/review files remain the exact committed data inputs.
+export function trustedSourceOwnerValidationFiles(owner) {
+  return Object.fromEntries(["Makefile", "scripts/validate_owner.py", "tests/test_owner_bootstrap.py"].map(name =>
+    [name, assets[name].replaceAll("@@OWNER@@", owner)]).concat([[SCHEMA, schemaText]]));
+}
+
 // Existing independently owned controls are not missing scaffolding. Validate
 // their actual fetched-base profile and retain them; never force a dummy PR or
 // overwrite independent AGENTS/Makefile/CI with this template.
@@ -48,7 +78,7 @@ export function inspectExistingSourceOwnerControls({ ownerRepo, fetchedBase, obs
   catch { fail("The existing owner profile is invalid; do not overwrite it with a synthetic bootstrap profile."); }
   return { status: "existing-owner-controls", owner_repo: ownerRepo, fetched_base: fetchedBase,
     evidence_profile: structuredClone(profile), evidence_profile_digest: canonicalDigest(profile),
-    source_change_required: false, ci_present: Object.hasOwn(observedFiles, CI) ? observedFiles[CI] !== null : null,
+    source_change_required: !reviewControlsComplete(observedFiles), ci_present: Object.hasOwn(observedFiles, CI) ? observedFiles[CI] !== null : null,
     app_acceptance: false, inventory_admission: false, runtime_activation: false };
 }
 
@@ -73,11 +103,11 @@ function marker(value) {
 export function assertProposedSourceOwnerAuthority(authority) {
   const owner = authority?.owner_repo;
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(owner ?? "") || authority.schema_version !== 1 ||
-      authority.classification !== "proposed" || authority.inventory_posture !== null ||
+      !["proposed", "admitted"].includes(authority.classification) || authority.inventory_posture !== null ||
       authority.source_bootstrap_eligible !== true || authority.ordinary_source_eligible !== false ||
       authority.model_writes_allowed !== false || authority.canonical_mutation !== false || authority.runtime_activation !== false ||
       authority.intake_entry_ref?.id !== `repo:${owner}` || !DIGEST.test(authority.intake_entry_ref?.digest ?? "") ||
-      !Number.isSafeInteger(authority.intake_entry_ref?.version) || authority.intake_entry_ref.version < 1) fail("A current proposed-only owner projection is required.");
+      !Number.isSafeInteger(authority.intake_entry_ref?.version) || authority.intake_entry_ref.version < 1) fail("Current proposed or admitted source-only authority before Inventory is required.");
   const binding = authority.provider_repository;
   if (!binding || Object.keys(binding).sort().join(",") !== "full_name,provider,provider_repository_id" || binding.provider !== "github" ||
       !/^[1-9][0-9]*$/.test(binding.provider_repository_id ?? "") || !Number.isSafeInteger(Number(binding.provider_repository_id)) ||
@@ -93,6 +123,8 @@ export function planSourceOwnerBootstrap({ authority, fetchedBase, profile, appl
   if (!SHA.test(fetchedBase ?? "") || typeof withCi !== "boolean") fail("Select the exact provider base and optional CI intent.");
   if (Buffer.byteLength(JSON.stringify(profile) ?? "") > 32768) fail("Validation profile exceeds the bounded scaffold input.");
   const selectedProfile = ownerProfile(profile, owner);
+  const existing = inspectExistingSourceOwnerControls({ ownerRepo: owner, fetchedBase, observedFiles });
+  if (existing && canonicalDigest(existing.evidence_profile) !== canonicalDigest(selectedProfile)) fail("Preserve the actual existing owner evidence profile during control repair.");
   if (!Array.isArray(applicationMarkers) || applicationMarkers.length < 1 || applicationMarkers.length > 48) fail("Select the real project's bounded application marker files.");
   const markers = applicationMarkers.map(marker).sort();
   if (new Set(markers).size !== markers.length) fail("Application markers must be unique.");
@@ -105,20 +137,22 @@ export function planSourceOwnerBootstrap({ authority, fetchedBase, profile, appl
   wanted[PROFILE] = `${JSON.stringify(selectedProfile, null, 2)}\n`;
   wanted[SCHEMA] = schemaText;
   wanted[METADATA] = `${JSON.stringify(metadata, null, 2)}\n`;
+  wanted["AGENTS.md"] += `\n${reviewGuidelines}`;
   if (!observedFiles || Object.getPrototypeOf(observedFiles) !== Object.prototype ||
       Object.keys(observedFiles).sort().join("\0") !== Object.keys(wanted).sort().join("\0")) {
     fail("Inspect every exact scaffold target at the selected provider base before planning effects.");
   }
+  reviewControlsComplete(observedFiles);
   const files = [];
   for (const [path, generated] of Object.entries(wanted).sort(([a], [b]) => a.localeCompare(b))) {
     const before = observedFiles[path];
     if (before !== null && (typeof before !== "string" || Buffer.byteLength(before) > 65_536)) fail("Observed source is not a bounded regular UTF-8 file.");
-    // Preserve existing project documentation; do not replace it with a stock
-    // README. Other existing controls require a genuine existing-owner path.
-    const content = path === "README.md" && before !== null ? before : generated;
+    // Preserve all independent controls. The only allowed existing-file delta
+    // is an exact append of absent review guidance, bound to its original bytes.
+    let content = before === null ? generated : before;
+    if (path === "AGENTS.md" && before !== null && reviewSection(before) === null) content = `${before}${before.endsWith("\n") ? "\n" : "\n\n"}${reviewGuidelines}`;
     if (Buffer.byteLength(content) > 65_536) fail("Generated owner control exceeds the finite source bound.");
-    if (before !== null && before !== content) fail(`Existing ${path} has independent owner content; do not overwrite it with bootstrap.`);
-    files.push({ path, action: before === null ? "create" : "unchanged", mode: "100644", content,
+    files.push({ path, action: before === null ? "create" : before === content ? "unchanged" : "replace", mode: "100644", content,
       expected_digest: before === null ? null : byteDigest(before), content_digest: byteDigest(content) });
   }
   const body = { schema_version: 1, workflow_id: "repository-owner-bootstrap-plan", owner_repo: owner,
@@ -126,7 +160,7 @@ export function planSourceOwnerBootstrap({ authority, fetchedBase, profile, appl
     fetched_base: fetchedBase, template: SOURCE_OWNER_BOOTSTRAP_TEMPLATE, evidence_profile_digest: canonicalDigest(selectedProfile),
     application_markers: markers, ci_selected: withCi,
     requires_workflow_permission: files.some(file => file.path === CI && file.action === "create"),
-    source_change_required: files.some(file => file.action === "create"), files,
+    source_change_required: files.some(file => file.action !== "unchanged"), files,
     model_invoked: false, app_import: false, canonical_mutation: false, runtime_activation: false };
   return { ...body, plan_digest: canonicalDigest(body) };
 }
