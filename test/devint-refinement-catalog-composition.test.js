@@ -39,6 +39,7 @@ const refinementSecret = "refinement-cgg-secret-0123456789abcdef";
 const wgcfSecret = "catalog-wgcf-secret-0123456789abcdef";
 const catalogSecret = "catalog-control-secret-0123456789abcdef";
 const agentConsoleSecret = "agent-console-cgg-secret-0123456789abcdef";
+const workDesignSecret = "work-design-cgg-secret-0123456789abcdef";
 const agentConsoleBindings = JSON.stringify({
   "governance-operations-console": "operator:test-operator",
 });
@@ -62,6 +63,9 @@ function createHarness(overrides = {}) {
 printf '%s\n' "$*" >> "\${TEST_K3S_LOG}"
 query="$*"
 case "$query" in
+  *"data.CGG_WORK_DESIGN_BASE_URL"*) printf '%s' "\${TEST_CGG_BASE_ENCODED:-}" ;;
+  *"data.CGG_WORK_DESIGN_CALLER_ID"*) printf '%s' "\${TEST_CGG_CALLER_ID_ENCODED:-}" ;;
+  *"data.CGG_WORK_DESIGN_CALLER_SECRET"*) printf '%s' "\${TEST_WORK_DESIGN_SECRET_ENCODED:-}" ;;
   *"get secret operator-orchestration-service-workspace-intake -o name"*)
     if [[ "\${TEST_IDENTITY_SECRET_PRESENT:-true}" == "true" ]]; then
       printf 'secret/operator-orchestration-service-workspace-intake'
@@ -116,6 +120,10 @@ esac
   chmodSync(k3s, 0o700);
   const env = {
     ...process.env,
+    CGG_WORK_DESIGN_BASE_URL: contextBaseUrl,
+    CGG_WORK_DESIGN_CALLER_ID: "operator-orchestration-service",
+    CGG_WORK_DESIGN_CALLER_SECRET: workDesignSecret,
+    TEST_WORK_DESIGN_SECRET_ENCODED: encode(workDesignSecret),
     CGG_REFINEMENT_BASE_URL: contextBaseUrl,
     CGG_REFINEMENT_CALLER_ID: "operator-orchestration-service",
     CGG_REFINEMENT_CALLER_SECRET: refinementSecret,
@@ -226,7 +234,7 @@ test("shared gateway projection does not make registered compositions conflict",
 
   const workDesignState = runCommon("work_design_runtime_state");
   assert.equal(workDesignState.status, 0, workDesignState.stderr);
-  assert.equal(workDesignState.stdout, "absent");
+  assert.equal(workDesignState.stdout, "ready");
 
   const workDesign = runCommon(
     "validate_work_design_composition_context; validate_refinement_catalog_composition_context",
@@ -254,7 +262,7 @@ test("shared gateway projection does not make registered compositions conflict",
       WGCF_WORKSPACE_INVENTORY_CALLER_SECRET: "",
       CGG_WORK_DESIGN_BASE_URL: contextBaseUrl,
       CGG_WORK_DESIGN_CALLER_ID: "operator-orchestration-service",
-      CGG_WORK_DESIGN_CALLER_SECRET: refinementSecret,
+      CGG_WORK_DESIGN_CALLER_SECRET: workDesignSecret,
     },
   );
   assert.equal(workDesign.status, 0, workDesign.stderr);

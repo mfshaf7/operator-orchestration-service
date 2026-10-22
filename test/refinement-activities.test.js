@@ -133,6 +133,39 @@ test("Refinement bulk activity applies target-specific accepted values once", as
   ]);
 });
 
+test("Refinement typed metadata never leaks PI Objective fields into a different target", async () => {
+  const currentPacket = packet();
+  currentPacket.draft_groups[0].fields.push({
+    backend_field: "pi_objective_type", required: true, value: "Committed",
+    target_node_ids: ["1003"], target_values: {"1003":"Committed"},
+    route_binding: {operation_kind:"bulk_update",oos_route:"POST /v1/delivery-work-items/bulk-update"},
+  });
+  const accepted = request();
+  accepted.accepted_draft.metadata_values["pi_objective_type:1003"] = "Committed";
+  const calls = [];
+  const activities = createRefinementActivities({
+    deliveryService: {async updateDeliveryWorkItem(input) {
+      calls.push(input);
+      return {work_item_record_ref:`openproject://work_packages/${input.workItemId.split("-").at(-1)}`};
+    }},
+    sourceAdapter: sourceAdapter(),
+  });
+  const operation = {kind:"bulk_update",status:"planned",operation_id:"typed",oos_route:"POST /v1/delivery-work-items/bulk-update"};
+  await activities.applyRefinementOperation({callerId:"console",operation,packet:currentPacket,request:accepted});
+  assert.equal(calls.length, 2);
+  assert.equal(Object.hasOwn(calls[0], "piObjectiveType"), false);
+  assert.equal(calls[1].piObjectiveType, "Committed");
+  const replay = createRefinementActivities({
+    deliveryService: {async updateDeliveryWorkItem() {throw new Error("must reuse committed typed values");}},
+    sourceAdapter: sourceAdapter({id:884,children:[
+      {id:1002,delivery_team:"Team A",children:[]},
+      {id:1003,delivery_team:"Team B",pi_objective_type:"Committed",children:[]},
+    ]}),
+  });
+  const result = await replay.applyRefinementOperation({callerId:"console",operation,packet:currentPacket,request:accepted});
+  assert.equal(result.reused_refs.length, 2);
+});
+
 test("Refinement activity preserves retryability of backend unavailability", async () => {
   const activities = createRefinementActivities({
     deliveryService: {

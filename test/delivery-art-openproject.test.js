@@ -5,6 +5,7 @@ import {
   createOpenProjectClient,
   currentDeliveryArtReferenceFromDescription,
 } from "../src/openproject-client.js";
+import { buildRefinementPacket } from "../src/refinement/packet-model.js";
 
 const config = {
   apiToken: "test-token",
@@ -54,6 +55,107 @@ function workPackage({
     subject,
   };
 }
+
+test("Refinement reads native current forms without business writes and preserves typed target contracts", async () => {
+  const records = new Map([
+    [1306, workPackage({ id: 1306, type: "Epic", subject: "Native planning", description: "Canonical initiative narrative" })],
+    [1310, workPackage({ id: 1310, parentId: 1306, type: "Feature", subject: "Real product outcome", description: "Canonical feature narrative" })],
+    [1311, workPackage({ id: 1311, parentId: 1306, type: "PI Objective", subject: "Actual product objective", description: "Canonical objective narrative" })],
+  ]);
+  for (const record of records.values()) {
+    Object.assign(record, {
+      customField33: { raw: "Canonical acceptance" },
+      customField34: { raw: "Canonical readiness" },
+      customField35: { raw: "Canonical completion" },
+      customField43: 8,
+    });
+    record._links.customField52 = { href: "/api/v3/custom_options/11", title: "Business" };
+    record._links.customField42 = { href: "/api/v3/custom_options/21", title: "Committed" };
+  }
+  const option = (id, title) => ({ href: `/api/v3/custom_options/${id}`, title });
+  const schema = {
+    customField14: { name: "Target PI", type: "String", writable: true },
+    customField30: { name: "Owner Repo", type: "String", writable: true },
+    customField31: { name: "Delivery Team", type: "String", writable: true },
+    customField32: { name: "Iteration", type: "String", writable: true },
+    customField33: { name: "Acceptance Criteria", type: "Formattable", writable: true },
+    customField34: { name: "Definition of Ready", type: "Formattable", writable: true },
+    customField35: { name: "Definition of Done", type: "Formattable", writable: true },
+    customField42: { name: "PI Objective Type", type: "CustomOption", location: "_links", writable: true,
+      _links: { allowedValues: [option(21, "Committed"), option(22, "Uncommitted")] } },
+    customField43: { name: "Planned Business Value", type: "Integer", writable: true },
+    customField44: { name: "Actual Business Value", type: "Integer", writable: true },
+    customField52: { name: "Execution Classification", type: "CustomOption", location: "_links", writable: true,
+      _links: { allowedValues: [option(11, "Business"), option(12, "Enabler"), option(13, "NFR")] } },
+    assignee: { name: "Assignee", type: "User", writable: true },
+    responsible: { name: "Accountable", type: "User", writable: true },
+  };
+  const calls = [];
+  const client = createOpenProjectClient({ config, async fetchImpl(url, options) {
+    const path = new URL(url).pathname;
+    calls.push({ path, method: options.method });
+    assert.ok(options.method === "GET" || (options.method === "POST" && path.endsWith("/form")), "only reads and form validation are permitted");
+    if (path === "/api/v3/projects/workspace-delivery-art/work_packages") {
+      const filters = JSON.parse(new URL(url).searchParams.get("filters"));
+      const elements = filters.some((entry) => entry.ancestor) ? [...records.values()].slice(1) : [records.get(1306)];
+      return jsonResponse({ _embedded: { elements }, count: elements.length, total: elements.length });
+    }
+    if (path === "/api/v3/relations") return jsonResponse({ _embedded: { elements: [] }, total: 0, count: 0 });
+    if (path === "/api/v3/projects/workspace-delivery-art/work_packages/form") {
+      // The native tree reader resolves all actual type-specific create forms.
+      const types = ["Feature", "Milestone", "PI Objective", "Risk", "User story", "Defect", "Task"];
+      return jsonResponse({ _embedded: { schema: { ...schema,
+        type: { _links: { allowedValues: types.map((title, index) => ({ href: `/api/v3/types/${index + 1}`, title })) } },
+      } } });
+    }
+    const match = path.match(/^\/api\/v3\/work_packages\/(\d+)(\/form)?$/);
+    assert.ok(match, `unexpected native request ${options.method} ${path}`);
+    const record = records.get(Number(match[1]));
+    assert.ok(record);
+    if (!match[2]) return jsonResponse(record);
+    assert.equal(JSON.parse(options.body).lockVersion, record.lockVersion);
+    return jsonResponse({ _embedded: { schema } });
+  } });
+  const input = {
+    packageRef: "delivery-package:1306",
+    source: { sourceRevision: "version-1", recordRef: "openproject://work_packages/1306" },
+    workDesignCompletion: { event: { application_id: "native-form-contract-test", content_digest: `sha256:${"e".repeat(64)}`,
+      delivery_id: "delivery-1306", recorded_at: "2026-10-23T00:00:00.000Z",
+      result: { target: { delivery_ref: "openproject://work_packages/1306" } } } },
+  };
+  const snapshot = await client.getRefinementDeliveryTree({ recordId: 1306 });
+  assert.equal(snapshot.sourceRevision, "version-1");
+  assert.equal(snapshot.tree.description, "Canonical initiative narrative");
+  const packet = buildRefinementPacket({ ...input, deliveryTree: snapshot.tree, fieldMetadata: snapshot.fieldMetadata });
+  const fields = packet.draft_groups.flatMap((group) => group.fields);
+  assert.equal(packet.status, "ready_for_review");
+  assert.equal(packet.target_tree.children[0].description, "Canonical feature narrative");
+  const item = (key) => fields.find((field) => field.route_binding.target === "work_item" && field.backend_field === key);
+  assert.equal(item("target_pi").field_kind, "short_text");
+  assert.equal(item("iteration").field_kind, "short_text");
+  assert.equal(item("target_pi").allowed_values, undefined);
+  assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1311: "Canonical acceptance" });
+  assert.equal(item("acceptance_criteria").field_kind, "long_text");
+  assert.deepEqual(item("execution_classification").target_node_ids, ["1310"]);
+  assert.deepEqual(item("execution_classification").allowed_values, ["Business", "Enabler", "NFR"]);
+  assert.deepEqual(item("pi_objective_type").target_node_ids, ["1311"]);
+  assert.deepEqual(item("pi_objective_type").allowed_values, ["Committed", "Uncommitted"]);
+  assert.equal(item("actual_business_value").required, false);
+  assert.equal(item("actual_business_value").value, "", "never fabricate future earned business value");
+  assert.equal(fields.some((field) => field.backend_field === "nfr_category"), false, "unsupported optional fields are not fake editors");
+  // A later form can remove edit permission without changing the Epic lockVersion.
+  // That capability change must invalidate the packet and block an empty required target.
+  schema.customField33.writable = false;
+  records.get(1311).customField33.raw = "";
+  const next = await client.getRefinementDeliveryTree({ recordId: 1306 });
+  const changed = buildRefinementPacket({ ...input, deliveryTree: next.tree, fieldMetadata: next.fieldMetadata });
+  const acceptance = changed.draft_groups.flatMap((group) => group.fields).find((field) => field.backend_field === "acceptance_criteria");
+  assert.notEqual(changed.packet_revision, packet.packet_revision);
+  assert.deepEqual(acceptance.target_node_ids, ["1311"], "populated readonly canonical values do not invite edits");
+  assert.equal(acceptance.target_statuses["1311"], "blocked");
+  assert.equal(changed.status, "drafting");
+  assert.ok(calls.some((call) => call.path === "/api/v3/work_packages/1311/form"));
+});
 
 test("captureDeliveryArtScope uses bounded reads and stable material ART fields", async () => {
   const calls = [];

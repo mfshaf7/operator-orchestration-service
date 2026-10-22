@@ -66,15 +66,20 @@ removes the recovery unit.
 ## Work Design Composition
 
 The profile remains independently launchable for ART operations. Governed Work
-Design advice is enabled only when Platform runs the registered composition:
+Design advice is enabled when Platform runs either registered composition:
 
 - `make devint-up COMPOSITION=work-design-advice`
 - `make devint-status COMPOSITION=work-design-advice`
 - `make devint-down COMPOSITION=work-design-advice`
 
+The complete Console composition, `COMPOSITION=refinement-catalog`, includes
+the same dedicated Work Design binding alongside its separate Refinement and
+Agent Console bindings. Use the normal complete-runtime activation for that
+Console lane, rather than starting a second standalone advice composition.
+
 That composition supplies the CGG and governed AI gateway cluster endpoints and
 one runtime-generated CGG caller credential. OOS accepts the three projections
-only as one complete set under the exact composition id. The credential is
+only as one complete set under a registered composition id. The credential is
 mounted from a dedicated namespace Secret, is never written to `broker.env` or
 rendered YAML, is omitted from status output, and is removed on failure or
 teardown. Standalone profile launch removes stale composition credentials and

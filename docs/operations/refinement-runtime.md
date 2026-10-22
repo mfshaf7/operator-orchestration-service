@@ -27,6 +27,26 @@ Use the current projection again after a stale-packet or stale-draft response.
 Reuse the original idempotency key when recovering the same accepted input.
 Never generate a second key merely because the API or worker was interrupted.
 
+## Canonical Metadata
+
+The packet reads each target's current OpenProject form and canonical values.
+Target PI and Iteration remain text fields when the current form declares
+`String`; actual `CustomOption` fields expose only the current allowed choices.
+Acceptance Criteria, Definition of Ready, Definition of Done, roles,
+classification and typed PI Objective/Risk fields use the same reviewed packet,
+not a second metadata editor. A field applies only to its explicit target ids.
+Changing form capabilities or choices invalidates the packet revision as well
+as changing the canonical tree. An unavailable empty required field stays
+blocked; populated read-only values and unavailable optional fields do not
+invite fake edits. The canonical writer and work-start guards remain decisive.
+
+Work Design's tree schema does not create PI Objectives. Add the genuine
+objective under its Epic through Delivery Execution's existing reviewed
+`add_work_item` operation, preserving it when reconciling the Work Design tree.
+Planning records the objective type and planned business value; it does not
+invent future Actual Business Value or a completed PI review. Those optional
+packet values remain empty until actual outcome review supplies them.
+
 ## Activation
 
 Source ships inactive. All of these settings must be deliberately supplied by
@@ -43,6 +63,11 @@ the later Platform activation work:
 
 Run the worker with `npm run refinement:worker`. The API process does not own
 the workflow or activity pollers.
+
+The complete `refinement-catalog` composition also supplies the existing Work
+Design CGG endpoint, caller id and dedicated credential. Work Design does not
+borrow the Refinement credential. A missing or mismatched dedicated binding
+fails readiness; a standalone profile still leaves advice unavailable.
 
 ## Recovery And Evidence
 

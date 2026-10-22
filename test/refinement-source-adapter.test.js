@@ -51,8 +51,12 @@ function deliveryTree() {
       owner_repo: "operator-orchestration-service",
       delivery_team: "Platform",
       iteration: "Iteration 2",
-      assignee_login: "",
-      responsible_login: "",
+      assignee_login: "actual-project-assignee",
+      responsible_login: "actual-project-accountable",
+      execution_classification: "Business",
+      acceptance_criteria: "Reviewed feature outcomes",
+      definition_of_ready: "Accepted current inputs and owner",
+      definition_of_done: "Verified output and durable evidence",
       planned_business_value: 8,
       children: [],
     }, {
@@ -63,8 +67,13 @@ function deliveryTree() {
       owner_repo: "operator-orchestration-service",
       delivery_team: "Workflow Integration",
       iteration: "PI-2026-03 / Iteration 2",
-      assignee_login: "",
-      responsible_login: "",
+      assignee_login: "actual-project-assignee",
+      responsible_login: "actual-project-accountable",
+      acceptance_criteria: "Actual objective success signal",
+      definition_of_ready: "Approved objective and source plan",
+      definition_of_done: "Actual outcome and earned-value review",
+      pi_objective_type: "Committed",
+      planned_business_value: 8,
       children: [],
     }],
   };
@@ -165,6 +174,26 @@ test("Refinement source derives one packet from trusted Work Design and canonica
   assert.equal(packet.target_tree.children[0].id, "1002");
   assert.equal(packet.target_tree.children[1].kind, "PI Objective");
   assert.equal(packet.status, "ready_for_review");
+  const fields = packet.draft_groups.flatMap((group) => group.fields);
+  assert.deepEqual(fields.find((field) => field.backend_field === "pi_objective_type").target_node_ids, ["1004"]);
+  assert.deepEqual(fields.find((field) => field.backend_field === "execution_classification").target_node_ids, ["1002"]);
+  assert.equal(fields.find((field) => field.backend_field === "actual_business_value").required, false);
+  assert.equal(fields.find((field) => field.backend_field === "target_pi").field_kind, "short_text");
+});
+
+test("Refinement missing fields stay bound to target identity, not numeric object-key order", async () => {
+  const native = client();
+  const tree = deliveryTree();
+  tree.children.reverse();
+  tree.children[0].acceptance_criteria = "";
+  native.getRefinementDeliveryTree = async () => ({deliveryRef:"openproject://work_packages/884",sourceRevision:"version-9",tree});
+  const packet = await createRefinementSourceAdapter({openProjectClient:native}).projectPacket({
+    packageRef:"delivery-package:909",sourceRef:"openproject://work_packages/909",
+  });
+  const field = packet.draft_groups.flatMap(group=>group.fields).find(field=>field.backend_field==="acceptance_criteria");
+  assert.equal(field.target_statuses["1004"], "missing");
+  assert.equal(field.target_statuses["1002"], "complete");
+  assert.equal(packet.status, "drafting");
 });
 
 test("Refinement receipt persistence replays identical output without duplicate comments", async () => {
