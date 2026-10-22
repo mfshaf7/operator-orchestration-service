@@ -353,6 +353,9 @@ export function createRuntime({
     platformClient: prototypeClosurePlatformClient,
     maturityStateRoot: config.prototypeMaturity.stateRoot,
     deliveryApplicationService: prototypeDeliveryApplicationService,
+    artifactService: deliveryArtArtifactService,
+    inventoryAuthorityRoot: config.workspaceIntake.authorityRoot,
+    callerOperatorBindings: config.deliveryArt.workSession.callerOperatorBindings,
   });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,

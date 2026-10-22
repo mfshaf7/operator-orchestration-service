@@ -11,9 +11,13 @@ import { createPrototypeClosureService } from "./service.js";
 import { createPrototypeClosureSourceClient } from "./source-client.js";
 import { createPrototypeClosureStore } from "./store.js";
 import { createWgcfPrototypeClosureClient } from "./wgcf-client.js";
+import { createCanonicalSourceRepositoryReader } from "../delivery-art/source-repository-admission.js";
+import { createPublicBootstrapSourceReader } from "../repository-owner-bootstrap/source-reader.js";
+import { createPrototypeClosureDurableOwnerReader } from "./durable-owner-reader.js";
 
 export function createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
-  maturityStateRoot = null, deliveryApplicationService = null }) {
+  maturityStateRoot = null, deliveryApplicationService = null, artifactService = null, inventoryAuthorityRoot = null,
+  callerOperatorBindings = {} }) {
   if (config?.profile !== "dev-integration") {
     throw closureError("profile_invalid", "Closure is limited to the admitted dev-integration profile.", 503);
   }
@@ -41,6 +45,12 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     provider,
   });
   const store = createPrototypeClosureStore({ root: config.stateRoot });
+  const durableOwnerReader = artifactService && inventoryAuthorityRoot && deliveryApplicationService
+    ? createPrototypeClosureDurableOwnerReader({
+      artifactService, deliveryApplicationService, studioSourceClient: sourceClient, callerOperatorBindings,
+      repositoryReader: createCanonicalSourceRepositoryReader({ authorityRoot: inventoryAuthorityRoot, python: config.python }),
+      publicSourceReader: createPublicBootstrapSourceReader({ fetchImpl }),
+    }) : null;
   const ownerReadback = maturityStateRoot && deliveryApplicationService
     ? createPrototypeClosureOwnerReadbackService({
       baselineReader: createPrototypeClosureBaselineOwnerReader({
@@ -50,6 +60,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
       deliveryReader: createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationService }),
       platformReader: resolvedPlatformReader,
       retirementStore: store,
+      durableOwnerReader,
     })
     : null;
   const localReaders = ownerReadback ? {
@@ -58,6 +69,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     "operator-orchestration-service": { read: ({ owner_ref: _owner, ...lookup }) => ownerReadback.read(lookup) },
     "platform-engineering": { read: (lookup) => resolvedPlatformReader.read(lookup) },
   } : {};
+  if (durableOwnerReader) localReaders["requested-owner"] = durableOwnerReader;
   const readEvidence = createPrototypeClosureOwnerEvidenceReader({ ...ownerReaders, ...localReaders });
   const service = createPrototypeClosureService({
     audit,
@@ -79,7 +91,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
 }
 
 export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerReaders, platformClient,
-  maturityStateRoot, deliveryApplicationService }) {
+  maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings }) {
   if (!config?.enabled) return null;
   if (closureManifest.runtime_activation !== true || config.profile !== "dev-integration") {
     throw closureError(
@@ -88,9 +100,9 @@ export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerR
       503,
     );
   }
-  if (!maturityStateRoot || !deliveryApplicationService) {
+  if (!maturityStateRoot || !deliveryApplicationService || !artifactService || !inventoryAuthorityRoot) {
     throw closureError("owner_readback_unavailable", "Closure requires maturity and Delivery owner readback.", 503);
   }
   return createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
-    maturityStateRoot, deliveryApplicationService });
+    maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings });
 }

@@ -18,6 +18,41 @@ selected durable owner. Setting `OOS_PROTOTYPE_CLOSURE_ENABLED` alone is not an
 activation path. Missing identity, evidence-file, or owner-reader dependencies
 fail closed.
 
+### Native durable-owner source proof
+
+For the qualified public synthetic, main-based source-only route, use the
+existing finalized Delivery source-work Review Packet URI as
+`durable_owner_acceptance_ref`. For `already-owned`, the same URI may also be
+`already_owned_source_proof_ref`; each evidence fact is checked independently.
+For `transfer`, the owner discovers the transfer proof from that exact accepted
+packet, not by scanning sessions or asking an operator to author a receipt.
+
+The app-import Landing Unit must include
+`records/prototype-source-imports/<prototype-id>.json`, matching the canonical
+`prototype-source-import-manifest.schema.json`. This is inert import metadata:
+the actual accepted Prototype/Delivery references, approved Studio source
+commit, intended custody and complete source-to-owner byte-digest mapping.
+It must not contain its own future merge SHA, a claimed approval or a runtime
+grant. Native review, merge and finalized Review Packet custody come first;
+source graduation consumes that real evidence afterward.
+
+Normal OOS composition resolves the existing durable artifact and current
+Inventory, verifies the packet's exact Delivery and accountable operator
+through the existing Delivery caller/operator binding, proves the merge is on
+the provider's current public `main`, and checks every accepted Studio file's
+bytes and mode against the imported Git objects. Unrelated later metadata
+commits do not require rewriting historical import proof. Changed Prototype
+files, missing mapping, wrong target/provider/operator, unmerged source,
+Intake-only or inactive owners, unsafe paths, and private/client repositories
+fail closed. No application code executes during this readback.
+
+The normal server supplies the existing Delivery artifact service and reviewed
+Inventory authority root; injected test readers are not operating acceptance.
+WGCF's bounded readback retains its eight-field verified-reference shape;
+OOS separately retains the verified custody fact for Studio reconciliation.
+These source changes require final composed Security acceptance and Platform
+activation before being claimed as live capability.
+
 The composed runtime reads Platform-owned runtime-disposition evidence from the
 Platform evidence file projected into persistent Closure state. It binds Studio
 committed-source readback, Delivery acceptance, OOS receipt custody, and

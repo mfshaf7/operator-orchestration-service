@@ -14,7 +14,13 @@ export function createWgcfPrototypeClosureClient({
     baseUrl,
     callerId,
     callerSecret,
-    fetchImpl,
+    // Two independently checked durable-owner rows may each take up to the
+    // bounded WGCF owner-read deadline. Keep the complete readiness exchange
+    // below the Console continuation budget; other workflow transports retain
+    // their own behavior.
+    fetchImpl: (url, options) => (fetchImpl ?? globalThis.fetch)(url, {
+      ...options, signal: AbortSignal.timeout(90_000),
+    }),
     configNames: {
       baseUrl: "WGCF_PROTOTYPE_CLOSURE_BASE_URL",
       callerId: "WGCF_PROTOTYPE_CLOSURE_CALLER_ID",
