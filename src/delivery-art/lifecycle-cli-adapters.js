@@ -395,7 +395,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
     const upstream = optionalOutput(
       execFileSyncImpl,
       "git",
-      ["rev-parse", "--verify", "@{u}"],
+      ["rev-parse", "--verify", `refs/remotes/origin/${landingUnit.branch}`],
       cwd,
     );
     const state = branch !== landingUnit.branch
