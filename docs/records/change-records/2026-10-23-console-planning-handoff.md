@@ -11,6 +11,7 @@ security_evidence:
   reviewed_artifacts:
     - dev-integration/profiles/accepted-idea-delivery/scripts/common.sh
     - src/openproject-client.js
+    - src/app.js
     - src/refinement/activities.js
     - src/refinement/packet-model.js
   notes: "Extends only the registered complete composition with the existing purpose-specific Work Design binding. Canonical form permissions, allowed choices, explicit target ids, reviewed immutable packets and readback remain authoritative; no new identity, direct browser backend access or model source-authoring authority."
@@ -62,6 +63,18 @@ replacement workflow mechanisms.
 - residual risk: source validation is not actual journey acceptance. No private/client, hostile multi-tenant, production deployment or crash-cure claim.
 
 ## Follow-Up
+
+### Aggregate planning projection ordering maintenance
+
+Actual retained Refinement completed with canonical receipt, but repeated native
+reads used unchanged input version-5/sequence5 while `projected_at` changed.
+Consumer integrity correctly rejected conflicting snapshots at one sequence.
+Work Design has the same composite-response/input-version mismatch. Both packet
+handlers now reuse the existing full-snapshot digest and projection timestamp;
+domain input versions and mutation concurrency remain unchanged. Existing native
+run package coordinates, authorization, receipt custody and replay guards are
+not weakened. Tests cover repeated aggregate observations, default JSON
+compatibility and actual producer-to-Console consumption before publication.
 
 ### Native planning-write fidelity maintenance
 

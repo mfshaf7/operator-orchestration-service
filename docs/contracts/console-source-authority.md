@@ -18,6 +18,14 @@ services continue to own their workflow records, revisions, events, and
 receipts. Route handlers only provide the domain owner and canonical record
 coordinates that cannot be inferred safely.
 
+Work Design and Refinement packet reads are aggregate observations: they carry
+history and a per-read `projected_at`, not only the input ART record. Their
+envelope uses the existing full-projection digest and projection-time ordering.
+The input record version remains unchanged inside the domain projection for
+optimistic mutation checks. An unchanged input version therefore does not stamp
+different observations with one event sequence. Consumer integrity and replay
+checks remain unchanged; this adds no counter, ledger or protocol version.
+
 The negotiated contract is available on current projection reads for:
 
 - Proposal projection and history
