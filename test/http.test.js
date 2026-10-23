@@ -461,6 +461,42 @@ test("Delivery closeout routes preserve caller, revision command, and replay sta
   }]);
 });
 
+test("fresh canonical closeout blockers remain readable without granting readiness", async () => {
+  for (const state of ["not_ready", "ready", "closed", "reconciliation_required"]) {
+    const projection = {
+      delivery_id: "delivery-886", record_ref: "openproject://work_packages/886",
+      source_revision: "sha256:" + "a".repeat(64),
+      projected_at: new Date().toISOString(), projection_state: state,
+      readiness: { ready_for_closeout: state === "ready", reasons: state === "ready" ? [] : ["open_descendants_present"] },
+    };
+    const app = createApp({ config: createBaseConfig(), ideaService: {}, openProjectClient: {},
+      deliveryCloseoutService: { async getProjection() { return projection; } } });
+    const response = await executeRequest(app, {
+      headers: { Accept: "application/vnd.mfshaf7.console-source-projection+json; version=1",
+        "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret" },
+      method: "GET", url: "/v1/delivery-initiatives/delivery-886/closeout",
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.freshness.state, "current");
+    assert.ok(Date.parse(response.body.freshness.valid_until) > Date.now());
+    assert.equal(response.body.binding.record_ref, "openproject://work_packages/886");
+    assert.equal(response.body.binding.source_owner, "workspace-delivery-art");
+    assert.deepEqual(response.body.projection, projection);
+  }
+});
+
+test("an unavailable canonical closeout does not acquire a fresh source envelope", async () => {
+  const app = createApp({ config: createBaseConfig(), ideaService: {}, openProjectClient: {},
+    deliveryCloseoutService: { async getProjection() { throw new OpenProjectError("backend_unavailable", "ART unavailable", 503, "backend_unavailable"); } } });
+  const response = await executeRequest(app, {
+    headers: { Accept: "application/vnd.mfshaf7.console-source-projection+json; version=1",
+      "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret" },
+    method: "GET", url: "/v1/delivery-initiatives/delivery-886/closeout",
+  });
+  assert.ok(response.statusCode >= 500);
+  assert.notEqual(response.body.artifact_type, "console-source-projection");
+});
+
 test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {
   const config = createBaseConfig();
   config.openProject.customFieldProposalWorkflowStateId = null;

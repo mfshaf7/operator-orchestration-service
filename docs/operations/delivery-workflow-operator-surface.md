@@ -1546,6 +1546,23 @@ recorded. In the managed draft payload, `target_work_package_id` is the raw
 positive OpenProject work-package id as an integer or numeric string; do not
 use broker-shaped ids such as `work-item-476` in that field.
 
+A successful canonical closeout read keeps source freshness separate from
+closeout readiness. An exact fresh snapshot may report `not_ready` with missing
+demo, open-descendant, PM² or Inspect & Adapt reasons. Its canonical source
+envelope remains current so the Console can show that guidance. The domain
+readiness and command guards still block premature closeout. Backend failures
+do not acquire a current envelope; expiry and binding checks remain mandatory.
+
+The existing guided closeout command records System Demo, enters Closing,
+records Inspect & Adapt, and finally completes the initiative through native
+backend validation. When only those three inline evidence steps remain and
+all execution, evidence and ownership counts are zero, the owner returns
+`prepare_delivery_closeout` while raw canonical readiness stays false. The
+Console can then review the complete evidence and submit that guided command.
+It need not write those same fields through another client first. Unknown
+reasons, open work, missing/weak evidence, owner gaps and reconciliation still
+withhold preparation; actual backend transition checks remain authoritative.
+
 Supported repair actions are:
 
 - `retarget`

@@ -130,7 +130,7 @@ function readiness(ready, status) {
   };
 }
 
-function harness({ beforeClose = null, closeFailure = false, ready = true, sourceCloseoutPending = false, terminalEventFailure = false, workspaceIntakeService = null } = {}) {
+function harness({ beforeClose = null, closeFailure = false, ready = true, pendingEvidenceReasons = null, readinessCounts = {}, sourceCloseoutPending = false, terminalEventFailure = false, workspaceIntakeService = null } = {}) {
   const calls = [];
   const activities = [];
   let sourceIndex = 0;
@@ -156,7 +156,12 @@ function harness({ beforeClose = null, closeFailure = false, ready = true, sourc
     },
     async getDeliveryCloseoutReadiness(input) {
       calls.push({ operation: "readiness", input });
-      return readiness(sourceIndex === 1 || ready, sourceIndex === 1 ? "done" : "in-progress");
+      const value = readiness(sourceIndex === 1 || ready, sourceIndex === 1 ? "done" : "in-progress");
+      if (sourceIndex === 0 && pendingEvidenceReasons) {
+        Object.assign(value.closeout_readiness, { closing_reasons: pendingEvidenceReasons, reasons: pendingEvidenceReasons, open_descendants: [], ready_for_closing: false, ready_for_closeout: false });
+        Object.assign(value.closeout_readiness.summary, { open_descendant_count: 0, ...readinessCounts });
+      }
+      return value;
     },
   };
   const service = createDeliveryCloseoutService({
@@ -199,6 +204,34 @@ test("Delivery closeout projects normalized readiness and exact next action", as
   assert.equal(projection.readiness.ready_for_closeout, true);
   assert.equal(projection.next_action.code, "prepare_delivery_closeout");
   assert.match(projection.readiness.readiness_ref, /#closeout-readiness@/);
+});
+
+test("guided closeout prepares only its own pending evidence steps and retains raw canonical readiness", async () => {
+  const target = harness({ pendingEvidenceReasons: ["system_demo_missing", "pm2_phase_not_closing", "inspect_and_adapt_missing"] });
+  const projection = await target.service.getProjection({ callerId: "governance-operations-console", correlationId: "read-guided", deliveryId: "delivery-886" });
+  assert.equal(projection.projection_state, "not_ready");
+  assert.equal(projection.readiness.ready_for_closeout, false);
+  assert.equal(projection.next_action.code, "prepare_delivery_closeout");
+  const result = await target.service.applyCommand({ callerId: "governance-operations-console", deliveryId: "delivery-886", command: command() });
+  assert.equal(result.status, "applied");
+  const close = target.calls.filter(call => call.operation === "close");
+  assert.equal(close.length, 1);
+  assert.equal(close[0].input.demoEvidence, "System demo receipt.");
+  assert.equal(close[0].input.inspectSummary, "Closeout evidence was inspected.");
+});
+
+test("pending inline evidence does not bypass execution, evidence, owner or unknown-reason blockers", async () => {
+  for (const options of [
+    { pendingEvidenceReasons: ["system_demo_missing", "unknown_new_guard"] },
+    ...["blocked_count", "open_descendant_count", "completed_with_weak_evidence_count", "completed_with_weak_done_narrative_count", "completed_without_evidence_count", "completed_without_owner_count"].map(key => ({
+      pendingEvidenceReasons: ["system_demo_missing"], readinessCounts: { [key]: 1 },
+    })),
+  ]) {
+    const target = harness(options);
+    await assert.rejects(target.service.applyCommand({ callerId: "governance-operations-console", deliveryId: "delivery-886", command: command() }), error => error.code === "delivery_closeout_not_ready");
+    assert.equal(target.calls.filter(call => call.operation === "close").length, 0);
+    assert.equal(target.activities.length, 0);
+  }
 });
 
 test("Delivery closeout applies once and replays its durable result", async () => {
