@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -24,7 +24,7 @@ function commandStub(command, args) {
     [`git diff --name-only ${baseCommit}...${headCommit}`, "src/a.js\ntest/a.test.js\n"],
     ["git status --porcelain", ""],
     [`git merge-base --is-ancestor ${baseCommit} ${headCommit}`, ""],
-    ["git rev-parse --verify @{u}", `${headCommit}\n`],
+    [`git rev-parse --verify refs/remotes/origin/${branch}`, `${headCommit}\n`],
     [
       `gh pr list --head ${branch} --state all --limit 1 --json state,isDraft,url,headRefOid,baseRefName,mergeCommit`,
       JSON.stringify([{
@@ -298,6 +298,42 @@ test("CLI evidence acquisition uses the nearest valid reviewed ancestor only for
     source,
   });
   assert.equal(accepted.profile_revision, headCommit);
+});
+
+test("main-only bootstrap clones inspect the exact published origin branch without Git upstream mapping", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-main-only-publication-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const remote = path.join(root, "remote.git"), seed = path.join(root, "seed"), repo = path.join(root, "repo");
+  const git = (cwd, ...args) => String(execFileSync("git", ["-c", "user.name=Synthetic source", "-c", "user.email=source@example.invalid", ...args],
+    { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })).trim();
+  git(root, "init", "--bare", "--initial-branch=main", remote);
+  git(root, "init", "--initial-branch=main", seed);
+  await writeFile(path.join(seed, "app.txt"), "base\n");
+  git(seed, "add", "."); git(seed, "commit", "-m", "Synthetic base");
+  git(seed, "remote", "add", "origin", remote); git(seed, "push", "origin", "main");
+  git(root, "clone", "--single-branch", "--branch", "main", remote, repo);
+  const base = git(repo, "rev-parse", "HEAD");
+  git(repo, "switch", "-c", branch);
+  await writeFile(path.join(repo, "app.txt"), "authored source\n");
+  git(repo, "add", "."); git(repo, "commit", "-m", "Synthetic authored source");
+  const head = git(repo, "rev-parse", "HEAD");
+  const { sourceAdapter } = createDeliveryArtLifecycleCliAdapters({ brokerRequest() { throw new Error("No broker effect expected"); } });
+  const unit = { base_commit: base, base_ref: "origin/main", branch, repo_root: repo };
+  assert.equal((await sourceAdapter.inspect(unit)).state, "unpushed");
+  // Mirror the actual publisher's verified-head bookmark and branch metadata.
+  git(repo, "push", remote, `${head}:refs/heads/${branch}`);
+  git(repo, "update-ref", `refs/remotes/origin/${branch}`, head);
+  git(repo, "config", `branch.${branch}.remote`, "origin");
+  git(repo, "config", `branch.${branch}.merge`, `refs/heads/${branch}`);
+  assert.throws(() => git(repo, "rev-parse", "@{u}"), "Main-only fetch mapping must reproduce the original failure");
+  assert.equal(git(repo, "ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0], head);
+  assert.equal((await sourceAdapter.inspect(unit)).state, "pushed");
+  assert.equal((await sourceAdapter.inspect(unit)).upstream_commit, head);
+  git(repo, "update-ref", `refs/remotes/origin/${branch}`, base);
+  assert.equal((await sourceAdapter.inspect(unit)).state, "unpushed", "A stale exact branch ref must still deny");
+  git(repo, "update-ref", "-d", `refs/remotes/origin/${branch}`);
+  git(repo, "update-ref", "refs/remotes/origin/another-branch", head);
+  assert.equal((await sourceAdapter.inspect(unit)).state, "unpushed", "An unrelated matching head cannot substitute for this branch");
 });
 
 test("CLI source inspection uses the recorded base commit and proves real Git ancestry", async () => {

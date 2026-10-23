@@ -894,6 +894,15 @@ verify the exact repository, branch, base, provider scope, and Agent Gary
 identity, and reject ambient human credential fallback. Operators must not
 locate credential files or invoke `git push` or `gh pr create` manually.
 
+Lifecycle source inspection reads the exact recorded
+`refs/remotes/origin/<Landing Unit branch>` bookmark. The native Gary publisher
+records it only after checking the actual provider head. This also supports
+the trusted bootstrap's main-only clone, where Git's `@{u}` cannot map a later
+review branch. Wrong, absent or stale branch refs remain unpushed; clean-tree,
+recorded base/branch, provider PR head and exact human review checks remain.
+Do not republish a successful source operation merely to repair its display,
+or change an independent repository's fetch configuration as a workaround.
+
 For an already active promoted organization owner, use that same maintenance
 path after Platform admits its current canonical Inventory/provider binding.
 Supply the existing managed canonical record reader to each OOS maintenance
