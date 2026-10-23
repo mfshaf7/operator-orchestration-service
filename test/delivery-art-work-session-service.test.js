@@ -283,11 +283,33 @@ test("realization successor adoption advances canonical source ordering without 
   }
   const before = await read();
   await service.executeRealization({ action: "continue", callerId: "operator:workspace-owner", workItemId: "1024", request: {}, sourceIntentRef: "source-intent:fresh-approved" });
+  await new Promise(resolve => setTimeout(resolve, 2));
   const after = await read(), unchanged = await read();
   assert.equal(effects, 1); assert.equal(after.projection.session_revision, before.projection.session_revision);
   assert.equal(after.projection.source_authorization.intent_ref, "source-intent:fresh-approved");
   assert.ok(after.revision.event_sequence > before.revision.event_sequence); assert.notEqual(after.revision.source_revision, before.revision.source_revision);
-  assert.equal(unchanged.revision.event_sequence, after.revision.event_sequence); assert.equal(unchanged.revision.source_revision, after.revision.source_revision);
+  assert.ok(unchanged.revision.event_sequence >= after.revision.event_sequence); assert.equal(unchanged.revision.source_revision, after.revision.source_revision);
+});
+
+test("first and ordinary work-session reads construct canonical observations without source authorization", async () => {
+  const config = loadConfig({ CALLER_ALLOWED_IDS: "operator:workspace-owner", CALLER_AUTH_SECRETS_JSON: JSON.stringify({ "operator:workspace-owner": "test-secret" }), OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({ "operator:workspace-owner": "operator:workspace-owner" }) });
+  for (const revision of [null, "2026-08-27T01:00:00.000Z"]) {
+    const native = {workflow_id:"delivery-art-work-session",delivery_id:"delivery-886",work_item_id:"work-item-1024",landing_unit_id:revision?"delivery-886-api":null,session_id:revision?"work-session:delivery-886:delivery-886-api":null,session_revision:revision,state:revision?"source-work":"decision-required",next_action:{code:revision?"source-work-required":"work-session-start-required",authority:"operator",reason:"Native next step"}};
+    const app=createApp({config,deliveryArtWorkSessionService:{async read(){return structuredClone(native);}}});
+    const read=async accept=>{
+      const request=Readable.from([]);request.method="GET";request.url="/v1/delivery-work-items/1024/work-session";request.headers={"x-oos-caller-id":"operator:workspace-owner","x-oos-caller-secret":"test-secret","x-oos-operator-id":"operator:workspace-owner",accept};
+      let body,code;await app(request,{writeHead(value){code=value;},end(value){body=JSON.parse(value);}});assert.equal(code,200,JSON.stringify(body));return body;
+    };
+    const before=await read("application/vnd.mfshaf7.console-source-projection+json; version=1");
+    await new Promise(resolve=>setTimeout(resolve,2));
+    const after=await read("application/vnd.mfshaf7.console-source-projection+json; version=1");
+    assert.deepEqual(before.projection,native);assert.deepEqual(after.projection,native);
+    assert.match(before.revision.source_revision,/^sha256:[0-9a-f]{64}$/);
+    assert.equal(after.revision.source_revision,before.revision.source_revision);
+    assert.ok(after.revision.event_sequence>before.revision.event_sequence);
+    assert.equal(after.projection.session_revision,revision);
+    assert.deepEqual(await read("application/json"),native);
+  }
 });
 
 test("work-session service binds source realization to the authenticated session identity", async () => {

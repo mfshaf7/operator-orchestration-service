@@ -1947,10 +1947,10 @@ async function handleGetDeliveryArtWorkSession({
   sendSourceProjection(response, request, result, () => ({
     recordRef: `openproject://work_packages/${workItemId.replace(/^work-item-/, "")}`,
     sourceOwner: "workspace-delivery-art",
-    sourceRevision: result.source_authorization?.revision ? sourceRevisionDigest(result) : result.updated_at,
-    sourceTimestamp: result.source_authorization?.revision
-      ? [result.updated_at, result.session_revision, result.source_authorization.revision].filter(value => Number.isFinite(Date.parse(value))).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)
-      : result.updated_at,
+    // Status is an observation even before a session has a command revision.
+    // Never invent or replace session_revision to construct its read envelope.
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp: new Date().toISOString(),
   }));
 }
 
