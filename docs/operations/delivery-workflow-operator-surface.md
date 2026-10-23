@@ -1553,6 +1553,16 @@ envelope remains current so the Console can show that guidance. The domain
 readiness and command guards still block premature closeout. Backend failures
 do not acquire a current envelope; expiry and binding checks remain mandatory.
 
+The existing guided closeout command records System Demo, enters Closing,
+records Inspect & Adapt, and finally completes the initiative through native
+backend validation. When only those three inline evidence steps remain and
+all execution, evidence and ownership counts are zero, the owner returns
+`prepare_delivery_closeout` while raw canonical readiness stays false. The
+Console can then review the complete evidence and submit that guided command.
+It need not write those same fields through another client first. Unknown
+reasons, open work, missing/weak evidence, owner gaps and reconciliation still
+withhold preparation; actual backend transition checks remain authoritative.
+
 Supported repair actions are:
 
 - `retarget`

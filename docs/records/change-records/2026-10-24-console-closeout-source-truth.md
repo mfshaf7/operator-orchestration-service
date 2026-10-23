@@ -33,6 +33,14 @@ The closeout GET supplies an explicit source-freshness attestation after the
 existing native service read. The shared envelope renderer accepts that owner
 descriptor without changing its default mapping for other routes.
 
+The existing prepare action also admits a clean execution tree whose only
+remaining reasons are the Demo, Closing and Inspect & Adapt steps recorded by
+the guided command itself. Raw canonical readiness stays false until those
+steps actually occur. Unknown reasons or nonzero blocked/open/evidence/owner
+counts deny preparation. The native command, transition order, field shapes
+and final canonical checks remain unchanged. The Console follows this owner
+action and still requires its full reviewed evidence before submission.
+
 ## Root Cause
 
 The authenticated native closeout read returned HTTP 200, a current observation
@@ -40,6 +48,11 @@ and the exact ART binding, with `projection_state: not_ready` and real missing
 demo, open-objective, PM² and Inspect & Adapt reasons. The generic mapper
 converted that domain readiness into unknown source freshness. Console then
 correctly rejected the invalid freshness claim and hid the actionable blockers.
+
+The wizard and adapter also required the guided command's own evidence to be
+recorded before that command could run, making a clean initiative depend on
+another client. Operation-specific preparation removes that circularity without
+declaring the pending evidence complete or bypassing the native sequence.
 
 Only the successful validated native closeout read explicitly attests current
 source freshness. Its unchanged domain readiness still governs every mutation.
@@ -55,6 +68,11 @@ no source envelope. Existing source-authority and closeout-service tests also
 run. Exact committed full local/provider CI and separate human review precede
 merge. No OpenProject mutation shape changes. This record describes source work;
 it does not claim an unperformed merge or deployment.
+
+Service regressions prove one guided invocation with its real evidence fields
+when only its own pending steps remain; all six execution/evidence/owner count
+classes and an unknown reason block before acceptance or mutation. Existing
+native backend tests retain ordered transition and final-done validation.
 
 ## Live Verification
 

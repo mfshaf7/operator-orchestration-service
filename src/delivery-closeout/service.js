@@ -189,7 +189,7 @@ function projectionNextAction({ events, packageStatus, readiness }) {
       authority: "operator-orchestration-service",
     };
   }
-  if (readiness.ready_for_closeout) {
+  if (readiness.ready_for_closeout || onlyGuidedEvidenceStepsRemain(readiness)) {
     return {
       code: "prepare_delivery_closeout",
       label: "Prepare Delivery Closeout",
@@ -201,6 +201,12 @@ function projectionNextAction({ events, packageStatus, readiness }) {
     label: "Resolve Closeout Gates",
     authority: "workspace-delivery-art",
   };
+}
+
+function onlyGuidedEvidenceStepsRemain(readiness) {
+  const inlineReasons = new Set(["system_demo_missing", "pm2_phase_not_closing", "inspect_and_adapt_missing"]);
+  return Object.values(readiness.counts).every(value => value === 0) &&
+    readiness.reasons.length > 0 && readiness.reasons.every(reason => inlineReasons.has(reason));
 }
 
 function projectionState({ events, packageStatus, readiness }) {
@@ -491,7 +497,8 @@ export function createDeliveryCloseoutService({
         },
       );
     }
-    if (before.projection_state !== "ready") {
+    if (before.projection_state !== "ready" && !(before.projection_state === "not_ready" &&
+      before.next_action.code === "prepare_delivery_closeout" && onlyGuidedEvidenceStepsRemain(before.readiness))) {
       throw new DeliveryCloseoutServiceError(
         "delivery_closeout_not_ready",
         "Delivery closeout gates are not ready for a terminal mutation.",
