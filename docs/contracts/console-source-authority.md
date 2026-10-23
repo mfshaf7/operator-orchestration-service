@@ -26,6 +26,13 @@ optimistic mutation checks. An unchanged input version therefore does not stamp
 different observations with one event sequence. Consumer integrity and replay
 checks remain unchanged; this adds no counter, ledger or protocol version.
 
+Work-session status likewise uses the full observation digest and read time.
+The valid `decision-required` response has no session revision; an ordinary
+session exposes `session_revision`, not `updated_at`. Neither case requires a
+source-authorization binding before read access. The nullable domain session
+revision remains the exact command concurrency token. Read envelopes do not
+start a session, synthesize a command revision or grant source authority.
+
 The negotiated contract is available on current projection reads for:
 
 - Proposal projection and history

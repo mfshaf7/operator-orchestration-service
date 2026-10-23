@@ -64,6 +64,21 @@ replacement workflow mechanisms.
 
 ## Follow-Up
 
+### Native first work-session read maintenance
+
+Read-only next-step preflight for Story1308 returned a valid native
+decision-required projection with null session revision, while its negotiated
+canonical envelope failed502. The HTTP descriptor referenced nonexistent
+updated_at unless source authorization existed. Status now uses the existing
+full-observation digest and read time; domain session_revision stays unchanged
+for commands. No session, source authorization or CLI business write is created
+to make first entry work. Absent, ordinary and source-authorized status reads,
+repeat observations and unchanged command concurrency are exercised through
+the actual producer and Console consumer. This is existing1298 maintenance,
+classified extend of the existing status boundary, child_isolated_landing_unit
+maintenance-1275-unstarted-work-session-read; one owner/rollback boundary, no
+ART child or architecture change. Revert this source change for rollback.
+
 ### Aggregate planning projection ordering maintenance
 
 Actual retained Refinement completed with canonical receipt, but repeated native
