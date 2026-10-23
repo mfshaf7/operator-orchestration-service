@@ -19,6 +19,31 @@ security_evidence:
 
 # Workspace Intake And Inventory Orchestration
 
+## October23 Direct Intake Recovery Maintenance
+
+Landing Unit Decision: feature_single_landing_unit,
+maintenance-1275-direct-intake-oos. The existing direct product/component
+request contract is operator-authored; it needs neither Delivery closeout nor
+source-owner attestation. Console lacked an entry, and the retained request
+list supported repository custody only. Extend that same list with explicit
+direct source plus exact product/component target. Mixed custody selectors
+are denied; existing custody verification is preserved.
+
+The durable store remains unchanged. Caller, target and source scope bind
+records and opaque cursors. Whole-journal counters prevent a hidden pending
+request from becoming permission to submit another. Count and byte limits,
+integrity checks, source-authority projection and denied caller semantics
+remain in force. Direct projections describe the accepted operator command
+and do not create source-owner attestations or accept an attestation caller.
+This is read-only API maintenance; no OpenProject field or mutation changes.
+
+Tests cover cold store reopen, product/component commands, whole-journal
+pagination, caller/target isolation, mixed selector and cursor denials,
+corrupt persisted state, HTTP forwarding and existing custody regressions.
+Local/provider CI, exact-source Security acceptance and normal Platform
+commissioning precede actual Console use. Rollback restores the accepted
+source composition while retaining existing workflow and canonical records.
+
 ## Summary
 
 Workspace Intake and Active Inventory now consume the exact merged Workspace

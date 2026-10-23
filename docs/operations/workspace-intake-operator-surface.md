@@ -29,6 +29,28 @@ that end-user identity delegation has already been implemented.
 
 ## Procedure
 
+### Direct Product And Component Classification
+
+In Console Workspace Registry, open Intake, choose the exact product or
+component key, and read the retained request journal before preparing a new
+classification. This existing direct route is operator-authored metadata;
+it does not claim Delivery, Prototype, or repository-custody attestation.
+Contextual evidence is preserved in the reviewed notes. The normal shared
+Decision / Review / Result workflow still requires explicit acceptance,
+reviewed source, canonical merge and merged-authority readback. Admission
+does not activate Inventory, runtime, publication or product maturity.
+
+`GET /v1/workspace-intake/requests?target_kind=product&target_name=<key>&source_class=direct`
+reads only this authenticated caller's direct commands for that exact target.
+Component selection uses `target_kind=component`. Both selectors exclude
+repository custody and other source classes; mixed selectors are denied.
+The existing count/byte/page bounds and opaque caller/target/source cursor
+apply. The pending count covers the full matching journal. Cold reopening
+reads the original acknowledged request, without preparing or resubmitting.
+Unavailable or corrupt state never becomes an empty successful journal.
+Direct candidate projections carry no source-owner attestation. The custody
+route and its source-owner verification remain unchanged.
+
 ### Preparing From An Existing Custody Result
 
 The source-qualified owner-admission extension consumes the exact WG/WGCF

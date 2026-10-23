@@ -68,23 +68,27 @@ function assertCaller(record, callerId) {
 
 export function createWorkspaceIntakeService({ store, readinessClient, sourceClient, custodySourceReader = null, sourceOwnerReadinessReader = null, clock = () => new Date(), audit }) {
   async function list({ callerId, input }) {
-    if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "custody_request_id", "cursor"].includes(key)) ||
-        typeof input.custody_request_id !== "string" || input.custody_request_id.length > 256 || !input.custody_request_id.trim() ||
+    const direct = input?.source_class === "direct";
+    if (!input || Array.isArray(input) || Object.keys(input).some(key => !["target", "custody_request_id", "source_class", "cursor"].includes(key)) ||
+        (direct ? Object.hasOwn(input, "custody_request_id") :
+          Object.hasOwn(input, "source_class") || typeof input.custody_request_id !== "string" || input.custody_request_id.length > 256 || !input.custody_request_id.trim()) ||
         (input.cursor !== undefined && !/^[0-9a-f]{64}$/.test(input.cursor))) {
-      throw intakeError("list_invalid", "Request listing requires one exact repository custody selector and an optional opaque cursor.", 400);
+      throw intakeError("list_invalid", "Request listing requires one exact custody or direct product/component selector and an optional opaque cursor.", 400);
     }
     const selected = preparationTarget({ target: input.target });
-    if (selected.kind !== "repo") throw intakeError("list_invalid", "Custody request listing requires a repository target.", 400);
-    if (typeof custodySourceReader !== "function") throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
-    const target = { ...selected, record_id: `repo:${selected.name}` };
-    const custody = repositoryCustodyIntakeAuthority({ result: await custodySourceReader(input.custody_request_id, { callerId }), target });
+    if (direct ? !["product", "component"].includes(selected.kind) : selected.kind !== "repo") {
+      throw intakeError("list_invalid", "Direct listing requires a product/component; custody listing requires a repository.", 400);
+    }
+    if (!direct && typeof custodySourceReader !== "function") throw intakeError("custody_source_unavailable", "Canonical repository custody reader is unavailable.", 503);
+    const target = { ...selected, record_id: `${selected.kind}:${selected.name}` };
+    const custody = direct ? null : repositoryCustodyIntakeAuthority({ result: await custodySourceReader(input.custody_request_id, { callerId }), target });
     const retained = (await store.list()).filter(record => record.caller_id === callerId &&
       record.request.target.kind === target.kind && record.request.target.name === target.name &&
-      custodyRequestFromIntakeSource(record.request.source) === input.custody_request_id);
+      (direct ? record.request.source.class === "direct" : custodyRequestFromIntakeSource(record.request.source) === input.custody_request_id));
     retained.sort((left, right) => Date.parse(right.request.requested_at) - Date.parse(left.request.requested_at) ||
       right.request.request_id.localeCompare(left.request.request_id));
     const cursorFor = record => intakeDigest({ caller_id: callerId, target,
-      custody_request_id: input.custody_request_id, request_id: record.request.request_id }).slice(7);
+      ...(direct ? { source_class: "direct" } : { custody_request_id: input.custody_request_id }), request_id: record.request.request_id }).slice(7);
     let offset = 0;
     if (input.cursor !== undefined) {
       offset = retained.findIndex(record => cursorFor(record) === input.cursor) + 1;
@@ -93,13 +97,21 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
     const page = retained.slice(offset, offset + 25);
     const records = page.map(record => {
       assertCaller(record, callerId);
-      if (record.request.source.digest !== custody.digest || !record.source_attestation) {
+      if (direct) {
+        assertIntake("request", record.request);
+        if (record.source_attestation || intakeDigest(record.request) !== intakeDigest(record.evaluation.request)) {
+          throw intakeError("storage_invalid", "Direct request metadata does not bind its operator-authored command.", 503);
+        }
+      } else if (record.request.source.digest !== custody.digest || !record.source_attestation) {
         throw intakeError("storage_invalid", "Retained request does not bind its canonical custody receipt.", 503);
       }
-      const candidate = bindWorkspaceIntakeSourceCandidate({ schema_version: 1, artifact_type: "workspace-intake-source-candidate",
+      const candidateBody = { schema_version: 1, artifact_type: "workspace-intake-source-candidate",
         source: record.request.source, target, requested_record: record.request.requested_record,
-        evidence_refs: record.source_attestation.evidence_refs });
-      if (candidate.candidate_digest !== record.source_attestation.candidate_digest) throw intakeError("storage_invalid", "Retained candidate binding is invalid.", 503);
+        evidence_refs: direct ? [record.request.source.ref] : record.source_attestation.evidence_refs };
+      // A direct projection describes the accepted operator command. It is
+      // deliberately not passed through the source-owner attestation binder.
+      const candidate = direct ? bindIntake(candidateBody, "candidate_digest") : bindWorkspaceIntakeSourceCandidate(candidateBody);
+      if (!direct && candidate.candidate_digest !== record.source_attestation.candidate_digest) throw intakeError("storage_invalid", "Retained candidate binding is invalid.", 503);
       return { request_id: record.request.request_id, requested_at: record.request.requested_at,
         updated_at: record.history.at(-1).at, status: record.status, revision: record.history.length,
         classification: record.request.requested_classification, candidate };
@@ -112,7 +124,7 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
       revision: retained.reduce((total, record) => total + record.history.length, 0),
       pending_request_count: retained.filter(record => !TERMINAL.has(record.status)).length,
       updated_at: retained.map(record => record.history.at(-1).at).sort().at(-1) ?? null,
-      custody_request_id: input.custody_request_id, records,
+      ...(direct ? { source_class: "direct", custody_request_id: null } : { custody_request_id: input.custody_request_id }), records,
       next_cursor: offset + records.length < retained.length ? cursorFor(page[records.length - 1]) : null };
   }
   async function custodyCandidate(callerId, requestId, target, requestedRecord) {
