@@ -68,8 +68,16 @@ OOS separately retains the verified custody fact for Studio reconciliation.
 These source changes require final composed Security acceptance and Platform
 activation before being claimed as live capability.
 
-The composed runtime reads Platform-owned runtime-disposition evidence from the
-Platform evidence file projected into persistent Closure state. It binds Studio
+The complete Console composition requests post-graduation disposition from the
+existing authenticated Platform provider using the exact Prototype, merged
+Studio revision and source event. Platform verifies current source custody and
+managed Preview absence and records its existing content-addressed proof.
+OOS does not choose the disposition, stop a resource or supply a proof body.
+An unavailable or unverified owner response retains the same pending request;
+the commissioned reader does not fall back to historical file evidence.
+The existing file reader remains the recovery/pre-merge retirement interface.
+Exact composed Security acceptance and normal Platform activation are required
+before these source changes become operating capability. It binds Studio
 committed-source readback, Delivery acceptance, OOS receipt custody, and
 Platform disposition without accepting caller-authored proof bodies. Source
 tests do not prove live owner acceptance or permission to mutate Studio.

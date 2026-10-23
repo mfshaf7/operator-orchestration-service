@@ -30,7 +30,7 @@ function validateRecord(record) {
   return record;
 }
 
-export function createPrototypeClosurePlatformEvidenceReader({ evidenceFile }) {
+export function createPrototypeClosurePlatformEvidenceReader({ evidenceFile, dispositionProvider = null }) {
   if (typeof evidenceFile !== "string" || !evidenceFile.trim()) {
     throw closureError("platform_reader_missing", "Closure requires a Platform evidence file.", 503);
   }
@@ -83,7 +83,14 @@ export function createPrototypeClosurePlatformEvidenceReader({ evidenceFile }) {
     },
 
     async readDisposition({ request, readback }) {
-      const matches = (await records()).filter((record) =>
+      const values = dispositionProvider
+        ? [validateRecord(await dispositionProvider.readPrototypeClosureDisposition({
+          prototype_id: request?.prototype_id,
+          merged_source_revision: readback?.merged_source_revision,
+          source_event_ref: readback?.source_event_ref,
+        }))]
+        : await records();
+      const matches = values.filter((record) =>
         record.field === "post_merge_runtime_disposition" &&
         record.prototype_id === request?.prototype_id &&
         record.merged_source_revision === readback?.merged_source_revision);

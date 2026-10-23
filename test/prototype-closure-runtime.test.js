@@ -91,6 +91,11 @@ test("isolated composition constructs its Platform reader from configured eviden
     const service = createPrototypeClosureComposition(base);
     assert.equal(typeof service.prepare, "function");
     assert.equal(typeof service.advance, "function");
+    assert.throws(() => createPrototypeClosureComposition({ ...base,
+      platformOperationConfig: { enabled: true, providerBaseUrl: "https://provider.invalid",
+        providerCallerId: "oos", providerCallerSecret: "" } }),
+      { code: "platform_operation_provider_not_configured" },
+      "normal configured composition cannot silently ignore a missing owner credential");
   } finally {
     await rm(stateRoot, { recursive: true, force: true });
   }
