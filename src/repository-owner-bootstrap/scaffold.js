@@ -28,8 +28,7 @@ const byteDigest = value => `sha256:${createHash("sha256").update(value, "utf8")
 function ownerProfile(value, owner) {
   const profile = validateDeliveryArtEvidenceProfile(value, owner);
   const kinds = new Set(profile.commands.map(command => command.kind));
-  if (!kinds.has("tests") || !kinds.has("validations") ||
-      !profile.commands.some(command => command.conformance_binding === "matching-fidelity")) {
+  if (!kinds.has("tests") || !kinds.has("validations")) {
     fail("Select real owner tests and validations with the applicable evidence fidelity; bootstrap checks are not app evidence.");
   }
   return profile;

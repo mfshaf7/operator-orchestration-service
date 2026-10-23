@@ -92,7 +92,7 @@ const exampleAuthority = { schema_version: 1, owner_repo: ownerName, classificat
   ordinary_source_eligible: false, model_writes_allowed: false, canonical_mutation: false, runtime_activation: false };
 const input = { owner_repo: ownerName, custody_request_id: "custody:documentation-example", with_ci: false, decision_ref: "operator:documentation-example",
   application_markers: ["app/main.mjs"], evidence_profile: { schema_version: 1, owner_repo: ownerName, profile_id: "example-selected-project-profile-v1", commands: [
-    { id: "tests", kind: "tests", name: "Selected real project tests", executable: "node", args: ["app/test.mjs"], fidelity: "pure-unit", conformance_binding: "matching-fidelity", timeout_seconds: 30 },
+    { id: "tests", kind: "tests", name: "Selected real project tests", executable: "node", args: ["app/test.mjs"], fidelity: "pure-unit", conformance_binding: "none", timeout_seconds: 30 },
     { id: "validations", kind: "validations", name: "Selected source diff", executable: "git", args: ["diff", "--check"], fidelity: "real-git", conformance_binding: "none", timeout_seconds: 30 },
   ] } };
 const plan = planSourceOwnerBootstrap({ authority: exampleAuthority, fetchedBase: base, profile: input.evidence_profile,

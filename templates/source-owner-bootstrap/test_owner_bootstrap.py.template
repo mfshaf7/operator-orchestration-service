@@ -13,7 +13,6 @@ class OwnerControlTests(unittest.TestCase):
     def test_actual_base_owned_profile_and_guidance(self):
         profile = owner_controls.validate(ROOT)
         self.assertEqual(profile["owner_repo"], "@@OWNER@@")
-        self.assertTrue(any(command["conformance_binding"] == "matching-fidelity" for command in profile["commands"]))
 
 
 if __name__ == "__main__":

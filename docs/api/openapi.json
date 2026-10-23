@@ -26673,7 +26673,7 @@
                         "app/test.mjs"
                       ],
                       "fidelity": "pure-unit",
-                      "conformance_binding": "matching-fidelity",
+                      "conformance_binding": "none",
                       "timeout_seconds": 30
                     },
                     {
@@ -26750,9 +26750,9 @@
                     "template": {
                       "id": "source-owner-bootstrap-v1",
                       "owner_repo": "operator-orchestration-service",
-                      "digest": "sha256:67d2992bbfcd65831e8914142ce8dbe5b566ffb2cc7c0666c14a264e3884a511"
+                      "digest": "sha256:0e8759fce364b276eb9082b4f875375c195a2f217fe5c9ead86efcd9dfd4eb02"
                     },
-                    "evidence_profile_digest": "sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65",
+                    "evidence_profile_digest": "sha256:8438250fbbde2e71f39a71041334bdd1f37977d182e97e57744a6ee239822cbe",
                     "application_markers": [
                       "app/main.mjs"
                     ],
@@ -26796,9 +26796,9 @@
                         "path": "contracts/delivery-art-work-session/evidence-profile.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"profile_id\": \"example-selected-project-profile-v1\",\n  \"commands\": [\n    {\n      \"id\": \"tests\",\n      \"kind\": \"tests\",\n      \"name\": \"Selected real project tests\",\n      \"executable\": \"node\",\n      \"args\": [\n        \"app/test.mjs\"\n      ],\n      \"fidelity\": \"pure-unit\",\n      \"conformance_binding\": \"matching-fidelity\",\n      \"timeout_seconds\": 30\n    },\n    {\n      \"id\": \"validations\",\n      \"kind\": \"validations\",\n      \"name\": \"Selected source diff\",\n      \"executable\": \"git\",\n      \"args\": [\n        \"diff\",\n        \"--check\"\n      ],\n      \"fidelity\": \"real-git\",\n      \"conformance_binding\": \"none\",\n      \"timeout_seconds\": 30\n    }\n  ]\n}\n",
+                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"profile_id\": \"example-selected-project-profile-v1\",\n  \"commands\": [\n    {\n      \"id\": \"tests\",\n      \"kind\": \"tests\",\n      \"name\": \"Selected real project tests\",\n      \"executable\": \"node\",\n      \"args\": [\n        \"app/test.mjs\"\n      ],\n      \"fidelity\": \"pure-unit\",\n      \"conformance_binding\": \"none\",\n      \"timeout_seconds\": 30\n    },\n    {\n      \"id\": \"validations\",\n      \"kind\": \"validations\",\n      \"name\": \"Selected source diff\",\n      \"executable\": \"git\",\n      \"args\": [\n        \"diff\",\n        \"--check\"\n      ],\n      \"fidelity\": \"real-git\",\n      \"conformance_binding\": \"none\",\n      \"timeout_seconds\": 30\n    }\n  ]\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:c99c27c3536a572c9c8be9fcd0221d1b55519c48ee9d78ee5120a7d90fe3e1c6"
+                        "content_digest": "sha256:dec39da6018fca2df4acc3013a259603c8008f7c0a85f2d00965961ccfa58745"
                       },
                       {
                         "path": "contracts/delivery-art-work-session/evidence-profile.schema.json",
@@ -26812,9 +26812,9 @@
                         "path": "contracts/delivery-art-work-session/source-bootstrap.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:67d2992bbfcd65831e8914142ce8dbe5b566ffb2cc7c0666c14a264e3884a511\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:a3675f61cb0c875af8d06dfa37fd539c8fc26bd3fdc46b709bb01a561e74aa65\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
+                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:0e8759fce364b276eb9082b4f875375c195a2f217fe5c9ead86efcd9dfd4eb02\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:8438250fbbde2e71f39a71041334bdd1f37977d182e97e57744a6ee239822cbe\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:2d48a0166a6985458c506903583d8866499259bbaf2194cc597f57da10abd8c0"
+                        "content_digest": "sha256:fb8dd3dd622cf6de706e4f95e732bfd0e586bbba3ea1b6102bf274624c3a5dbe"
                       },
                       {
                         "path": "Makefile",
@@ -26844,23 +26844,23 @@
                         "path": "tests/test_owner_bootstrap.py",
                         "action": "create",
                         "mode": "100644",
-                        "content": "\"\"\"Actual owner-control checks, not substitute app/conformance tests.\"\"\"\nimport importlib.util\nfrom pathlib import Path\nimport unittest\n\nROOT = Path(__file__).resolve().parents[1]\nspec = importlib.util.spec_from_file_location(\"owner_controls\", ROOT / \"scripts/validate_owner.py\")\nowner_controls = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(owner_controls)\n\n\nclass OwnerControlTests(unittest.TestCase):\n    def test_actual_base_owned_profile_and_guidance(self):\n        profile = owner_controls.validate(ROOT)\n        self.assertEqual(profile[\"owner_repo\"], \"example-owner-source\")\n        self.assertTrue(any(command[\"conformance_binding\"] == \"matching-fidelity\" for command in profile[\"commands\"]))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+                        "content": "\"\"\"Actual owner-control checks, not substitute app/conformance tests.\"\"\"\nimport importlib.util\nfrom pathlib import Path\nimport unittest\n\nROOT = Path(__file__).resolve().parents[1]\nspec = importlib.util.spec_from_file_location(\"owner_controls\", ROOT / \"scripts/validate_owner.py\")\nowner_controls = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(owner_controls)\n\n\nclass OwnerControlTests(unittest.TestCase):\n    def test_actual_base_owned_profile_and_guidance(self):\n        profile = owner_controls.validate(ROOT)\n        self.assertEqual(profile[\"owner_repo\"], \"example-owner-source\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:65142f8d10ba0b982182f23a89b58062042487b1073d97eb68ac181ccbecee86"
+                        "content_digest": "sha256:2e1c23c140a3d2d88e710f9bbae3142decd1c08048372ce9cfaf3e16f2a15f55"
                       }
                     ],
                     "model_invoked": false,
                     "app_import": false,
                     "canonical_mutation": false,
                     "runtime_activation": false,
-                    "plan_digest": "sha256:c000b84eb8c51b34bdcb70d640158c33d077a5efb5d1e15b85ae2b9d95762608"
+                    "plan_digest": "sha256:514875c59a4990189fe40a159a3d1212a1534565a532c5b5f52ffc744aab152a"
                   },
                   "authorization": "preparation-only",
                   "credential_issued": false,
                   "checkout_created": false,
                   "canonical_mutation": false,
                   "runtime_activation": false,
-                  "preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041"
+                  "preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf"
                 }
               }
             }
@@ -27040,7 +27040,7 @@
                           "app/test.mjs"
                         ],
                         "fidelity": "pure-unit",
-                        "conformance_binding": "matching-fidelity",
+                        "conformance_binding": "none",
                         "timeout_seconds": 30
                       },
                       {
@@ -27059,7 +27059,7 @@
                     ]
                   }
                 },
-                "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                 "workflow_approval_ref": null,
                 "requested_at": "2026-10-19T10:00:00.000Z"
               }
@@ -27115,7 +27115,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -27134,7 +27134,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -27368,7 +27368,7 @@
                                 "app/test.mjs"
                               ],
                               "fidelity": "pure-unit",
-                              "conformance_binding": "matching-fidelity",
+                              "conformance_binding": "none",
                               "timeout_seconds": 30
                             },
                             {
@@ -27387,7 +27387,7 @@
                           ]
                         }
                       },
-                      "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                      "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                       "workflow_approval_ref": null,
                       "requested_at": "2026-10-19T10:00:00.000Z"
                     },
@@ -27441,7 +27441,7 @@
                                   "app/test.mjs"
                                 ],
                                 "fidelity": "pure-unit",
-                                "conformance_binding": "matching-fidelity",
+                                "conformance_binding": "none",
                                 "timeout_seconds": 30
                               },
                               {
@@ -27460,7 +27460,7 @@
                             ]
                           }
                         },
-                        "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                        "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                         "workflow_approval_ref": null,
                         "requested_at": "2026-10-19T10:00:00.000Z"
                       },
@@ -27711,7 +27711,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -27730,7 +27730,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28210,7 +28210,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -28229,7 +28229,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28462,7 +28462,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -28481,7 +28481,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28718,7 +28718,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -28737,7 +28737,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28973,7 +28973,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -28992,7 +28992,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29229,7 +29229,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -29248,7 +29248,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29487,7 +29487,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -29506,7 +29506,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29745,7 +29745,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -29764,7 +29764,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30003,7 +30003,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -30022,7 +30022,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30256,7 +30256,7 @@
                               "app/test.mjs"
                             ],
                             "fidelity": "pure-unit",
-                            "conformance_binding": "matching-fidelity",
+                            "conformance_binding": "none",
                             "timeout_seconds": 30
                           },
                           {
@@ -30275,7 +30275,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:59f214f7d88469badf03ad5a11ff0fada29e7d0c03f52a950b3155a5f0f71041",
+                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
