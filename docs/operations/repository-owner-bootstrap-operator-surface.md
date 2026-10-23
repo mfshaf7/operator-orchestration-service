@@ -46,6 +46,13 @@ the checkpoint or repin contract bundles to bypass a missing Platform refresh.
    [OpenAPI contract](../api/openapi.json) defines the closed input fields.
    Select real project tests/validations and required fidelity; do not copy
    documentation examples or substitute bootstrap tests for application proof.
+   Use `conformance_binding: none` for baseline tests/validations that must run
+   for ordinary source work. `matching-fidelity` applies only when an accepted
+   matching conformance case exists; use it for actual case-specific checks.
+   Bootstrap does not require an Architecture Packet or an architecture-bound
+   command. Existing independent profiles retain their selected bindings;
+   normal source preflight still enforces exact applicable case/kind/fidelity
+   coverage. Owner-control success is not evidence that an application exists.
 3. Inspect the finite plan and `preparation_digest`. This read-only preparation
    creates no request journal, checkout, token, admission or runtime. Existing
    README bytes are preserved; independent controls are not overwritten.

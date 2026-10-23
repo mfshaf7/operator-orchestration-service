@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { parse as parseYaml } from "yaml";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { validateDeliveryArtEvidenceProfileCoverage } from "../src/delivery-art/review-evidence-acquisition.js";
 import { inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, SOURCE_OWNER_BOOTSTRAP_TEMPLATE } from "../src/repository-owner-bootstrap/scaffold.js";
 
 function input(withCi = false) {
@@ -42,6 +43,33 @@ test("trusted scaffold is deterministic and finite, preserves README, and does n
   const unrelated = structuredClone(request);
   unrelated.authority.intake_register_digest = `sha256:${"c".repeat(64)}`;
   assert.deepEqual(planSourceOwnerBootstrap(unrelated), plan, "Unrelated canonical metadata must not invalidate selected owner identity");
+});
+
+test("ordinary source scaffold reaches native baseline coverage without requiring an architecture case", async t => {
+  const request = input();
+  request.profile.commands[0].conformance_binding = "none";
+  const plan = planSourceOwnerBootstrap(request);
+  const files = Object.fromEntries(plan.files.map(file => [file.path, file.content]));
+  const profile = JSON.parse(files["contracts/delivery-art-work-session/evidence-profile.json"]);
+  const coverage = value => validateDeliveryArtEvidenceProfileCoverage({ ownerRepo: request.authority.owner_repo,
+    profile: value, conformanceCases: [], requiredEvidenceKinds: ["tests", "validations"] });
+  assert.doesNotThrow(() => coverage(profile));
+  assert.throws(() => coverage(input().profile), { code: "delivery_art_evidence_profile_incomplete" },
+    "Case-bound checks must still be inapplicable without accepted cases");
+  assert.doesNotThrow(() => validateDeliveryArtEvidenceProfileCoverage({ ownerRepo: request.authority.owner_repo,
+    profile: input().profile, conformanceCases: [{ id: "synthetic-scaffold-unit-case", fidelity: "pure-unit" }],
+    requiredEvidenceKinds: ["tests", "validations"] }), "Existing conditional profiles retain their exact case/fidelity semantics");
+  assert.deepEqual(inspectExistingSourceOwnerControls({ ownerRepo: request.authority.owner_repo,
+    fetchedBase: request.fetchedBase, observedFiles: files }).evidence_profile, profile);
+  const directory = await mkdtemp(path.join(tmpdir(), "ordinary-owner-scaffold-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const [name, content] of Object.entries(files)) {
+    const target = path.join(directory, name); await mkdir(path.dirname(target), { recursive: true }); await writeFile(target, content);
+  }
+  const controls = execFileSync("make", ["validate"], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+  assert.match(controls, /not app acceptance/);
+  assert.match(execFileSync("python3", ["scripts/validate_owner.py", "--application-if-present"], { cwd: directory,
+    encoding: "utf8", timeout: 30000 }), /no application tests executed/);
 });
 
 test("CI is an explicit finite optional file and existing identical controls need no new write purpose", () => {
