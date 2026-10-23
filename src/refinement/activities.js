@@ -85,13 +85,39 @@ function argumentsFor(fields, request, targetNodeId) {
   );
 }
 
-function planNode(node) {
+function planNode(node, fields, request) {
+  const accepted = argumentsFor(fields, request, String(node.id));
   return {
-    type: node.kind,
-    subject: node.title,
-    description: node.draft_body || node.description,
-    children: node.children.map(planNode),
+    type: node.type,
+    subject: node.subject,
+    // Native reconciliation is parent/type/subject based. Do not send a new
+    // classification here: metadata applies it later by explicit work-item id.
+    ...(node.execution_classification ? { executionClassification: node.execution_classification } : {}),
+    // Absent fields stay native-retained; do not re-submit read-only values
+    // merely because the whole coordinated hierarchy is present in the plan.
+    ...(Object.hasOwn(accepted, "targetPi") ? { target_pi: accepted.targetPi } : {}),
+    ...(Object.hasOwn(accepted, "iteration") ? { iteration: accepted.iteration } : {}),
+    // Omit status/description: Refinement does not authorize execution or edits
+    // to the accepted hierarchy's narratives. Native plan retains current state.
+    children: (node.children ?? []).map((child) => planNode(child, fields, request)),
   };
+}
+
+function assertPlanningScope(current, accepted) {
+  if (String(current.id) !== String(accepted.id) || current.type !== accepted.kind || current.subject !== accepted.title) {
+    throw new RefinementActivityError("apply_conflict", "The reviewed planning hierarchy changed; reload Refinement before applying.");
+  }
+  const currentChildren = current.children ?? [];
+  const acceptedChildren = accepted.children ?? [];
+  const identities = currentChildren.map((child) => `${child.type.toLowerCase()}:${child.subject.trim().toLowerCase()}`);
+  if (currentChildren.length !== acceptedChildren.length || new Set(identities).size !== identities.length) {
+    throw new RefinementActivityError("apply_conflict", "The reviewed planning scope changed or contains ambiguous native identities.");
+  }
+  for (const child of currentChildren) {
+    const reviewed = acceptedChildren.find((entry) => String(entry.id) === String(child.id));
+    if (!reviewed) throw new RefinementActivityError("apply_conflict", "The reviewed planning scope no longer matches canonical work-item ids.");
+    assertPlanningScope(child, reviewed);
+  }
 }
 
 function resultRefs(result, field) {
@@ -111,12 +137,17 @@ function fieldHasAcceptedEffect(field, request, targetNodeId) {
 }
 
 function targetMatchesAcceptedValues(node, fields, request, targetNodeId) {
-  return fields
+  return Boolean(node) && fields
     .filter((field) => fieldHasAcceptedEffect(field, request, targetNodeId))
     .every((field) =>
-      String(node?.[field.backend_field] ?? "") ===
-        String(acceptedValue(request, field, targetNodeId)),
+      comparableValue(node[field.backend_field], field) ===
+        comparableValue(acceptedValue(request, field, targetNodeId), field),
     );
+}
+
+function comparableValue(value, field) {
+  const text = String(value ?? "").trim();
+  return field.field_kind === "number" && text !== "" && Number.isFinite(Number(text)) ? String(Number(text)) : text;
 }
 
 export function createRefinementActivities({ deliveryService, sourceAdapter }) {
@@ -186,6 +217,9 @@ export function createRefinementActivities({ deliveryService, sourceAdapter }) {
         const updatedRefs = [];
         const reusedRefs = [];
         for (const targetNodeId of targetNodeIds) {
+          if (!nodesById.has(targetNodeId)) {
+            throw new RefinementActivityError("apply_conflict", `Reviewed work item ${targetNodeId} is absent from the canonical hierarchy.`);
+          }
           const targetRef = `openproject://work_packages/${targetNodeId}`;
           if (
             targetMatchesAcceptedValues(
@@ -224,23 +258,40 @@ export function createRefinementActivities({ deliveryService, sourceAdapter }) {
       }
 
       if (operation.kind === "plan_apply") {
+        const snapshot = await sourceAdapter.readDeliverySnapshot({ packet });
+        const nodesById = new Map(flattenTree(snapshot.tree).map((node) => [String(node.id), node]));
+        const targetNodeIds = [...new Set(fields.flatMap((field) => field.target_node_ids ?? []))];
+        if (targetNodeIds.length === 0) {
+          throw new RefinementActivityError("request_invalid", "Coordinated planning has no reviewed field targets.");
+        }
+        const targetRefs = targetNodeIds.map((id) => `openproject://work_packages/${id}`);
+        if (targetNodeIds.every((id) => targetMatchesAcceptedValues(nodesById.get(id), fields, request, id))) {
+          return { operation_id: operation.operation_id, skipped: false, created_refs: [], updated_refs: [], reused_refs: targetRefs, target_refs: targetRefs };
+        }
+        assertPlanningScope(snapshot.tree, packet.target_tree);
         const result = await deliveryService.applyDeliveryPlan({
           callerId,
           correlationId: request.correlation_id,
           plan: {
             schema_version: 1,
-            items: packet.target_tree.children.map(planNode),
+            items: snapshot.tree.children.map((node) => planNode(node, fields, request)),
           },
           recordId: request.delivery_id,
           reconcileMissing: "ignore",
         });
+        const createdRefs = resultRefs(result, "created");
+        const writtenRefs = [...resultRefs(result, "updated"), ...resultRefs(result, "reused")];
+        const knownRefs = new Set([...nodesById.keys()].map((id) => `openproject://work_packages/${id}`));
+        if (!result?.delivery_record_ref || createdRefs.length || writtenRefs.some((ref) => !knownRefs.has(ref))) {
+          throw new RefinementActivityError("backend_readback_incomplete", "Coordinated Refinement did not reconcile only the existing reviewed hierarchy; inspect canonical state before continuing.");
+        }
         return {
           operation_id: operation.operation_id,
           skipped: false,
           created_refs: resultRefs(result, "created"),
           updated_refs: resultRefs(result, "updated"),
           reused_refs: resultRefs(result, "reused"),
-          target_refs: [result?.delivery_record_ref].filter(Boolean),
+          target_refs: targetRefs,
         };
       }
 
@@ -279,8 +330,17 @@ export function createRefinementActivities({ deliveryService, sourceAdapter }) {
     }
   }
 
-  async function readRefinementCanonicalState({ operationResults, packet }) {
-    return sourceAdapter.readCanonicalState({ operationResults, packet });
+  async function readRefinementCanonicalState({ operationResults, packet, request }) {
+    const snapshot = await sourceAdapter.readDeliverySnapshot({ packet });
+    const nodesById = new Map(flattenTree(snapshot.tree).map((node) => [String(node.id), node]));
+    for (const field of allFields(packet)) {
+      for (const id of field.target_node_ids ?? []) {
+        if (fieldHasAcceptedEffect(field, request, id) && !targetMatchesAcceptedValues(nodesById.get(String(id)), [field], request, id)) {
+          throw new RefinementActivityError("backend_readback_incomplete", `Canonical work item ${id} does not contain the accepted ${field.backend_field} value.`);
+        }
+      }
+    }
+    return sourceAdapter.readCanonicalState({ operationResults, packet, snapshot });
   }
 
   async function persistRefinementReceipt({ appliedAt, readback, request, runId }) {

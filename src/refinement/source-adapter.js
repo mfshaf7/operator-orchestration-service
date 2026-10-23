@@ -151,8 +151,8 @@ export function createRefinementSourceAdapter({ openProjectClient }) {
     });
   }
 
-  async function readCanonicalState({ packet, operationResults = [] }) {
-    const snapshot = await readDeliverySnapshot({ packet });
+  async function readCanonicalState({ packet, operationResults = [], snapshot = null }) {
+    snapshot ??= await readDeliverySnapshot({ packet });
     const refs = operationResults.flatMap((result) => result?.target_refs ?? []);
     return {
       delivery_ref: snapshot.deliveryRef,

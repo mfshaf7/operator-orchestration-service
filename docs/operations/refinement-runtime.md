@@ -47,6 +47,27 @@ Planning records the objective type and planned business value; it does not
 invent future Actual Business Value or a completed PI review. Those optional
 packet values remain empty until actual outcome review supplies them.
 
+Creation of a new PI Objective requires Target PI and a compatible Iteration
+in that reviewed `add_work_item` input. Do not submit a blank create and expect
+Refinement to repair an item that the native writer correctly rejected.
+
+Accepted Refinement writes run in order: initiative governance, coordinated
+planning, then explicit-id work-item metadata. Target PI and Iteration use the
+existing initiative `plan/apply` authority because generic Feature updates
+cannot PI-commit a Feature. This reconciles only the reviewed existing tree
+with `reconcileMissing: ignore`; native identity remains parent/type/subject.
+Changed or ambiguous hierarchy requires a fresh review. The planning step
+retains current classification, descriptions and status; accepted classification
+changes apply afterward by explicit id, avoiding a new prefixed identity during
+plan reconciliation. Refinement never marks items Ready automatically.
+
+Replay reads accepted fields before repeating any mutation. Final readback
+compares every effectful accepted field against its actual canonical target;
+returned record references alone are insufficient. A missing target, ignored
+value or unexpected plan-created reference is not a successful application.
+Inspect partial effects and continue the same run; never delete an unexpected
+record or fabricate a completed receipt to conceal the mismatch.
+
 ## Activation
 
 Source ships inactive. All of these settings must be deliberately supplied by

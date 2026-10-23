@@ -86,6 +86,14 @@ schema, and gateway-audit evidence. The operator may accept, edit, or ignore it.
 6. Failure remains a non-success state with a bounded code and recovery
    reference where one exists.
 
+The existing operations are ordered governance, `plan_apply`, then
+`bulk_update`. Work-item Target PI and Iteration bind to coordinated planning;
+other metadata remains explicit-id scoped. Native plan reconciliation uses the
+reviewed parent/type/subject identities, preserving current classification and
+status rather than creating new work or authorizing execution. The same fresh
+canonical snapshot must confirm all effectful accepted values before receipt
+construction; an operation's returned references do not prove those values.
+
 ## Storage And Recovery
 
 This contract adds no database. OOS owns workflow correlation and canonical

@@ -63,6 +63,26 @@ replacement workflow mechanisms.
 
 ## Follow-Up
 
+### Native planning-write fidelity maintenance
+
+The actual reviewed Console PI Objective create was rejected before mutation
+because the input omitted Target PI. Native creation also requires compatible
+Iteration. The coordinated follow-up adds these inputs in the Console without
+marking work Ready or changing native rules. Refinement now routes work-item
+Target PI and Iteration through existing coordinated `plan/apply`, not generic
+Feature update, and preserves native parent/type/subject reconciliation with
+current classification before later explicit-id metadata changes. It rejects
+changed or ambiguous scope and unexpected creations. Final readback verifies
+all effectful accepted values rather than certifying returned references alone.
+
+Validation includes all seven real native create types, missing/mismatched PI
+inputs, generic Feature/inherited-parent constraints, actual Delivery service
+and OpenProject plan writer with existing records and roadmap projection,
+zero-creation replay, classification ordering, stale scope and missing/ignored
+readback. These source checks do not replace the pending same-record Console
+retry after exact source acceptance and normal activation. No new ART repair
+item, permission, API, profile, ledger or execution-authority grant is added.
+
 - required follow-up: land coherent WG/OOS/CGG/Console source, exact Security acceptance, then normal whole-runtime activation and actual Console Work Design/Refinement readback before app delivery
 - owner: existing #1298 operator journey maintenance
 - due date or closure condition: actual same-record Console proof and existing #1275 acceptance closeout

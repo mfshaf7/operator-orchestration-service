@@ -4,6 +4,8 @@ import { assertRefinementPacket } from "./contracts.js";
 const GOVERNANCE_ROUTE =
   "POST /v1/delivery-initiatives/{delivery_id}/governance";
 const BULK_UPDATE_ROUTE = "POST /v1/delivery-work-items/bulk-update";
+const PLAN_APPLY_ROUTE = "POST /v1/delivery-initiatives/{delivery_id}/plan/apply";
+const PLANNING_FIELDS = new Set(["target_pi", "iteration"]);
 
 const GOVERNANCE_FIELDS = [
   field("target-pi", "target_pi", "Target PI", "short_text", true),
@@ -62,9 +64,10 @@ function stringValue(value) {
 }
 
 function routeBinding(definition, target) {
+  const planning = target === "work_item" && PLANNING_FIELDS.has(definition.backendField);
   return {
-    operation_kind: target === "initiative" ? "governance" : "bulk_update",
-    oos_route: target === "initiative" ? GOVERNANCE_ROUTE : BULK_UPDATE_ROUTE,
+    operation_kind: target === "initiative" ? "governance" : planning ? "plan_apply" : "bulk_update",
+    oos_route: target === "initiative" ? GOVERNANCE_ROUTE : planning ? PLAN_APPLY_ROUTE : BULK_UPDATE_ROUTE,
     payload_key: definition.backendField,
     target,
   };
@@ -156,7 +159,36 @@ export function buildRefinementPacket({
     (entry) => entry.status === "complete",
   );
   const receiptId = workDesignCompletion.event.application_id;
+  const planningFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "plan_apply");
+  const bulkFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "bulk_update");
+  const applyPlan = {
+    summary: "Apply reviewed governance, coordinated PI planning and ID-scoped metadata through existing Delivery authorities.",
+    expected_routes: [GOVERNANCE_ROUTE, PLAN_APPLY_ROUTE, BULK_UPDATE_ROUTE],
+    operations: [
+      {
+        operation_id: `${packageRef}-governance`, kind: "governance",
+        label: "Update Initiative Governance", detail: "Apply accepted package-level governance values.",
+        target: workDesignCompletion.event.result.target.delivery_ref, oos_route: GOVERNANCE_ROUTE, status: "planned",
+      },
+      {
+        operation_id: `${packageRef}-planning`, kind: "plan_apply",
+        label: "Apply Coordinated PI Planning",
+        detail: "Apply accepted Target PI and Iteration to the existing hierarchy; preserve taxonomy and current statuses.",
+        target: "Reviewed ART planning scope", oos_route: PLAN_APPLY_ROUTE,
+        status: workItems.length > 0 && planningFields.length > 0 ? "planned" : "skipped",
+      },
+      {
+        operation_id: `${packageRef}-work-items`, kind: "bulk_update",
+        label: "Update Work Item Metadata",
+        detail: "Apply accepted non-planning metadata by explicit work-item id without reshaping the tree.",
+        target: "Reviewed ART work items", oos_route: BULK_UPDATE_ROUTE,
+        status: workItems.length > 0 && bulkFields.length > 0 ? "planned" : "skipped",
+      },
+    ],
+  };
   const packetRevision = canonicalDigest({
+    apply_plan: applyPlan,
+    metadata_fields: [...governanceFields, ...workItemFields],
     delivery_tree: deliveryTree,
     field_metadata: fieldMetadata,
     source_revision: source.sourceRevision,
@@ -202,37 +234,14 @@ export function buildRefinementPacket({
       {
         gate_id: `${packageRef}-metadata-review`,
         label: "Metadata Review",
-        oos_route: BULK_UPDATE_ROUTE,
+        oos_route: (bulkFields[0] ?? planningFields[0] ?? governanceFields[0])?.route_binding.oos_route ?? BULK_UPDATE_ROUTE,
         detail: metadataComplete
           ? "Every required metadata target has a current value."
           : "Required metadata still needs an operator decision.",
         status: metadataComplete ? "passed" : "open",
       },
     ],
-    apply_plan: {
-      summary: "Apply reviewed initiative and item metadata through existing OOS Delivery authorities.",
-      expected_routes: [GOVERNANCE_ROUTE, BULK_UPDATE_ROUTE],
-      operations: [
-        {
-          operation_id: `${packageRef}-governance`,
-          kind: "governance",
-          label: "Update Initiative Governance",
-          detail: "Apply accepted package-level governance values.",
-          target: workDesignCompletion.event.result.target.delivery_ref,
-          oos_route: GOVERNANCE_ROUTE,
-          status: "planned",
-        },
-        {
-          operation_id: `${packageRef}-work-items`,
-          kind: "bulk_update",
-          label: "Update Work Item Metadata",
-          detail: "Apply accepted item-scoped metadata values without changing the Work Design tree.",
-          target: "Reviewed ART work items",
-          oos_route: BULK_UPDATE_ROUTE,
-          status: workItems.length > 0 && workItemFields.length > 0 ? "planned" : "skipped",
-        },
-      ],
-    },
+    apply_plan: applyPlan,
     last_saved_at: workDesignCompletion.event.recorded_at,
   };
   return assertRefinementPacket(packet);
