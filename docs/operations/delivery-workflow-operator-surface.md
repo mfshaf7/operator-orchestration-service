@@ -1546,6 +1546,13 @@ recorded. In the managed draft payload, `target_work_package_id` is the raw
 positive OpenProject work-package id as an integer or numeric string; do not
 use broker-shaped ids such as `work-item-476` in that field.
 
+A successful canonical closeout read keeps source freshness separate from
+closeout readiness. An exact fresh snapshot may report `not_ready` with missing
+demo, open-descendant, PM² or Inspect & Adapt reasons. Its canonical source
+envelope remains current so the Console can show that guidance. The domain
+readiness and command guards still block premature closeout. Backend failures
+do not acquire a current envelope; expiry and binding checks remain mandatory.
+
 Supported repair actions are:
 
 - `retarget`

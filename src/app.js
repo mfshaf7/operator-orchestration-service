@@ -112,6 +112,7 @@ function sendSourceProjection(response, request, projection, sourceDescriptor) {
 
   const {
     eventSequence,
+    freshnessState,
     recordRef,
     sourceOwner,
     sourceRef,
@@ -123,7 +124,7 @@ function sendSourceProjection(response, request, projection, sourceDescriptor) {
   const url = new URL(request.url, "http://localhost");
   const body = createConsoleSourceProjection({
     eventSequence,
-    freshnessState: sourceFreshnessState(projection),
+    freshnessState: freshnessState ?? sourceFreshnessState(projection),
     projection,
     recordRef:
       recordRef ??
@@ -1702,6 +1703,9 @@ async function handleDeliveryCloseoutProjection({
   sendSourceProjection(response, request, projection, () => ({
     recordRef: projection.record_ref,
     sourceOwner: "workspace-delivery-art",
+    // getProjection has just read and validated canonical ART and history.
+    // A not-ready closeout is fresh guidance, not unknown source freshness.
+    freshnessState: "current",
   }));
 }
 
