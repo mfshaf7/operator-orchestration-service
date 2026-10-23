@@ -179,6 +179,10 @@ test("Refinement source derives one packet from trusted Work Design and canonica
   assert.deepEqual(fields.find((field) => field.backend_field === "execution_classification").target_node_ids, ["1002"]);
   assert.equal(fields.find((field) => field.backend_field === "actual_business_value").required, false);
   assert.equal(fields.find((field) => field.backend_field === "target_pi").field_kind, "short_text");
+  assert.deepEqual(packet.apply_plan.operations.map((operation) => operation.kind), ["governance", "plan_apply", "bulk_update"]);
+  for (const field of fields.filter((field) => field.route_binding.target === "work_item")) {
+    assert.equal(field.route_binding.operation_kind, ["target_pi", "iteration"].includes(field.backend_field) ? "plan_apply" : "bulk_update");
+  }
 });
 
 test("Refinement missing fields stay bound to target identity, not numeric object-key order", async () => {

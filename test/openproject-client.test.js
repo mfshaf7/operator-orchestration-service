@@ -11,6 +11,8 @@ import {
 } from "../src/openproject-client.js";
 import { readMarkdownSections } from "../src/delivery-narrative.js";
 import { OpenProjectError } from "../src/errors.js";
+import { createDeliveryService } from "../src/delivery-service.js";
+import { createRefinementActivities } from "../src/refinement/activities.js";
 import {
   DELIVERY_ACTIVE_STATUSES,
   DELIVERY_BACKLOG_ITERATION_LABEL,
@@ -15850,7 +15852,7 @@ test("applyDeliveryPlan defers execution classification when a create form omits
   });
 });
 
-test("applyDeliveryPlan updates committed children with matching roadmap version projection", async () => {
+test("Refinement uses native coordinated plan writer for existing Feature PI commitment and Iteration", async () => {
   const calls = [];
   const payloads = new Map([
     [
@@ -15953,6 +15955,7 @@ test("applyDeliveryPlan updates committed children with matching roadmap version
             JSON.stringify({
               _embedded: {
                 schema: {
+                  customField32: { location: "payload", name: "Iteration", type: "String", writable: true },
                   customField14: {
                     location: "payload",
                     name: "Target PI",
@@ -15993,18 +15996,18 @@ test("applyDeliveryPlan updates committed children with matching roadmap version
         const current = payloads.get(id);
         const body = JSON.parse(options.body ?? "{}");
         assert.ok(current);
-        assert.equal(body.customField14, "PI-2026-02");
-        assert.deepEqual(body._links.version, {
-          href: "/api/v3/versions/5",
-          title: "PI-2026-02",
-        });
+        if (Object.hasOwn(body,"customField14")) {
+          assert.equal(body.customField14, "PI-2026-02");
+          assert.deepEqual(body._links.version, {href:"/api/v3/versions/5",title:"PI-2026-02"});
+        }
         const patched = {
           ...current,
           _links: {
             ...current._links,
             ...(body._links ?? {}),
           },
-          customField14: body.customField14,
+          ...(Object.hasOwn(body,"customField14") ? {customField14:body.customField14} : {}),
+          ...(body.customField32 ? {customField32:body.customField32} : {}),
           lockVersion: current.lockVersion + 1,
         };
         payloads.set(id, patched);
@@ -16019,42 +16022,49 @@ test("applyDeliveryPlan updates committed children with matching roadmap version
     },
   });
 
-  const result = await client.applyDeliveryPlan({
-    plan: {
-      items: [
-        {
-          subject: "Deliver proportional work-home controls",
-          target_pi: "PI-2026-02",
-          type: "PI Objective",
-        },
-        {
-          children: [
-            {
-              executionClassification: "Enabler",
-              subject: "Persist Target PI during first plan apply",
-              target_pi: "PI-2026-02",
-              type: "User story",
-            },
-          ],
-          executionClassification: "Enabler",
-          subject: "Enforce broker plan apply metadata",
-          target_pi: "PI-2026-02",
-          type: "Feature",
-        },
-      ],
-      schema_version: 1,
-    },
-    recordId: 38,
-  });
-
-  assert.equal(result.planResult.summary.created_count, 0);
-  assert.equal(result.planResult.summary.updated_count, 2);
+  const nativeTree = () => {
+    const from = (id) => {
+      const payload = payloads.get(id);
+      return {id,type:payload._links.type.title,subject:payload.subject,status:payload._links.status.title,
+        target_pi:payload.customField14,iteration:payload.customField32,execution_classification:payload.customField36,
+        children:[...payloads.values()].filter(child=>child._links.parent?.href===`/api/v3/work_packages/${id}`).map(child=>from(child.id))};
+    };
+    return from(38);
+  };
+  const reviewed = (node) => ({id:String(node.id),kind:node.type,title:node.subject,children:node.children.map(reviewed)});
+  const fields = ["target_pi","iteration"].map(backend_field=>({backend_field,required:true,target_node_ids:["60","61","67"],route_binding:{operation_kind:"plan_apply",oos_route:"POST /v1/delivery-initiatives/{delivery_id}/plan/apply"}}));
+  const sourceAdapter = {async readDeliverySnapshot(){return {deliveryRef:"openproject://work_packages/38",tree:nativeTree()};},async readCanonicalState({snapshot}){return snapshot;}};
+  const deliveryService = createDeliveryService({openProjectClient:client,audit:{emit(){}}});
+  const nativeApply = deliveryService.applyDeliveryPlan.bind(deliveryService);
+  let nativeResult;
+  deliveryService.applyDeliveryPlan = async (input) => {nativeResult = await nativeApply(input);return nativeResult;};
+  const activities = createRefinementActivities({deliveryService,sourceAdapter});
+  const input = {callerId:"console",operation:{operation_id:"planning",kind:"plan_apply",status:"planned",oos_route:fields[0].route_binding.oos_route},
+    packet:{target_tree:reviewed(nativeTree()),draft_groups:[{fields}]},
+    request:{delivery_id:"delivery-38",correlation_id:"native-planning",accepted_draft:{metadata_values:{target_pi:"PI-2026-02",iteration:"PI-2026-02 / Iteration 1"}}}};
+  const operation = await activities.applyRefinementOperation(input);
+  assert.deepEqual(operation.created_refs,[]);
+  assert.equal(operation.updated_refs.length,3);
+  await activities.readRefinementCanonicalState({...input,operationResults:[operation]});
+  const beforeReplay = calls.length;
+  const replay = await activities.applyRefinementOperation(input);
+  assert.equal(calls.length,beforeReplay,"replay reads the canonical snapshot without a second native mutation");
+  assert.equal(replay.reused_refs.length,3);
+  for (const id of [60,61,67]) {
+    assert.equal(payloads.get(id).customField32,"PI-2026-02 / Iteration 1");
+    assert.equal(payloads.get(id)._links.status.title,"new");
+  }
+  const nativePatches = calls.filter(call=>call.options.method==="PATCH");
+  assert.equal(nativePatches.length,3);
+  assert.ok(nativePatches.every(call=>!JSON.parse(call.options.body)._links?.status));
+  assert.equal(nativeResult.plan_result.summary.created_count, 0);
+  assert.equal(nativeResult.plan_result.summary.updated_count, 3);
   assert.deepEqual(
-    result.planResult.updated.map((item) => item.target_pi),
-    ["PI-2026-02", "PI-2026-02"],
+    nativeResult.plan_result.updated.map((item) => item.target_pi),
+    ["PI-2026-02", "PI-2026-02", "PI-2026-02"],
   );
   assert.deepEqual(
-    result.planResult.updated.map((item) => item.changes_applied?.roadmap_version_projection?.status),
+    nativeResult.plan_result.updated.filter(item=>item.id!==60).map((item) => item.changes_applied?.roadmap_version_projection?.status),
     ["write_payload_applied", "write_payload_applied"],
   );
 });
