@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -17,16 +18,6 @@ function atomicWrite(filePath, value) {
     try { fsyncSync(parent); } finally { closeSync(parent); }
   } finally {
     if (existsSync(temporary)) unlinkSync(temporary);
-  }
-}
-
-function processAlive(pid) {
-  if (!Number.isSafeInteger(pid) || pid < 1) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code === "EPERM";
   }
 }
 
@@ -50,33 +41,41 @@ export function createPrivateFileTransactions({ root, failure }) {
   }
 
   function withLock(lockKey, operation) {
-    const lockPath = path.join(locks, `${key(lockKey)}.lock`);
-    if (existsSync(lockPath)) {
-      let holder = {};
-      try { holder = JSON.parse(readFileSync(lockPath, "utf8")); } catch {}
-      if (processAlive(holder.pid)) {
+    const prefix = path.join(locks, key(lockKey));
+    // A legacy PID record cannot prove ownership across PID namespaces or
+    // process reuse. Migration requires quiescing the old writers; never guess
+    // that a legacy holder is dead and unlink its lock during a transaction.
+    if (existsSync(`${prefix}.lock`)) {
+      throw failure("state_busy", "A legacy private transaction lock requires verified recovery.");
+    }
+    let descriptor;
+    try {
+      descriptor = openSync(`${prefix}.flock`, "a", 0o600);
+      // flock(1) and this process share the inherited open file description.
+      // Its lock remains held by our descriptor after flock exits and is
+      // released by the kernel on close or process death, including PID reuse.
+      const result = spawnSync("flock", ["-n", "-E", "75", "3"], {
+        stdio: ["ignore", "ignore", "ignore", descriptor],
+      });
+      if (result.status !== 0) {
         throw failure(
-          "state_busy",
-          "Private workflow state is being updated concurrently.",
+          result.status === 75 ? "state_busy" : "state_unavailable",
+          result.status === 75
+            ? "Private workflow state is being updated concurrently."
+            : "Private workflow transaction locking is unavailable.",
         );
       }
-      unlinkSync(lockPath);
+    } catch (error) {
+      if (descriptor !== undefined) closeSync(descriptor);
+      throw error;
     }
-    const token = randomUUID();
-    let descriptor = null;
     const release = () => {
-      if (descriptor !== null) closeSync(descriptor);
-      descriptor = null;
-      if (!existsSync(lockPath)) return;
-      let holder = {};
-      try { holder = JSON.parse(readFileSync(lockPath, "utf8")); } catch {}
-      if (holder.token === token) unlinkSync(lockPath);
+      if (descriptor !== undefined) closeSync(descriptor);
+      descriptor = undefined;
+      // Never unlink a flock inode: waiters and new owners must use the same
+      // inode. Persistent empty .flock files are coordination state, not leases.
     };
     try {
-      descriptor = openSync(lockPath, "wx", 0o600);
-      writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, token })}\n`);
-      closeSync(descriptor);
-      descriptor = null;
       const result = operation();
       if (result && typeof result.then === "function") return result.finally(release);
       release();

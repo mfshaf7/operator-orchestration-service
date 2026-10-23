@@ -40,6 +40,7 @@ completed ART items are historical evidence, not live feature flags.
 ## Shared Runtime Controls
 
 - [Platform Operations And Source Authorization](platform-operation-adapter.md)
+- [Private Transaction Recovery](private-transaction-recovery.md)
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
 - [Agent Console Orchestration](agent-console-operator-surface.md)
 - [Agent Action Enforcement](agent-action-enforcement.md)
