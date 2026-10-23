@@ -894,6 +894,21 @@ verify the exact repository, branch, base, provider scope, and Agent Gary
 identity, and reject ambient human credential fallback. Operators must not
 locate credential files or invoke `git push` or `gh pr create` manually.
 
+For an already active promoted organization owner, use that same maintenance
+path after Platform admits its current canonical Inventory/provider binding.
+Supply the existing managed canonical record reader to each OOS maintenance
+command using `OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED=true` and
+`OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT=<managed-current-WG-record-root>`.
+This must be the existing freshness-checked record authority, not a primary
+checkout or caller-authored inventory. Missing, stale or ineligible authority
+denies. The exact provider repository must match the Git origin, which is
+checked again after preflight. A repository name or organization URL is not
+admission. The two existing selected installations and token permissions stay
+unchanged. Commissioning and immutable legacy recovery do not admit new owners.
+This engineering maintenance repairs owner controls; normal app work still uses
+the actual Console/OOS source intent and work session. Gary remains committer,
+pusher and PR author; the delegated human reviews/merges and retires resources.
+
 Workflow-file maintenance additionally requires the operator's separate Gary
 Workflows grant and Platform `deliver --purpose workflow-maintenance
 --approval-ref <operator-approval-ref>`. Pass the same two arguments on each
