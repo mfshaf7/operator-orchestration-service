@@ -125,3 +125,28 @@ test("already-owned graduation requires proof of the selected durable repository
   current.already_owned_source_proof_ref.source_revision = "c".repeat(40);
   await assert.rejects(resolver.resolve(request, readiness, source), /readback differs/i);
 });
+
+test("retained graduation scopes the independent receipt recheck to the verified readiness target", async () => {
+  const { request, source, readiness, current } = fixture("graduate-source");
+  const target = "openproject://work_packages/900";
+  const accepted = readiness.readiness.evidence.find(row => row.field === "accepted_delivery_target_receipt_ref");
+  accepted.subject_ref = target;
+  current.accepted_delivery_target_receipt_ref.subject_ref = target;
+  assert.equal(request.target_delivery_ref, undefined);
+  assert.equal(source.delivery_target_ref, undefined); // Existing retained snapshot.
+  const calls = [];
+  const reader = { read: async lookup => {
+    calls.push(lookup);
+    if (lookup.field === "accepted_delivery_target_receipt_ref") assert.equal(lookup.target_delivery_ref, target);
+    return current[lookup.field];
+  } };
+  const readEvidence = createPrototypeClosureOwnerEvidenceReader(Object.fromEntries(
+    [...new Set(Object.values(owners))].map(owner => [owner, reader]),
+  ));
+  const resolver = createPrototypeClosureAuthorityResolver({ readEvidence });
+  await resolver.resolve(request, readiness, source);
+  assert.equal(calls.length, 3);
+  current.accepted_delivery_target_receipt_ref = { ...current.accepted_delivery_target_receipt_ref,
+    subject_ref: "openproject://work_packages/999" };
+  await assert.rejects(resolver.resolve(request, readiness, source), /readback differs/);
+});

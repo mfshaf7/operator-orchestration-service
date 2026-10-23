@@ -51,7 +51,8 @@ export function createPrototypeClosureAuthorityResolver({ readEvidence }) {
         const expectedOwner = owner === "requested-owner" ? request.durable_owner_ref : owner;
         requireBinding(row.owner_ref === expectedOwner && (!request[field] || request[field] === row.ref),
           "authority_evidence_mismatch", `Closure ${field} differs from the accepted request or owner.`);
-        const observed = await readEvidence({ field, ref: row.ref, ownerRef: expectedOwner, request, source });
+        const observed = await readEvidence({ field, ref: row.ref, ownerRef: expectedOwner,
+          subjectRef: row.subject_ref, request, source });
         requireBinding(observed?.ref === row.ref && observed?.owner_ref === expectedOwner &&
           observed?.digest === row.digest && observed?.state === "accepted" &&
           (observed?.subject_ref ?? null) === (row.subject_ref ?? null) &&

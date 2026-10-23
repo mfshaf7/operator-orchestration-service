@@ -19,7 +19,7 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
     }
   }
 
-  return async ({ field, ref, ownerRef, request, source }) => {
+  return async ({ field, ref, ownerRef, subjectRef, request, source }) => {
     const reader = registered.get(ownerRef) ?? (DURABLE_OWNER_FIELDS.has(field) ? registered.get("requested-owner") : null);
     if (typeof reader?.read !== "function") {
       throw closureError("owner_reader_missing", `Closure has no reader for ${ownerRef}.`, 503);
@@ -38,7 +38,8 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
     }
     if (["target_delivery_ref", "accepted_delivery_target_receipt_ref"].includes(field)) {
       lookup.source_packet_ref = source?.delivery_packet_ref ?? null;
-      lookup.target_delivery_ref = request.target_delivery_ref ?? null;
+      lookup.target_delivery_ref = request.target_delivery_ref ??
+        (field === "accepted_delivery_target_receipt_ref" ? subjectRef : null) ?? null;
       lookup.accepted_delivery_target_receipt_ref = request.accepted_delivery_target_receipt_ref ??
         source?.accepted_delivery_target_receipt_ref ?? null;
     }

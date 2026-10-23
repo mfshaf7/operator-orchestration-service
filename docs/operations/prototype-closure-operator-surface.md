@@ -46,6 +46,21 @@ files, missing mapping, wrong target/provider/operator, unmerged source,
 Intake-only or inactive owners, unsafe paths, and private/client repositories
 fail closed. No application code executes during this readback.
 
+For graduation, WGCF scopes accepted Delivery receipt discovery to the target
+already recorded in committed Studio source. OOS independently rechecks that
+receipt against the verified readiness row's target, including when resuming a
+retained request whose source snapshot predates this read correction. Target,
+owner, packet, receipt, actor and current-version checks remain in force. A
+missing marker is a broken source link, not an invitation to repeat Delivery
+application. The initiative/tree/work-item narrative writers retain an existing
+Prototype application marker and reject a changed or duplicate binding. The
+same description replacement paths retain current native ART evidence reference
+entries, including their original projection times; changing those pointers
+requires their existing controlled projection workflow. For
+an already lost marker, verify the original trusted target activity and restore
+that exact original metadata through reviewed Console narrative editing before
+continuing the same Closure request. Do not recreate its app or receipt.
+
 The normal server supplies the existing Delivery artifact service and reviewed
 Inventory authority root; injected test readers are not operating acceptance.
 WGCF's bounded readback retains its eight-field verified-reference shape;
