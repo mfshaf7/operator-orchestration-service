@@ -164,6 +164,10 @@ function harness({
         sourceIndex = 1;
         return { work_item_id: input.workItemId, changes_applied: { subject: true } };
       },
+      async updateDeliveryInitiative(input) {
+        calls.push({operation:"revise-initiative",input});sourceIndex=1;
+        return {delivery_id:input.recordId,changes_applied:{description:true}};
+      },
     },
     openProjectClient: {
       async addDeliveryChangeEvent({ raw }) {
@@ -225,6 +229,19 @@ test("Delivery change rejects a stale package before mutation", async () => {
       error.code === "delivery_change_source_revision_stale",
   );
   assert.equal(target.calls.some((call) => call.operation === "revise"), false);
+});
+
+test("root revision uses the native initiative writer once and preserves unsupported-field denial", async () => {
+  const target=harness();
+  const input={callerId:"governance-operations-console",deliveryId:"delivery-886",command:command({operation:{type:"revise_work_item",payload:{work_item_id:"work-item-886",changes:{subject:"Updated initiative",description:"Reviewed complete narrative"}}}})};
+  const result=await target.service.applyCommand(input),replay=await target.service.applyCommand(input);
+  assert.equal(result.status,"applied");assert.equal(replay.replayed,true);
+  assert.equal(target.calls.filter(c=>c.operation==="revise-initiative").length,1);
+  assert.equal(target.calls.some(c=>c.operation==="revise"),false);
+  assert.equal(target.calls.find(c=>c.operation==="revise-initiative").input.description,"Reviewed complete narrative");
+  const denied=harness();const rejected=await denied.service.applyCommand({...input,command:command({operation:{type:"revise_work_item",payload:{work_item_id:"work-item-886",changes:{iteration:"PI-2026-04 / Iteration 1"}}}})});
+  assert.equal(rejected.status,"rejected");assert.equal(rejected.before.source_revision,rejected.after.source_revision);
+  assert.equal(denied.calls.some(c=>c.operation==="revise-initiative"||c.operation==="revise"),false);
 });
 
 test("Repository request routes to Repository without mutating Delivery", async () => {

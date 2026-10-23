@@ -12,6 +12,9 @@ security_evidence:
     - dev-integration/profiles/accepted-idea-delivery/scripts/common.sh
     - src/openproject-client.js
     - src/app.js
+    - src/delivery-art/work-session-runtime.js
+    - src/delivery-change/service.js
+    - src/delivery-service.js
     - src/refinement/activities.js
     - src/refinement/packet-model.js
   notes: "Extends only the registered complete composition with the existing purpose-specific Work Design binding. Canonical form permissions, allowed choices, explicit target ids, reviewed immutable packets and readback remain authoritative; no new identity, direct browser backend access or model source-authoring authority."
@@ -63,6 +66,30 @@ replacement workflow mechanisms.
 - residual risk: source validation is not actual journey acceptance. No private/client, hostile multi-tenant, production deployment or crash-cure claim.
 
 ## Follow-Up
+
+### Ordinary source entry and canonical narrative maintenance
+
+Actual first app-source preflight exposed an absent optional Architecture
+Packet becoming a blocker in the composed runtime. The existing ordinary
+source contract permits no packet. Only the exact native missing-reference
+404 maps to null; missing records, permission/backend failures and invalid
+current packets remain blocked. Required architecture and command guards stay.
+
+The existing tree editor also submitted a root Epic description through the
+child-item writer. Native rejection preserved identical before/after revisions;
+no compensation or repeat apply was needed. Root revisions now use the native
+initiative writer, with explicit unsupported-field rejection and form-bound
+subject support. Native non-mutating form1306 readback proves subject and
+description writable. No new public operation, permission or generic writer.
+Canonical description text is retained in this scoped read and semantic hash,
+so a text-only edit cannot reuse an earlier source revision. Missing narrative
+readback denies editing. Console preserves existing text and shows native
+rejection reasons. Review, replay and receipt custody remain unchanged.
+
+These are existing1298 maintenance, child_isolated_landing_unit
+maintenance-1275-ordinary-source-entry, one OOS review/rollback boundary. App
+source remains separately delivered through the normal Console work session;
+no artificial Architecture Packet, fixture result or repair ART child.
 
 ### Native first work-session read maintenance
 

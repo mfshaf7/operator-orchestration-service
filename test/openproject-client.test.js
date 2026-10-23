@@ -3265,6 +3265,8 @@ test("closeAcceptedIdeaDelivery rejects a concurrent source status change before
 
 test("getDeliveryExecutionSummary returns bounded read-only initiative dependency state", async () => {
   const calls = [];
+  let narrativeSuffix="first";
+  let omitNarrative=false;
   const deliveryTypeAllowedValues = [
     "Feature",
     "Enabler",
@@ -3350,6 +3352,7 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
           },
         ];
         const elements = filterName === "id" ? [root] : descendants;
+        if(!omitNarrative)for(const item of elements)item.description={raw:`## Existing narrative\nPreserved Unicode — ${narrativeSuffix}`};
         return {
           ok: true,
           status: 200,
@@ -3731,6 +3734,13 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
     /^delivery-package:sha256:[a-f0-9]{64}$/,
   );
   assert.equal(changeSource.executionTree.id, 38);
+  assert.equal(changeSource.executionTree.description,"## Existing narrative\nPreserved Unicode — first");
+  narrativeSuffix="changed body with identical headings";
+  const editedText=await client.getDeliveryChangeSource({recordId:38});
+  assert.notEqual(editedText.sourceRevision,changeSource.sourceRevision);
+  assert.match(editedText.executionTree.children[0].description,/changed body/);
+  omitNarrative=true;
+  await assert.rejects(client.getDeliveryChangeSource({recordId:38}),e=>e.details==="delivery_change_narrative_missing");
   assert.deepEqual(
     changeSource.dependencyRelations.map((relation) => relation.id),
     [501, 502, 503, 504],
@@ -11803,6 +11813,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
             JSON.stringify({
               _embedded: {
                 schema: {
+                  subject: {type:"String",required:true,writable:true},
                   customField13: {
                     _links: {
                       allowedValues: [
@@ -11953,6 +11964,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
     responsibleLogin: "Platform Engineering",
     sponsor: "OpenClaw",
     status: "in-progress",
+    subject: "Reviewed updated initiative title",
     successCriteria: "Keep the initiative fields initiative-only.",
     targetPi: "PI-2026-02",
   });
@@ -11964,6 +11976,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   );
   assert.ok(patchCall);
   const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.subject,"Reviewed updated initiative title");
   assert.equal(patchPayload.customField14, "PI-2026-02");
   assert.equal(patchPayload.customField27, "platform-engineering");
   assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
@@ -11975,6 +11988,19 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
   assert.equal(result.changesApplied.ownerRepo.to, "platform-engineering");
+});
+
+test("initiative title revision denies absent/read-only subject forms and blank input before PATCH", async () => {
+  for(const scenario of ["missing","read-only","blank"]){
+    const methods=[];
+    const client=createOpenProjectClient({config,fetchImpl:async(_url,options)=>{
+      methods.push(options.method);
+      const value=options.method==="GET"?{id:38,lockVersion:1,subject:"Existing initiative",description:{raw:""},_links:{type:{title:"Epic"},status:{title:"new"}}}:{_embedded:{schema:scenario==="missing"?{}:{subject:{type:"String",writable:scenario!=="read-only"}}}};
+      assert.notEqual(options.method,"PATCH");return {ok:true,status:200,text:async()=>JSON.stringify(value)};
+    }});
+    await assert.rejects(client.updateDeliveryInitiative({recordId:38,subject:scenario==="blank"?" ":"Updated title"}),e=>e instanceof OpenProjectError&&e.details===(scenario==="blank"?"initiative_subject_required":"initiative_subject_read_only"));
+    assert.deepEqual(methods,["GET","POST"]);
+  }
 });
 
 test("updateDeliveryInitiative validates external lineage refs against portfolio scope", async () => {
