@@ -5,6 +5,7 @@ import test from "node:test";
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { RefinementServiceError } from "../src/refinement/service.js";
+import { sourceRevisionDigest } from "../src/console-source-authority.js";
 
 function config() {
   return loadConfig({
@@ -18,6 +19,7 @@ async function executeRequest(app, {
   callerId = "governance-operations-console",
   method = "POST",
   url,
+  accept,
 }) {
   const request = body === null
     ? Readable.from([])
@@ -29,6 +31,7 @@ async function executeRequest(app, {
     "x-oos-caller-secret": "test-secret",
   };
   if (body !== null) request.headers["content-type"] = "application/json";
+  if (accept) request.headers.accept = accept;
   let statusCode = 200;
   let responseBody = "";
   const response = {
@@ -49,6 +52,38 @@ function appWith(refinementService) {
     ideaService: {},
     openProjectClient: {},
     refinementService,
+  });
+}
+
+for (const family of ["refinement", "work-design"]) {
+  test(`${family} canonical aggregate snapshots advance independently of unchanged input record versions`, async () => {
+    let sequence=0;
+    const base=Date.parse("2026-10-23T01:00:00.000Z");
+    const service={async project(){
+      const projected_at=new Date(base+sequence++).toISOString();
+      return family==="refinement"
+        ? {source_revision:"version-5",packet:{source:{source_ref:"openproject://work_packages/909",source_revision:"version-5"}},history:[],projected_at}
+        : {source:{ref:"openproject://work_packages/909",revision:"version-5"},history:[],projected_at};
+    }};
+    const app=createApp({config:config(),deliveryService:{},ideaService:{},openProjectClient:{},refinementService:service,workDesignService:service});
+    const url=`/v1/delivery-${family}/delivery-package%3A909/projection?source_ref=openproject%3A%2F%2Fwork_packages%2F909`;
+    const read=()=>executeRequest(app,{method:"GET",url,accept:"application/vnd.mfshaf7.console-source-projection+json; version=1"});
+    const first=await read(),second=await read();
+    assert.equal(first.statusCode,200);assert.equal(second.statusCode,200);
+    assert.deepEqual(first.body.binding,second.body.binding);
+    assert.equal(first.body.revision.event_sequence,base);
+    assert.equal(second.body.revision.event_sequence,base+1);
+    for (const {body} of [first,second]) {
+      assert.equal(body.revision.source_revision,sourceRevisionDigest(body.projection));
+      assert.notEqual(body.revision.source_revision,"version-5");
+      assert.equal(family==="refinement"?body.projection.source_revision:body.projection.source.revision,"version-5","optimistic mutation input revision is preserved");
+    }
+    assert.notEqual(first.body.revision.source_revision,second.body.revision.source_revision);
+    assert.notEqual(first.body.revision.event_cursor,second.body.revision.event_cursor);
+    const compatible=await executeRequest(app,{method:"GET",url,accept:"application/json"});
+    assert.equal(compatible.statusCode,200);
+    assert.equal(compatible.body.artifact_type,undefined,"default JSON remains the domain projection");
+    assert.equal(family==="refinement"?compatible.body.source_revision:compatible.body.source.revision,"version-5");
   });
 }
 

@@ -3462,7 +3462,10 @@ async function handleWorkDesignProjection({
   sendSourceProjection(response, request, result, () => ({
     recordRef: result.source.ref,
     sourceOwner: "workspace-delivery-art",
-    sourceRevision: result.source.revision,
+    // The observation contains history and a projection time, not only its
+    // input record. Preserve the input version in the domain body for writes.
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp: result.projected_at,
   }));
 }
 
@@ -3509,6 +3512,8 @@ async function handleRefinementProjection({
   sendSourceProjection(response, request, result, () => ({
     recordRef: result.packet.source.source_ref,
     sourceOwner: "workspace-delivery-art",
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp: result.projected_at,
   }));
 }
 
