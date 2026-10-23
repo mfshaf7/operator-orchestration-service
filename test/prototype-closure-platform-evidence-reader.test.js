@@ -7,11 +7,56 @@ import test from "node:test";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createPrototypeClosurePlatformEvidenceReader } from
   "../src/prototype-closure/platform-evidence-reader.js";
+import { createPlatformOperationProviderClient } from "../src/platform-operation/provider-client.js";
 
 function boundRecord(content) {
   const digest = canonicalDigest(content);
   return { ...content, ref: `platform://prototype-closure/evidence/${digest.slice(7)}`, digest };
 }
+
+test("normal Platform client and Closure reader bind an authenticated exact-event absence lookup", async () => {
+  const revision = "a".repeat(40);
+  const lookup = { prototype_id: "sample-tool", merged_source_revision: revision,
+    source_event_ref: "prototype-closure:sample-tool:0002" };
+  const proof = boundRecord({ field: "post_merge_runtime_disposition",
+    owner_ref: "platform-engineering", state: "accepted", disposition: "absent",
+    prototype_id: lookup.prototype_id, merged_source_revision: revision });
+  let calls = 0;
+  const provider = createPlatformOperationProviderClient({
+    baseUrl: "http://127.0.0.1:38491", allowHttp: true, callerId: "oos", callerSecret: "s".repeat(32),
+    async fetchImpl(url, init) {
+      calls++;
+      assert.equal(String(url), "http://127.0.0.1:38491/v1/console-operations/prototype-closure-dispositions");
+      assert.equal(init.method, "POST");
+      assert.equal(init.redirect, "error");
+      assert.equal(init.headers["x-platform-caller-id"], "oos");
+      assert.equal(init.headers["x-platform-caller-secret"], "s".repeat(32));
+      assert.deepEqual(JSON.parse(init.body), lookup);
+      return Response.json(proof);
+    },
+  });
+  const reader = createPrototypeClosurePlatformEvidenceReader({
+    evidenceFile: "/not-read/provider-required.json", dispositionProvider: provider });
+  const result = await reader.readDisposition({ request: { prototype_id: "sample-tool" },
+    readback: { merged_source_revision: revision, source_event_ref: lookup.source_event_ref } });
+  assert.equal(calls, 1);
+  assert.equal(result.ref, proof.ref);
+  assert.equal(result.disposition, "absent");
+  proof.disposition = "revoked";
+  await assert.rejects(reader.readDisposition({ request: { prototype_id: "sample-tool" },
+    readback: { merged_source_revision: revision, source_event_ref: lookup.source_event_ref } }),
+    { code: "prototype_closure_platform_evidence_invalid" });
+});
+
+test("commissioned owner lookup cannot fall back to historical file proof after a dependency error", async () => {
+  const reader = createPrototypeClosurePlatformEvidenceReader({
+    evidenceFile: "/not-read/no-fallback.json",
+    dispositionProvider: { async readPrototypeClosureDisposition() { throw new Error("owner unavailable"); } },
+  });
+  await assert.rejects(reader.readDisposition({ request: { prototype_id: "sample-tool" },
+    readback: { merged_source_revision: "a".repeat(40), source_event_ref: "prototype-closure:sample-tool:0002" } }),
+    /owner unavailable/);
+});
 
 test("Platform evidence reader resolves owner proof and post-merge disposition", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-platform-evidence-"));

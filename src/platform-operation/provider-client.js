@@ -86,6 +86,11 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    async readPrototypeClosureDisposition(lookup) {
+      return request("/v1/console-operations/prototype-closure-dispositions", {
+        body: lookup, method: "POST",
+      });
+    },
     async getCatalog() {
       return assertPlatformOperationCatalog(
         await request("/v1/console-operations/catalog"),

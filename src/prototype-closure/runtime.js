@@ -14,10 +14,11 @@ import { createWgcfPrototypeClosureClient } from "./wgcf-client.js";
 import { createCanonicalSourceRepositoryReader } from "../delivery-art/source-repository-admission.js";
 import { createPublicBootstrapSourceReader } from "../repository-owner-bootstrap/source-reader.js";
 import { createPrototypeClosureDurableOwnerReader } from "./durable-owner-reader.js";
+import { createPlatformOperationProviderClient } from "../platform-operation/provider-client.js";
 
 export function createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
   maturityStateRoot = null, deliveryApplicationService = null, artifactService = null, inventoryAuthorityRoot = null,
-  callerOperatorBindings = {} }) {
+  callerOperatorBindings = {}, platformOperationConfig = null }) {
   if (config?.profile !== "dev-integration") {
     throw closureError("profile_invalid", "Closure is limited to the admitted dev-integration profile.", 503);
   }
@@ -32,6 +33,13 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
   }
   const resolvedPlatformReader = platformClient ?? createPrototypeClosurePlatformEvidenceReader({
     evidenceFile: config.platformEvidenceFile,
+    dispositionProvider: platformOperationConfig?.enabled ? createPlatformOperationProviderClient({
+      baseUrl: platformOperationConfig.providerBaseUrl,
+      callerId: platformOperationConfig.providerCallerId,
+      callerSecret: platformOperationConfig.providerCallerSecret,
+      allowHttp: platformOperationConfig.providerAllowHttp,
+      fetchImpl,
+    }) : null,
   });
   const provider = createPrototypeClosureGitHubClient({
     owner: config.owner,
@@ -91,7 +99,8 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
 }
 
 export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerReaders, platformClient,
-  maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings }) {
+  maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings,
+  platformOperationConfig }) {
   if (!config?.enabled) return null;
   if (closureManifest.runtime_activation !== true || config.profile !== "dev-integration") {
     throw closureError(
@@ -104,5 +113,6 @@ export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerR
     throw closureError("owner_readback_unavailable", "Closure requires maturity and Delivery owner readback.", 503);
   }
   return createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
-    maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings });
+    maturityStateRoot, deliveryApplicationService, artifactService, inventoryAuthorityRoot, callerOperatorBindings,
+    platformOperationConfig });
 }

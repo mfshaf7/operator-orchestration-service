@@ -349,6 +349,7 @@ export function createRuntime({
   });
   const prototypeClosureService = createPrototypeClosureRuntime({
     audit, config: config.prototypeClosure, fetchImpl,
+    platformOperationConfig: config.platformOperation,
     ownerReaders: prototypeClosureOwnerReaders,
     platformClient: prototypeClosurePlatformClient,
     maturityStateRoot: config.prototypeMaturity.stateRoot,

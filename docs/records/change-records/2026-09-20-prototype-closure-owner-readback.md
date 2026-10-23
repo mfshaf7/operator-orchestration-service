@@ -23,6 +23,27 @@ security_evidence:
 
 # Prototype Closure Owner Readback
 
+## October23 Post-graduation Owner Reader Maintenance
+
+Landing Unit Decision: feature_single_landing_unit,
+maintenance-1275-graduation-tail-oos. The actual merged graduation needs a
+Platform absence proof, but the old normal composition only read a file
+populated by an engineering recorder. Reuse the existing authenticated,
+bounded Platform provider client for an exact-event disposition lookup and
+validate the returned content-addressed proof through the existing Closure
+reader. Normal composition wires the existing Platform credential; no new
+credential, permission, runtime control, proof schema, ART child or request is
+introduced. Owner failure never falls back to file evidence or creates source.
+
+Merge the Platform producer before this consumer, land the Console's retained
+request navigation, and refresh the existing composed Security decision/index
+before activation. Existing pre-merge retirement/file compatibility remains
+available. Tests cover the actual provider client/reader boundary, configured
+composition credential denial, unavailable owner and proof tampering. These
+are source checks; the retained Console request must still complete after
+commissioning. Rollback restores the prior accepted owner sources while
+preserving the merged event, request, evidence and app source.
+
 ## Summary
 
 ART #1150 binds Closure's `apply-delivery` request to an already accepted
