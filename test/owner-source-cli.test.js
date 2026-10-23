@@ -60,10 +60,12 @@ test("owner source derives repository identity from origin for a descriptive wor
   assert.equal(value.session.owner_repo, "operator-orchestration-service");
 });
 
-test("owner source rejects an origin outside the admitted GitHub owner", () => {
-  assert.throws(
-    () => buildOwnerSourceSession({
+test("owner origin is a selector, not authority for another GitHub account", async () => {
+  let called = false;
+  await assert.rejects(
+    runOwnerSourceCommand({
       argv: ARGV,
+      agentSourceIdentity: { async preflight() { called = true; } },
       execFileSyncImpl(_executable, args) {
         if (args[1] === "--show-toplevel") return "/workspace/operator-orchestration-service\n";
         if (args[1] === "--abbrev-ref") return "fix/owner-source-preflight\n";
@@ -71,8 +73,9 @@ test("owner source rejects an origin outside the admitted GitHub owner", () => {
         throw new Error(`unexpected git command: ${args.join(" ")}`);
       },
     }),
-    /origin must identify an admitted mfshaf7 GitHub repository/,
+    /requires the existing fresh canonical source repository reader/,
   );
+  assert.equal(called, false);
 });
 
 test("owner source publishes only after the Agent Gary preflight is ready", async () => {
@@ -81,7 +84,7 @@ test("owner source publishes only after the Agent Gary preflight is ready", asyn
   const adapter = {
     async preflight(input) {
       calls.push(["preflight", input]);
-      return { identity: { state: "ready" }, provider: { state: "ready" } };
+      return { identity: { state: "ready" }, provider: { state: "ready", repository: "mfshaf7/operator-orchestration-service" } };
     },
     async publish(input) {
       calls.push(["publish", input]);
@@ -97,6 +100,36 @@ test("owner source publishes only after the Agent Gary preflight is ready", asyn
   assert.equal(code, 0);
   assert.deepEqual(calls.map(([name]) => name), ["preflight", "publish"]);
   assert.equal(JSON.parse(output.join("")).state, "published");
+});
+
+test("promoted owner maintenance publishes only its independently resolved exact provider", async () => {
+  const repository = "mfshaf7-workspace/sample-app";
+  const exec = (exe, args) => args[0] === "remote" ? `https://github.com/${repository}.git\n` : gitFixture(exe, args);
+  const env = { OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED: "true", OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT: "/trusted/current-inventory" };
+  const calls = [];
+  const adapter = {
+    async preflight() { return { identity: { state: "ready" }, provider: { state: "ready", repository } }; },
+    async publish(input) { calls.push(input); return { state: "published" }; },
+  };
+  assert.equal(await runOwnerSourceCommand({ argv: ARGV, env, agentSourceIdentity: adapter, execFileSyncImpl: exec, stdout: { write() {} } }), 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].session.owner_repo, "sample-app");
+  calls.length = 0;
+  adapter.preflight = async () => ({ identity: { state: "ready" }, provider: { state: "ready", repository: "another-owner/sample-app" } });
+  await assert.rejects(runOwnerSourceCommand({ argv: ARGV, env, agentSourceIdentity: adapter, execFileSyncImpl: exec, stdout: { write() {} } }), { code: "agent_source_origin_mismatch" });
+  assert.equal(calls.length, 0);
+});
+
+test("maintenance rejects an origin change after exact provider preflight", async () => {
+  let reads = 0, published = false;
+  await assert.rejects(runOwnerSourceCommand({ argv: ARGV, execFileSyncImpl: (exe, args) =>
+    args[0] === "remote" && ++reads > 1 ? "git@github.com:mfshaf7/another-owner.git\n" : gitFixture(exe, args),
+    agentSourceIdentity: {
+      async preflight() { return { identity: { state: "ready" }, provider: { state: "ready", repository: "mfshaf7/operator-orchestration-service" } }; },
+      async publish() { published = true; },
+    }, stdout: { write() {} },
+  }), /origin changed/);
+  assert.equal(published, false);
 });
 
 test("owner source refuses publication when exact identity is unavailable", async () => {

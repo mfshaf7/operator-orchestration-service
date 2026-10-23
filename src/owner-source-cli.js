@@ -61,10 +61,11 @@ function ownerRepositoryFromOrigin(remoteUrl) {
     [owner, repository] = parts;
   }
   repository = repository.replace(/\.git$/, "");
-  if (owner !== "mfshaf7" || !repository) {
-    throw new Error("origin must identify an admitted mfshaf7 GitHub repository");
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(owner) ||
+      !/^[a-z0-9][a-z0-9._-]*$/.test(repository)) {
+    throw new Error("origin must identify an exact GitHub owner repository");
   }
-  return repository;
+  return { ownerRepo: repository, repository: `${owner}/${repository}` };
 }
 
 export function buildOwnerSourceSession({
@@ -80,7 +81,7 @@ export function buildOwnerSourceSession({
     throw new Error("--repo-root must be the exact owner repository root");
   }
   const branch = git(execFileSyncImpl, repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  const ownerRepo = ownerRepositoryFromOrigin(
+  const origin = ownerRepositoryFromOrigin(
     git(execFileSyncImpl, repoRoot, ["remote", "get-url", "origin"]),
   );
   const baseCommit = option(argv, "--base-commit");
@@ -91,9 +92,10 @@ export function buildOwnerSourceSession({
   return {
     action: argv[1],
     repoRoot,
+    repository: origin.repository,
     session: {
       landing_unit_id: option(argv, "--landing-unit-id"),
-      owner_repo: ownerRepo,
+      owner_repo: origin.ownerRepo,
       covered_work_item_ids: [trackingRef],
       landing_unit: {
         base_commit: baseCommit,
@@ -104,10 +106,15 @@ export function buildOwnerSourceSession({
   };
 }
 
-function assertReady(preflight) {
+function assertReady(preflight, repository) {
   if (preflight?.identity?.state !== "ready" || preflight?.provider?.state !== "ready") {
     const error = new Error("Agent Gary source preflight is not ready");
     error.code = preflight?.identity?.reason_code ?? "agent_source_preflight_blocked";
+    throw error;
+  }
+  if (preflight.provider.repository !== repository) {
+    const error = new Error("Canonical source provider does not match the exact owner origin");
+    error.code = "agent_source_origin_mismatch";
     throw error;
   }
 }
@@ -121,6 +128,11 @@ export async function runOwnerSourceCommand({
 } = {}) {
   const input = buildOwnerSourceSession({ argv, execFileSyncImpl });
   const credentialPurpose = maintenancePurpose(argv);
+  if (!input.repository.startsWith("mfshaf7/") &&
+      (env.OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED !== "true" ||
+       !env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim())) {
+    throw new Error("Organization maintenance requires the existing fresh canonical source repository reader");
+  }
   const adapter = agentSourceIdentity ?? createConfiguredAgentSourceIdentityAdapter({
     env: { ...env, OOS_AGENT_SOURCE_IDENTITY_ENABLED: "true" },
     credentialPurpose,
@@ -128,9 +140,13 @@ export async function runOwnerSourceCommand({
   const preflight = await adapter.preflight({ session: input.session });
   if (input.action === "status") {
     stdout.write(`${JSON.stringify({ action: "status", ...preflight }, null, 2)}\n`);
-    return preflight?.identity?.state === "ready" && preflight?.provider?.state === "ready" ? 0 : 1;
+    return preflight?.identity?.state === "ready" && preflight?.provider?.state === "ready" &&
+      preflight.provider.repository === input.repository ? 0 : 1;
   }
-  assertReady(preflight);
+  assertReady(preflight, input.repository);
+  if (ownerRepositoryFromOrigin(git(execFileSyncImpl, input.repoRoot, ["remote", "get-url", "origin"])).repository !== input.repository) {
+    throw new Error("Owner origin changed during maintenance source preflight");
+  }
   const result = input.action === "prepare"
     ? await adapter.prepare({ repoRoot: input.repoRoot, session: input.session })
     : await adapter.publish({ repoRoot: input.repoRoot, session: input.session });
