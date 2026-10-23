@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import {createDeliveryArtSourceExecutorServer} from "../src/delivery-art/source-executor.js";
+import {OpenProjectError} from "../src/errors.js";
 
 import {
   createDeliveryArtWorkSessionCloseAdapter,
@@ -440,4 +442,29 @@ test("work-session runtime fails closed before source work when its executor is 
       statusCode: 503,
     },
   );
+});
+
+test("composed runtime distinguishes no optional packet from current-architecture lookup failures", async t => {
+  const root=await mkdtemp(path.join(tmpdir(),"oos-optional-architecture-"));
+  const socketPath=path.join(root,"executor.sock");
+  const server=createDeliveryArtSourceExecutorServer({adapters:{lifecycleSource:{},workSource:{}},executorId:"delivery-source-executor",secret:SECRET});
+  await new Promise(resolve=>server.listen(socketPath,resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+  let failure=new OpenProjectError("not_found","No projected packet",404,"delivery_art_reference_missing");
+  const runtime=createDeliveryArtWorkSessionRuntime({
+    artifactService:{async currentArchitecturePacket(){throw failure;}},
+    config:{deliveryArt:{workSession:{executorId:"delivery-source-executor",executorSecret:SECRET,executorSocketPath:socketPath}}},
+    deliveryService:{async getDeliveryWorkItemContinuationContext(){return {delivery_id:"delivery-1306",work_item_id:"work-item-1308",continuation_context:{target_item:{id:1308,type:"User story",status:"new",owner_repo:"console-todo-1275",target_pi:"PI-2026-04",blocked:false,dependency_blocked:false}}};}},
+    env:{OOS_DELIVERY_WORK_SESSION_STATE_ROOT:path.join(root,"state")},
+  });
+  const read=()=>runtime.inspect({callerId:"governance-operations-console",operatorId:"operator:mfshaf7",workItemId:"1308"});
+  const absent=await read();
+  assert.equal(absent.session_id,null);
+  assert.ok(absent.configured_path.blockers.some(b=>b.code==="landing-unit-decision-required"));
+  assert.equal(absent.configured_path.blockers.some(b=>b.code==="architecture-packet-required"),false);
+  for(const error of [new OpenProjectError("not_found","Record missing",404,"delivery_initiative_not_found"),new OpenProjectError("backend_unavailable","Backend failed",503),new OpenProjectError("not_found","Wrong 404 detail",404),Object.assign(new Error("Current packet is not ready"),{code:"delivery_art_architecture_current_not_ready",statusCode:409})]){
+    failure=error;const result=await read();
+    assert.ok(result.configured_path.blockers.some(b=>b.code==="architecture-packet-required"&&b.reason===error.message));
+    assert.equal(result.session_id,null);
+  }
 });

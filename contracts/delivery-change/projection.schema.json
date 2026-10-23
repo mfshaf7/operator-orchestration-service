@@ -33,6 +33,7 @@
         "record_ref": { "type": "string" },
         "status": { "type": "string" },
         "subject": { "type": "string" },
+        "description": { "type": "string", "description": "Current canonical narrative; included in the semantic source revision." },
         "type": { "type": "string" },
         "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
       }

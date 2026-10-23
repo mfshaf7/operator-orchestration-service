@@ -6333,6 +6333,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
+      // Editing requires the actual existing text, and text-only changes must
+      // advance the same optimistic revision as the rest of this scoped tree.
+      for (const node of flattenDeliveryTree(executionTree)) {
+        const description = state.workPackagesById.get(node.id)?.description?.raw;
+        if (typeof description !== "string") {
+          throw new OpenProjectError("backend_contract_drift", "Canonical narrative is unavailable for Delivery tree editing.", 502, "delivery_change_narrative_missing");
+        }
+        node.description = description;
+      }
       const scopedIds = new Set(flattenDeliveryTree(executionTree).map((node) => node.id));
       const dependencyRelations = state.dependencyRelations
         .filter((relation) =>
@@ -7179,6 +7188,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       requiredUpstreamRef,
       sponsor,
       status,
+      subject,
       successCriteria,
       systemDemoEvidence,
       targetPi,
@@ -7258,6 +7268,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const currentTargetPi = normalizeStringValue(
         readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
       );
+
+      if (subject !== undefined) {
+        const desiredSubject = normalizeStringValue(subject);
+        if (!desiredSubject) {
+          throw new OpenProjectError("validation_failure", "Initiative subject must be non-empty.", 422, "initiative_subject_required");
+        }
+        const schema = formPayload?._embedded?.schema?.subject;
+        if (!schema || schema.writable === false) {
+          throw new OpenProjectError("validation_failure", "Initiative subject is not writable in the current form.", 422, "initiative_subject_read_only");
+        }
+        if (desiredSubject !== normalizeStringValue(currentPayload.subject)) {
+          patchPayload.subject = desiredSubject;
+          changesApplied.subject = {from:currentPayload.subject,to:desiredSubject};
+        }
+      }
 
       if (typeof status === "string" && status.trim()) {
         const resolvedStatus = await resolveAllowedValueLink({

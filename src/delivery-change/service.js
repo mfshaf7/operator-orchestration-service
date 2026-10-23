@@ -298,6 +298,18 @@ export function createDeliveryChangeService({
           type: payload.type,
         });
       case "revise_work_item":
+        if (workItemId(payload.work_item_id) === `work-item-${parseDeliveryId(command.delivery_id)}`) {
+          const allowed = new Set(["subject", "description", "clear_description", "owner_repo", "status", "target_pi", "assignee_login", "responsible_login", "nfr_category"]);
+          const unsupported = Object.keys(payload.changes).filter(key => !allowed.has(key));
+          if (unsupported.length) {
+            throw new DeliveryChangeServiceError("delivery_change_initiative_fields_invalid", `Requested fields are not supported by the initiative workflow: ${unsupported.join(", ")}.`, {statusCode:422,details:{fields:unsupported}});
+          }
+          const changes = mappedRevisionChanges(Object.fromEntries(Object.entries(payload.changes).filter(([key])=>key!=="clear_description")));
+          if (payload.changes.clear_description === true) changes.description = null;
+          return deliveryService.updateDeliveryInitiative({
+            ...changes,callerId,correlationId:command.command_id,recordId:command.delivery_id,
+          });
+        }
         return deliveryService.updateDeliveryWorkItem({
           ...mappedRevisionChanges(payload.changes),
           callerId,

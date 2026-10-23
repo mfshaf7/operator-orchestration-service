@@ -764,6 +764,12 @@ commands for source-backed work that does not require an Architecture Packet.
 Matching-fidelity commands cannot satisfy that baseline when no conformance
 case applies.
 
+Ordinary source work may have no projected Architecture Packet. The composed
+work-session reader maps only the native explicit absent-reference result to
+that empty state. Missing records, denied access, unavailable dependencies and
+invalid or unready current packets remain blockers. A required architecture
+binding still needs its exact current durable packet; absence grants no waiver.
+
 `runtime_and_live` commands are verification-only. The source executor marks
 only those commands with `OOS_DELIVERY_ART_EVIDENCE_EXECUTION=true`, binds the
 acquisition and command identifiers, sets

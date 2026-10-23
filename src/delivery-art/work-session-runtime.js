@@ -361,7 +361,15 @@ export function createDeliveryArtWorkSessionRuntime({
   });
   const artifactAdapter = {
     async currentArchitecture(deliveryId) {
-      return (await artifactService.currentArchitecturePacket({ deliveryId })).artifact;
+      try {
+        return (await artifactService.currentArchitecturePacket({ deliveryId })).artifact;
+      } catch (error) {
+        // A first ordinary source session can have no projected packet.
+        // Other 404s and invalid/current-packet failures remain authoritative.
+        if (error?.statusCode === 404 && error?.errorClass === "not_found" &&
+            error?.details === "delivery_art_reference_missing") return null;
+        throw error;
+      }
     },
     async draftWorkStart(input) {
       return (await artifactService.draftWorkStart(input)).work_start;

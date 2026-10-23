@@ -19,6 +19,14 @@ Commands are single-mutation units. A Console review may sequence several
 commands, but it must refresh canonical truth between them. OOS does not claim
 that an entire edited tree is one atomic transaction.
 
+The scoped tree carries each current canonical description. Missing narrative
+readback fails visibly rather than becoming a blank editable value. Narrative
+content participates in the existing semantic source revision, including edits
+that retain the same headings. Root Epic revisions use the native initiative
+writer; child revisions use the child-item writer. Subject and description use
+the current form and native initiative controls. Unsupported initiative fields
+deny before mutation rather than disappearing from the requested change.
+
 ## Authority boundaries
 
 - OOS validates commands, source revisions, acceptance, replay, receipts, and
