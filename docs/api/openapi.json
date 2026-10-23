@@ -10179,14 +10179,18 @@
         "x-oos-owner": "operator-orchestration-service",
         "x-oos-workflow-family": "workspace-intake",
         "operationId": "listCustodyWorkspaceIntakeRequests",
-        "summary": "Read retained caller-owned requests for one exact repository custody target",
+        "summary": "Read retained caller-owned Intake requests for one exact custody or direct target",
         "parameters": [
           {
             "name": "target_kind",
             "in": "query",
             "required": true,
             "schema": {
-              "const": "repo"
+              "enum": [
+                "repo",
+                "product",
+                "component"
+              ]
             }
           },
           {
@@ -10201,10 +10205,20 @@
           {
             "name": "custody_request_id",
             "in": "query",
-            "required": true,
+            "required": false,
+            "description": "Required for repo; mutually exclusive with source_class.",
             "schema": {
               "type": "string",
               "minLength": 1
+            }
+          },
+          {
+            "name": "source_class",
+            "in": "query",
+            "required": false,
+            "description": "Required direct selector for product/component; mutually exclusive with custody_request_id.",
+            "schema": {
+              "const": "direct"
             }
           },
           {
@@ -77645,131 +77659,268 @@
         }
       },
       "WorkspaceIntakeRequestPage": {
-        "type": "object",
-        "required": [
-          "schema_version",
-          "workflow_id",
-          "target",
-          "custody_request_id",
-          "revision",
-          "pending_request_count",
-          "updated_at",
-          "next_cursor",
-          "records"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "schema_version": {
-            "const": 1
-          },
-          "workflow_id": {
-            "const": "workspace-intake"
-          },
-          "target": {
+        "oneOf": [
+          {
             "type": "object",
             "required": [
-              "kind",
-              "name",
-              "record_id"
+              "schema_version",
+              "workflow_id",
+              "target",
+              "custody_request_id",
+              "revision",
+              "pending_request_count",
+              "updated_at",
+              "next_cursor",
+              "records"
             ],
             "additionalProperties": false,
             "properties": {
-              "kind": {
-                "const": "repo"
+              "schema_version": {
+                "const": 1
               },
-              "name": {
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              "workflow_id": {
+                "const": "workspace-intake"
               },
-              "record_id": {
+              "target": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "name",
+                  "record_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "repo"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "record_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "custody_request_id": {
                 "type": "string",
                 "minLength": 1
-              }
-            }
-          },
-          "custody_request_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "revision": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "pending_request_count": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "updated_at": {
-            "oneOf": [
-              {
-                "type": "string",
-                "format": "date-time"
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "next_cursor": {
-            "oneOf": [
-              {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
+              "revision": {
+                "type": "integer",
+                "minimum": 0
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "records": {
-            "type": "array",
-            "maxItems": 25,
-            "items": {
-              "type": "object",
-              "required": [
-                "request_id",
-                "requested_at",
-                "updated_at",
-                "revision",
-                "status",
-                "classification",
-                "candidate"
-              ],
-              "additionalProperties": false,
-              "properties": {
-                "request_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "requested_at": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "updated_at": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "revision": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "status": {
-                  "$ref": "#/components/schemas/WorkspaceIntakeResult/properties/status"
-                },
-                "classification": {
-                  "enum": [
-                    "proposed",
-                    "admitted",
-                    "out-of-scope"
-                  ]
-                },
-                "candidate": {
-                  "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
+              "pending_request_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "updated_at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "next_cursor": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "records": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "request_id",
+                    "requested_at",
+                    "updated_at",
+                    "revision",
+                    "status",
+                    "classification",
+                    "candidate"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "request_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "requested_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeResult/properties/status"
+                    },
+                    "classification": {
+                      "enum": [
+                        "proposed",
+                        "admitted",
+                        "out-of-scope"
+                      ]
+                    },
+                    "candidate": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
+                    }
+                  }
                 }
               }
             }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "workflow_id",
+              "target",
+              "custody_request_id",
+              "revision",
+              "pending_request_count",
+              "updated_at",
+              "next_cursor",
+              "records",
+              "source_class"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "workflow_id": {
+                "const": "workspace-intake"
+              },
+              "target": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "name",
+                  "record_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "product",
+                      "component"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "record_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "custody_request_id": {
+                "type": "null"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "pending_request_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "updated_at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "next_cursor": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "records": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "request_id",
+                    "requested_at",
+                    "updated_at",
+                    "revision",
+                    "status",
+                    "classification",
+                    "candidate"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "request_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "requested_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeResult/properties/status"
+                    },
+                    "classification": {
+                      "enum": [
+                        "proposed",
+                        "admitted",
+                        "out-of-scope"
+                      ]
+                    },
+                    "candidate": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeDirectCandidate"
+                    }
+                  }
+                }
+              },
+              "source_class": {
+                "const": "direct"
+              }
+            }
           }
-        }
+        ]
       },
       "SourceBootstrapSubject": {
         "type": "object",
@@ -79923,6 +80074,91 @@
                 }
               }
             }
+          }
+        }
+      },
+      "WorkspaceIntakeDirectCandidate": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "source",
+          "target",
+          "requested_record",
+          "evidence_refs",
+          "candidate_digest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-intake-source-candidate"
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "class",
+              "ref",
+              "digest"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "const": "direct"
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            }
+          },
+          "requested_record": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "candidate_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       }

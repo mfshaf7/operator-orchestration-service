@@ -63,4 +63,8 @@ test("retained request listing is authenticated, exact-selector and read-only", 
   assert.equal((await invoke(app, { method: "GET", url: `${url}&target_name=second`, body: "" })).code, 400);
   assert.equal((await invoke(app, { method: "GET", url, body: "", secret: "wrong" })).code, 401);
   assert.equal(calls.length, 1);
+  const direct = "/v1/workspace-intake/requests?target_kind=product&target_name=synthetic-product&source_class=direct";
+  assert.equal((await invoke(app, { method: "GET", url: direct, body: "" })).code, 200);
+  assert.deepEqual(calls[1], { callerId: caller, input: { target: { kind: "product", name: "synthetic-product" }, source_class: "direct" } });
+  assert.equal((await invoke(app, { method: "GET", url: `${direct}&source_class=delivery`, body: "" })).code, 400);
 });

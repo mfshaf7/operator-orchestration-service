@@ -3633,12 +3633,13 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
   if (action === "list") {
     const parameters = new URL(request.url, "http://localhost").searchParams;
     const keys = [...parameters.keys()];
-    if (new Set(keys).size !== keys.length || keys.some(key => !["target_kind", "target_name", "custody_request_id", "cursor"].includes(key))) {
+    if (new Set(keys).size !== keys.length || keys.some(key => !["target_kind", "target_name", "custody_request_id", "source_class", "cursor"].includes(key))) {
       throw new HttpError(400, "workspace_intake_list_invalid", "Request list parameters are invalid.");
     }
     const result = await workspaceIntakeService.list({ callerId: caller.id, input: {
       target: { kind: parameters.get("target_kind"), name: parameters.get("target_name") },
-      custody_request_id: parameters.get("custody_request_id"),
+      ...(parameters.has("custody_request_id") ? { custody_request_id: parameters.get("custody_request_id") } : {}),
+      ...(parameters.has("source_class") ? { source_class: parameters.get("source_class") } : {}),
       ...(parameters.has("cursor") ? { cursor: parameters.get("cursor") } : {}),
     } });
     sendSourceProjection(response, request, result, () => ({

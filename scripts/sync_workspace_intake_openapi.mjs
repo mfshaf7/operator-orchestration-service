@@ -91,6 +91,18 @@ const schemas = {
     canonical_mutation: { type: "boolean" },
   }),
 };
+// Direct candidates project operator-authored commands; the attestation schema
+// continues to admit only authenticated source-owner classes.
+schemas.WorkspaceIntakeDirectCandidate = structuredClone(schemas.WorkspaceIntakeSourceCandidate);
+schemas.WorkspaceIntakeDirectCandidate.properties.source.properties.class = { const: "direct" };
+schemas.WorkspaceIntakeDirectCandidate.properties.target.properties.kind = { enum: ["product", "component"] };
+const directPage = structuredClone(schemas.WorkspaceIntakeRequestPage);
+directPage.required.push("source_class");
+directPage.properties.source_class = { const: "direct" };
+directPage.properties.custody_request_id = { type: "null" };
+directPage.properties.target.properties.kind = { enum: ["product", "component"] };
+directPage.properties.records.items.properties.candidate = ref("WorkspaceIntakeDirectCandidate");
+schemas.WorkspaceIntakeRequestPage = { oneOf: [schemas.WorkspaceIntakeRequestPage, directPage] };
 for (const [name, schema] of Object.entries(schemas)) source = upsertOpenApiComponent(source, name, schema);
 const input = inputFixture();
 const example = { schema_version: 1, workflow_id: "workspace-intake", request_id: input.request.request_id, session_ref: input.session_ref, execution_ref: input.execution_ref,
@@ -145,11 +157,12 @@ source = upsertOpenApiPath(source, "/v1/workspace-intake/source-candidates", { p
   },
 } });
 source = upsertOpenApiPath(source, "/v1/workspace-intake/requests", {
-  get: { ...common, operationId: "listCustodyWorkspaceIntakeRequests", summary: "Read retained caller-owned requests for one exact repository custody target",
+  get: { ...common, operationId: "listCustodyWorkspaceIntakeRequests", summary: "Read retained caller-owned Intake requests for one exact custody or direct target",
     parameters: [
-      { name: "target_kind", in: "query", required: true, schema: { const: "repo" } },
+      { name: "target_kind", in: "query", required: true, schema: { enum: ["repo", "product", "component"] } },
       { name: "target_name", in: "query", required: true, schema: targetName },
-      { name: "custody_request_id", in: "query", required: true, schema: text },
+      { name: "custody_request_id", in: "query", required: false, description: "Required for repo; mutually exclusive with source_class.", schema: text },
+      { name: "source_class", in: "query", required: false, description: "Required direct selector for product/component; mutually exclusive with custody_request_id.", schema: { const: "direct" } },
       { name: "cursor", in: "query", required: false, schema: { type: "string", pattern: "^[0-9a-f]{64}$" } },
     ], responses: {
       "200": { description: "Read-only caller/custody-scoped page; reopening does not resubmit classification.",
