@@ -6,6 +6,7 @@ import {
   createCapturePayload,
   createNodeRequestImpl,
   createOpenProjectClient,
+  currentDeliveryArtReferenceFromDescription,
   mapWorkPackageToIdeaRecord,
   syncExecutionContextSection,
 } from "../src/openproject-client.js";
@@ -11772,6 +11773,17 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
 
 test("updateDeliveryInitiative writes the top-level Epic target PI and initiative fields", async () => {
   const calls = [];
+  const artifactNote = [
+    "- 2026-04-21T00:00:00.000Z delivery-art: Delivery ART evidence reference",
+    "- artifact type: delivery_art_work_start_record",
+    "- artifact id: work-start:delivery-38:accepted",
+    "- artifact status: implementation-ready",
+    `- artifact ref: wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+    `- artifact digest: sha256:${"a".repeat(64)}`,
+    `- custody receipt ref: wgcf://receipts/artifact-custody/receipt-${"b".repeat(64)}.json`,
+    `- custody receipt digest: sha256:${"b".repeat(64)}`,
+  ].join("\n");
+  const originalDescription = `Old initiative description.\n\n## Operator work notes\n\n${artifactNote}`;
   const client = createOpenProjectClient({
     config,
     fetchImpl: async (url, options) => {
@@ -11795,7 +11807,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
               customField31: "delivery-art-operator-surfaces",
               customField32: "architecture-anchor",
               description: {
-                raw: "Old initiative description.",
+                raw: originalDescription,
               },
               id: 38,
               lockVersion: 7,
@@ -11988,6 +12000,16 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
   assert.equal(result.changesApplied.ownerRepo.to, "platform-engineering");
+  assert.deepEqual(
+    currentDeliveryArtReferenceFromDescription(patchPayload.description.raw, "delivery_art_work_start_record"),
+    currentDeliveryArtReferenceFromDescription(originalDescription, "delivery_art_work_start_record"),
+  );
+  assert.ok(patchPayload.description.raw.includes(artifactNote), "Original evidence projection time and bytes survive narrative/context replacement");
+  const patchCount = calls.filter(call => call.options.method === "PATCH").length;
+  await assert.rejects(client.updateDeliveryInitiative({ recordId: 38,
+    description: `Changed narrative\n\n## Operator work notes\n\n${artifactNote.replaceAll("a".repeat(64), "c".repeat(64))}`,
+  }), error => error instanceof OpenProjectError && error.details === "delivery_art_description_reference_changed");
+  assert.equal(calls.filter(call => call.options.method === "PATCH").length, patchCount);
 });
 
 test("initiative title revision denies absent/read-only subject forms and blank input before PATCH", async () => {

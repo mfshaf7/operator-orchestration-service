@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { OpenProjectError } from "../src/errors.js";
+import { createOpenProjectClient } from "../src/openproject-client.js";
 import {
   buildPrototypeDeliveryDescription,
   createPrototypeDeliveryIngressAdapter,
   decodePrototypeDeliveryTargetMarker,
+  encodePrototypeDeliveryTargetMarker,
+  preservePrototypeDeliveryTargetMarker,
   prototypeDeliveryTargetMarker,
 } from "../src/delivery-ingress/prototype-adapter.js";
 import {
@@ -211,6 +214,41 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
       record_version: target.recordVersion,
     },
   });
+  // Run the actual initiative writer across a persisted HTTP payload before
+  // rediscovering the original trusted receipt through the native adapter.
+  let backend = {
+    id: target.recordId, lockVersion: target.recordVersion, subject: target.title,
+    description: { raw: target.description }, customField13: "Initiating",
+    customField27: target.ownerRepo,
+    _links: { type: { title: "Epic" }, status: { title: "new" } },
+  };
+  const writer = createOpenProjectClient({
+    config: { apiToken: "synthetic", baseUrl: "http://example.test",
+      deliveryProjectIdentifier: "workspace-delivery-art", deliveryCustomFieldPm2PhaseId: 13 },
+    fetchImpl: async (url, options) => {
+      const pathname = new URL(url).pathname;
+      let value;
+      if (options.method === "GET" && pathname === "/api/v3/work_packages/901") value = backend;
+      else if (options.method === "POST" && pathname.endsWith("/901/form")) value = {
+        _embedded: { schema: {
+          customField13: { name: "PM² Phase", fieldFormat: "string" },
+          customField27: { name: "Owner Repo", fieldFormat: "string" },
+        } },
+      };
+      else if (options.method === "PATCH" && pathname === "/api/v3/work_packages/901") {
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.lockVersion, backend.lockVersion);
+        backend = { ...backend, ...patch, lockVersion: backend.lockVersion + 1 };
+        value = backend;
+      } else throw new Error(`Unexpected native writer request: ${options.method} ${pathname}`);
+      return { ok: true, status: 200, text: async () => JSON.stringify(value) };
+    },
+  });
+  await writer.updateDeliveryInitiative({ recordId: 901, description: "## Revised delivery narrative\n\nImplement the accepted app." });
+  assert.match(backend.description.raw, /Revised delivery narrative/);
+  assert.deepEqual(decodePrototypeDeliveryTargetMarker(backend.description.raw), context.marker);
+  target.description = backend.description.raw;
+  target.recordVersion = backend.lockVersion;
   let directTargetReads = 0;
   let targetScans = 0;
   const openProjectClient = {
@@ -266,6 +304,20 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
   );
   assert.equal(targetScans, 1);
   assert.equal(directTargetReads, 4);
+});
+
+test("narrative replacement retains one exact accepted marker and rejects changed or duplicate bindings", () => {
+  const { marker } = applicationContext();
+  const encoded = encodePrototypeDeliveryTargetMarker(marker);
+  const current = `Original narrative\n\n${encoded}`;
+  assert.equal(preservePrototypeDeliveryTargetMarker(current, "Rewritten narrative"), `Rewritten narrative\n\n${encoded}`);
+  assert.equal(preservePrototypeDeliveryTargetMarker(current, ""), encoded);
+  assert.equal(preservePrototypeDeliveryTargetMarker(current, current), current);
+  assert.equal(preservePrototypeDeliveryTargetMarker("Ordinary delivery", "New narrative"), "New narrative");
+  for (const proposed of [encodePrototypeDeliveryTargetMarker({ ...marker, application_id: "foreign" }), `${encoded}\n${encoded}`]) {
+    assert.throws(() => preservePrototypeDeliveryTargetMarker(current, proposed),
+      error => error instanceof OpenProjectError && error.details === "prototype_delivery_target_marker_changed");
+  }
 });
 
 test("Prototype adapter rejects a trusted event whose receipt digest was altered", async () => {

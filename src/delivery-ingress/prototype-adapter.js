@@ -97,6 +97,28 @@ export function decodePrototypeDeliveryTargetMarker(description) {
   }
 }
 
+// Narrative editing must retain the existing application identity used by
+// native receipt discovery. Restore only the current binding, never silently
+// replace it with another application supplied in edited prose.
+export function preservePrototypeDeliveryTargetMarker(currentDescription, nextDescription) {
+  const marker = decodePrototypeDeliveryTargetMarker(currentDescription);
+  if (!marker) return nextDescription;
+  const prefix = `<!-- ${MARKER_PREFIX}`;
+  const currentStart = currentDescription.indexOf(prefix);
+  const currentEnd = currentDescription.indexOf(" -->", currentStart) + 4;
+  const next = String(nextDescription ?? "");
+  const proposed = decodePrototypeDeliveryTargetMarker(next);
+  if (currentDescription.indexOf(prefix, currentStart + prefix.length) !== -1 ||
+      (proposed && (canonicalDigest(proposed) !== canonicalDigest(marker) ||
+        next.indexOf(prefix, next.indexOf(prefix) + prefix.length) !== -1))) {
+    throw new OpenProjectError("validation_failure",
+      "A narrative edit cannot replace or duplicate the accepted Prototype Delivery application binding.",
+      422, "prototype_delivery_target_marker_changed");
+  }
+  if (proposed) return next;
+  return [next.trimEnd(), currentDescription.slice(currentStart, currentEnd)].filter(Boolean).join("\n\n");
+}
+
 function markdownList(values, emptyText) {
   return values.length > 0
     ? values.map((value) => `- ${value}`).join("\n")

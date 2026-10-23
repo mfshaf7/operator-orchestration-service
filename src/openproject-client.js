@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { preservePrototypeDeliveryTargetMarker } from "./delivery-ingress/prototype-adapter.js";
 
 import { canonicalDigest } from "./delivery-art/canonical-json.js";
 import {
@@ -1148,10 +1149,7 @@ function normalizeDeliveryArtProjection({
   };
 }
 
-export function currentDeliveryArtReferenceFromDescription(
-  rawDescription,
-  artifactType,
-) {
+function deliveryArtReferenceEntries(rawDescription) {
   const lines = String(rawDescription ?? "").split(/\r?\n/);
   const entries = [];
   let current = null;
@@ -1163,17 +1161,21 @@ export function currentDeliveryArtReferenceFromDescription(
   for (const line of lines) {
     if (/^- \d{4}-\d{2}-\d{2}T[^ ]+ delivery-art: Delivery ART evidence reference$/.test(line)) {
       flush();
-      current = {};
+      current = { source_lines: [line] };
       continue;
     }
     if (!current) continue;
     const field = line.match(/^- (artifact type|artifact id|artifact status|artifact ref|artifact digest|custody receipt ref|custody receipt digest):\s*(.*)$/);
     if (!field) continue;
     current[field[1]] = field[2].replace(/^`|`$/g, "");
+    current.source_lines.push(line);
   }
   flush();
+  return entries;
+}
 
-  const match = entries
+export function currentDeliveryArtReferenceFromDescription(rawDescription, artifactType) {
+  const match = deliveryArtReferenceEntries(rawDescription)
     .filter((entry) => entry["artifact type"] === artifactType)
     .at(-1);
   if (!match) return null;
@@ -1205,6 +1207,29 @@ export function currentDeliveryArtReferenceFromDescription(
       uri: normalized.artifactUri,
     },
   };
+}
+
+function preserveDeliveryDescriptionBindings(currentDescription, nextDescription) {
+  let next = preservePrototypeDeliveryTargetMarker(currentDescription, nextDescription);
+  const entries = deliveryArtReferenceEntries(currentDescription);
+  for (const artifactType of DELIVERY_ART_ID_PREFIX_BY_TYPE.keys()) {
+    const existing = currentDeliveryArtReferenceFromDescription(currentDescription, artifactType);
+    if (!existing) continue;
+    const proposed = currentDeliveryArtReferenceFromDescription(next, artifactType);
+    if (proposed) {
+      if (canonicalDigest(proposed) !== canonicalDigest(existing)) {
+        throw new OpenProjectError("validation_failure",
+          "Narrative editing cannot replace the current Delivery ART evidence reference; use its controlled projection workflow.",
+          422, "delivery_art_description_reference_changed");
+      }
+      continue;
+    }
+    const entry = entries.filter(row => row["artifact type"] === artifactType).at(-1);
+    const notes = readMarkdownSections(next).get("Operator work notes");
+    next = replaceOrAppendMarkdownSection(next, "Operator work notes",
+      [notes, entry.source_lines.join("\n")].filter(Boolean).join("\n\n"));
+  }
+  return next;
 }
 
 function buildWorkPackageMap(workPackages) {
@@ -7305,7 +7330,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if (description !== undefined) {
-        const desiredDescription = description === null ? "" : normalizeStringValue(description);
+        const desiredDescription = preserveDeliveryDescriptionBindings(
+          currentDescription, description === null ? "" : normalizeStringValue(description),
+        );
         if (desiredDescription !== currentDescription) {
           patchPayload.description = {
             format: "markdown",
@@ -7579,14 +7606,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       const desiredDescriptionBase =
-        description === undefined ? currentDescription : normalizeStringValue(description);
-      const desiredDescription = syncExecutionContextSection(desiredDescriptionBase, {
-        architectureAnchorRef: validatedLineage.architectureAnchorRef,
-        initiativeFamily: validatedLineage.initiativeFamily,
-        lineageRole: validatedLineage.lineageRole,
-        ownerRepo: desiredOwnerRepo,
-        requiredUpstreamRef: validatedLineage.requiredUpstreamRef,
-      });
+        patchPayload.description?.raw ?? currentDescription;
+      const desiredDescription = preserveDeliveryDescriptionBindings(currentDescription,
+        syncExecutionContextSection(desiredDescriptionBase, {
+          architectureAnchorRef: validatedLineage.architectureAnchorRef,
+          initiativeFamily: validatedLineage.initiativeFamily,
+          lineageRole: validatedLineage.lineageRole,
+          ownerRepo: desiredOwnerRepo,
+          requiredUpstreamRef: validatedLineage.requiredUpstreamRef,
+        }));
       if (desiredDescription !== currentDescription) {
         patchPayload.description = {
           format: "markdown",
@@ -8368,6 +8396,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           };
         }
 
+        if (patchPayload.description) {
+          patchPayload.description.raw = preserveDeliveryDescriptionBindings(
+            currentDescription, patchPayload.description.raw,
+          );
+          if (patchPayload.description.raw === currentDescription) {
+            delete patchPayload.description;
+            delete changesApplied.description;
+          }
+        }
         const nextPayload = Object.keys(changesApplied).length > 0
           ? await patchWorkPackagePayload(payload.id, patchPayload)
           : payload;
@@ -10075,6 +10112,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         });
       }
 
+      descriptionRaw = preserveDeliveryDescriptionBindings(currentDescription, descriptionRaw);
       if (descriptionRaw !== currentDescription) {
         patchPayload.description = {
           format: "markdown",
