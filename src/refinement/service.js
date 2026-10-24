@@ -145,7 +145,10 @@ function assertProjection(request, projection, projectedRequest, contextCallerId
     projection?.request_id !== request.request_id ||
     projection?.correlation_id !== request.correlation_id ||
     projection?.idempotency_key !== projectedRequest.idempotency_key ||
-    projection?.request_digest !== projectedRequest.assist_request_digest ||
+    projection?.request_digest !== canonicalDigest({
+      binding,
+      refinement_context: request,
+    }) ||
     projection?.admission_decision?.redaction_safe !== true ||
     !["not_requested", "denied"].includes(projection?.admission_decision?.raw_projection) ||
     binding?.request_id !== request.request_id ||

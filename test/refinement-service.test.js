@@ -156,7 +156,7 @@ function applyRequest() {
 }
 
 function readyProjection(request) {
-  return {
+  const projection = {
     schema_version: 1,
     status: "ready",
     replayed: false,
@@ -205,6 +205,13 @@ function readyProjection(request) {
       may_mutate_delivery: false,
     },
   };
+  // CGG hashes its bound projection envelope; context_digest separately binds
+  // the canonical assist request. Those two digests are deliberately distinct.
+  projection.request_digest = canonicalDigest({
+    binding: projection.binding,
+    refinement_context: request.assist_request,
+  });
+  return projection;
 }
 
 function service(overrides = {}) {
@@ -432,4 +439,31 @@ test("Refinement apply validates the immutable draft before starting a durable r
       error instanceof RefinementServiceError && error.code === "accepted_draft_stale",
   );
   assert.equal(started, 1);
+});
+
+
+test("Refinement rejects context-only receipts and tampered CGG bindings before invocation", async () => {
+  for (const [index, mutation] of [
+    (projection, request) => { projection.request_digest = request.assist_request_digest; },
+    (projection) => { projection.binding.operator_id = "operator:other"; },
+    (projection) => { projection.binding.packet.packet_revision = "wrong-revision"; },
+    (projection) => { projection.binding.target.selected_node_ids = ["unbound-node"]; },
+    (projection) => { projection.binding.context_digest = `sha256:${"0".repeat(64)}`; },
+  ].entries()) {
+    await assert.rejects(service({
+      contextClient: {
+        async project(request) {
+          const projection = structuredClone(readyProjection(request));
+          mutation(projection, request);
+          if (index > 0) projection.request_digest = canonicalDigest({
+            binding: projection.binding, refinement_context: request.assist_request,
+          });
+          return projection;
+        },
+      },
+      gatewayClient: { async invoke() { assert.fail("Unbound projection must not invoke a model"); } },
+    }).assist({ callerId: "governance-operations-console", packageId: packageRef,
+                request: assistRequest() }),
+      (error) => error.code === "context_projection_failed");
+  }
 });
