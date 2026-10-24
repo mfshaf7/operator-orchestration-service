@@ -31,6 +31,7 @@ COPY --chown=node:node contracts/delivery-art ./contracts/delivery-art
 COPY --chown=node:node contracts/delivery-art-lifecycle ./contracts/delivery-art-lifecycle
 COPY --chown=node:node contracts/delivery-art-work-session ./contracts/delivery-art-work-session
 COPY --chown=node:node contracts/delivery-ingress ./contracts/delivery-ingress
+COPY --chown=node:node contracts/governed-ai ./contracts/governed-ai
 COPY --chown=node:node contracts/lifecycle-transition ./contracts/lifecycle-transition
 COPY --chown=node:node contracts/model-profile-request ./contracts/model-profile-request
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration

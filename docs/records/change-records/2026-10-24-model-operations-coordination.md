@@ -54,6 +54,7 @@ their business output or allowing a model to approve or apply its own output.
 - actual backend/model/native effort/fallback evidence is opt-in owner metadata and optional for historical records; wrong-task, incomplete or secret-bearing metadata fails closed
 - Work Design, Refinement, Agent Console, Delivery source realization and Prototype source authoring preserve canonical task outputs and existing source-policy bindings
 - a retained Prototype model request preserves its original wire version across recovery
+- package the shared selection schema in both runtime image targets; PR CI caught the initially omitted Dockerfile copy before merge, so packaged startup is part of the corrected exact-head proof
 - tests cover persisted lost responses, concurrent later configuration edits, stale controls, cancellation, private caller scope, tampered owner evidence and consumer compatibility
 - related change records: Platform model-management foundation and custody-classification maintenance records; existing Model Profile Request source activation
 
