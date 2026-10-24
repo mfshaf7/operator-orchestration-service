@@ -1,3 +1,4 @@
+import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -230,6 +231,7 @@ function assertGatewayResult(result, { profileId, requestId, projection, source 
 
 function gatewayRequest({ attempt, operatorId, profileId, projection, source }) {
   return {
+    selection_evidence_version: 1,
     profile_id: profileId,
     caller_identity: {
       caller_id: "operator-orchestration-service/source-realization",
@@ -555,6 +557,7 @@ export function createDeliveryArtSourceRealizationService({
           profile_id: modelResult.profile_id,
           binding_selection_ref: modelResult.binding_selection_ref,
           audit_ref: modelResult.audit_ref,
+          ...selectionEvidence(modelResult, { profileId, taskKind: "source_realization" }),
         };
         attempt.change_set = changeSet;
         attempt.change_set_digest = canonicalDigest(changeSet);

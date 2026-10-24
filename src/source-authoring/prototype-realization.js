@@ -1,3 +1,4 @@
+import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { assertPrototypeChangeSet } from "./prototype-change-set.js";
 import { assertSourceCredentialTimestamp, SOURCE_INTENT_REFERENCE } from "../platform-operation/source-credentials.js";
@@ -190,6 +191,7 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
         const projection = await lifecycleContext.project({ record: metadata, requestRef: attempt.context_request_ref });
         const { content: _modelContent, ...safeProjection } = projection; attempt.context = safeProjection;
         const modelRequest = gatewayRequest({ metadata, attempt, projection, capture, profileId });
+        if (!attempt.model_request_ref || store.readArtifact(attempt.model_request_ref).selection_evidence_version === 1) modelRequest.selection_evidence_version = 1;
         const modelReference = store.writeArtifact(requestId, modelRequest);
         if (attempt.model_request_ref && canonicalDigest(attempt.model_request_ref) !== canonicalDigest(modelReference)) throw fail("model_request_changed", "Retained model invocation must not change across recovery.");
         attempt.model_request_ref = modelReference; await writeRecord(metadata.session, record);
@@ -200,7 +202,8 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
           throw fail("model_result_invalid", "Governed model result did not retain the exact admitted Prototype purpose, source and bounded app/design scope.", { statusCode: 502 });
         }
         assertPrototypeChangeSet(changeSet, metadata.session, { status: 502, code: "model_result_invalid" });
-        attempt.model = { profile_id: result.profile_id, binding_selection_ref: result.binding_selection_ref, audit_ref: result.audit_ref };
+        attempt.model = { profile_id: result.profile_id, binding_selection_ref: result.binding_selection_ref, audit_ref: result.audit_ref,
+          ...selectionEvidence(result, { profileId, taskKind: modelRequest.task.kind }) };
         attempt.change_set = changeSet; attempt.change_set_digest = canonicalDigest(changeSet); attempt.state = "draft-ready"; attempt.completed_at = revision();
         record.revision = attempt.completed_at; await writeRecord(metadata.session, record); return project(record, configured);
       } catch (error) {

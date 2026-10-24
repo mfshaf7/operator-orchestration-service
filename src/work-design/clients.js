@@ -20,7 +20,7 @@ export function createWorkDesignGatewayClient({ baseUrl, fetchImpl }) {
   const client = createWorkDesignJsonClient({ baseUrl, fetchImpl });
   return {
     invoke(request) {
-      return client.post("/v1/governed-ai/invoke", request);
+      return client.post("/v1/governed-ai/invoke", { ...request, selection_evidence_version: 1 });
     },
   };
 }

@@ -62,6 +62,8 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
           invocation_path: "governed-ai-gateway",
           generated_at: "2026-10-14T01:00:00.000Z",
           binding_selection_ref: "profile-binding://source-realization-v1",
+          effective_selection: { revision: 2, configuration_digest: `sha256:${"a".repeat(64)}`, task: "source-realization-v1/source_realization",
+            selection_ref: `ai-routing-selection:${"b".repeat(64)}`, attempts: [{ backend_id: "codex", model: "test-model", effort: "high", outcome: "suggestion-produced" }] },
           audit_ref: "audit://source-realization/1285-1",
           output: changeSet,
         };

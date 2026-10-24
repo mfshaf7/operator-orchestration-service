@@ -55,7 +55,8 @@
         "output_schema_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
         "cgg_packet_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
         "redaction_receipt_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "gateway_audit_ref": { "type": "string", "minLength": 1, "maxLength": 512 }
+        "gateway_audit_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "effective_selection": {"title":"Platform effective model selection evidence","type":"object","additionalProperties":false,"required":["revision","configuration_digest","task","attempts","selection_ref"],"properties":{"revision":{"type":"integer","minimum":0},"configuration_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"task":{"type":"string","minLength":1,"maxLength":300},"selection_ref":{"type":"string","pattern":"^ai-routing-selection:[0-9a-f]{64}$"},"attempts":{"type":"array","maxItems":5,"items":{"type":"object","additionalProperties":false,"required":["backend_id","model","effort","outcome"],"properties":{"backend_id":{"type":"string","minLength":1,"maxLength":300},"model":{"type":"string","minLength":1,"maxLength":200},"effort":{"anyOf":[{"type":"null"},{"type":"boolean"},{"type":"string","minLength":1,"maxLength":200}]},"outcome":{"type":"string","pattern":"^[a-z][a-z0-9-]{0,100}$"}}}}}}
       }
     }
   },

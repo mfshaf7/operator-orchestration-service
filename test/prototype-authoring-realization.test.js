@@ -76,6 +76,8 @@ function fixture(t, { ownerPreparation = false } = {}) {
   const gatewayClient = { configured: true, async invoke(value) { invokes++; modelRequests.push(value); const binding = value.input.source_binding;
     return { policy_decision: "allow", policy_status: "active", profile_id: value.profile_id, decision_id: value.caller_identity.decision_or_correlation_id,
       caller_id: value.caller_identity.caller_id, invocation_path: "governed-ai-gateway", generated_at: clock().toISOString(), binding_selection_ref: "model-binding:existing", audit_ref: "audit:example",
+      effective_selection: { revision: 2, configuration_digest: `sha256:${"a".repeat(64)}`, task: `${value.profile_id}/${value.task.kind}`,
+        selection_ref: `ai-routing-selection:${"b".repeat(64)}`, attempts: [{ backend_id: "codex", model: "test-model", effort: "high", outcome: "suggestion-produced" }] },
       output: { schema_version: 1, change_set_id: "prototype-draft:1", session_id: binding.session_id, base_commit: binding.base_commit, objective_digest: binding.objective_digest,
         commit_message: "feat: add synthetic example source", operations: [{ action: "create", path: badOutput ? "prototypes/other/source.txt" : "prototypes/example/source.txt", content: "Synthetic test draft.\n", expected_digest: null }] } }; } };
   const dependencies = { authoringService, store, sourceExecutor, platformOperations, lifecycleContext, gatewayClient, clock, enabled: true };
@@ -100,6 +102,8 @@ test("actual Prototype workflow starts its real session, generates only a draft,
   assert.match(started.session_id, /^prototype-source-session:[0-9a-f]{64}$/); assert.equal(f.ensureCalls, 1);
   const input = f.generation(); const draft = await f.service.generate({ ...f.args, input });
   assert.equal(draft.state, "draft-ready"); assert.equal(f.applyCalls, 0); assert.equal(f.invokes, 1);
+  assert.equal(draft.attempt.model.effective_selection.attempts[0].effort, "high");
+  assert.equal(f.modelRequests[0].selection_evidence_version, 1);
   assert.equal(JSON.stringify(f.modelRequests).includes("private-test-value"), false);
   assert.equal(f.modelRequests[0].caller_identity.caller_id, "operator-orchestration-service/prototype-source-authoring");
   assert.equal(f.modelRequests[0].task.contract_ref, "oos.prototype.source-authoring.v1");

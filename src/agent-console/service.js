@@ -1,3 +1,4 @@
+import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { createHash } from "node:crypto";
 
 import { createAgentActionEnforcer } from "../agent-action/enforcement.js";
@@ -433,6 +434,7 @@ export function createAgentConsoleService({
           profile_id: response.profile_id,
           binding_selection_ref: response.binding_selection_ref,
           audit_ref: response.audit_ref,
+          ...selectionEvidence(response, { profileId: MODEL.profile_id, taskKind: MODEL.task_kind }),
         };
         modelGeneratedAt = response.generated_at;
         result = structuredClone(response.output);

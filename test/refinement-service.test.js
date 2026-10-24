@@ -225,6 +225,8 @@ function service(overrides = {}) {
           caller_id: request.caller_identity.caller_id,
           invocation_path: "governed-ai-gateway",
           task: request.task,
+          effective_selection: { revision: 2, configuration_digest: `sha256:${"a".repeat(64)}`, task: `delivery-refinement-advisor-v1/${request.task.kind}`,
+            selection_ref: `ai-routing-selection:${"b".repeat(64)}`, attempts: [{ backend_id: "local", model: "test-model", effort: false, outcome: "suggestion-produced" }] },
           output: {
             confidence: "medium",
             required_operator_action: "review",
@@ -322,6 +324,7 @@ test("Refinement assist binds CGG projection and governed output to one packet f
   });
   assert.equal(result.suggestion.field_key, "initiative-target-pi");
   assert.equal(result.suggestion.value, "PI-2026-04");
+  assert.equal(result.evidence.effective_selection.attempts[0].effort, false);
   assert.equal(result.required_operator_action, "review");
 });
 

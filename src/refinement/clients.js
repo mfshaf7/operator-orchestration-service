@@ -25,7 +25,7 @@ export function createRefinementGatewayClient({ baseUrl, fetchImpl }) {
   const client = createRefinementJsonClient({ baseUrl, fetchImpl });
   return {
     invoke(request) {
-      return client.post("/v1/governed-ai/invoke", request);
+      return client.post("/v1/governed-ai/invoke", { ...request, selection_evidence_version: 1 });
     },
   };
 }

@@ -1,3 +1,4 @@
+import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { createHash } from "node:crypto";
 
 import {
@@ -556,6 +557,7 @@ export function createWorkDesignService({
             cgg_packet_ref: projection.packet_ref,
             redaction_receipt_ref: projection.redaction_receipt_ref,
             gateway_audit_ref: gateway.audit_ref,
+            ...selectionEvidence(gateway, { profileId: PROFILE_ID, taskKind: request.task.kind }),
           },
         });
       } catch (error) {

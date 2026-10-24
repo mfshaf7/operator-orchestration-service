@@ -478,6 +478,17 @@ export function loadConfig(
       repositoryId: env.OOS_PROPOSAL_TARGET_APPLICATION_GITHUB_REPOSITORY_ID,
       tokenFile: env.OOS_PROPOSAL_TARGET_APPLICATION_TOKEN_FILE,
     },
+    modelOperations: {
+      enabled: parseBoolean(env.OOS_MODEL_OPERATIONS_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_MODEL_OPERATIONS_STATE_ROOT?.trim() || undefined,
+      platformBaseUrl: env.OOS_MODEL_OPERATIONS_PLATFORM_BASE_URL?.trim() || undefined,
+      managementTokenFile: env.OOS_MODEL_OPERATIONS_MANAGEMENT_TOKEN_FILE?.trim() || undefined,
+      operatorBindings: parseCallerOperatorBindings(
+        env.OOS_MODEL_OPERATIONS_CALLER_OPERATOR_BINDINGS_JSON,
+        "OOS_MODEL_OPERATIONS_CALLER_OPERATOR_BINDINGS_JSON",
+      ),
+    },
     modelProfileRequest: {
       enabled: parseBoolean(env.OOS_MODEL_PROFILE_REQUEST_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
