@@ -1358,6 +1358,17 @@ Treat these outcomes distinctly:
   head revision set. The corrected packet receives new immutable custody
   without overwriting the earlier merge-ready record; a different, closed, or
   wrong-base pull request remains blocked
+- corrected pre-merge evidence at the same source head: update the existing
+  editable evidence document and reconcile the original session. Its ordinary
+  evidence-revision transition revalidates current source and proof, drafts a
+  new packet, and persists new immutable custody. Identity covers the complete
+  normalized Landing Unit, evidence and exceptions, so a changed validation or
+  review obligation does not reuse the earlier immutable key. Unchanged proof
+  reuses its current packet; historical durable packets remain valid. Do not
+  change source merely to attach already completed CI proof, delete registry
+  history or use post-merge finalization supersession before merge. A normal
+  continuation may automatically acquire, draft and seal before returning to
+  the next operator gate; it does not promise a pause between those steps
 - legacy local pre-merge draft: lifecycle reconciliation recognizes a valid
   current-head draft whose packet id predates source-scoped identity, repeats
   the clean-source, exact-PR, and current-evidence checks, and re-authors it

@@ -1030,6 +1030,83 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   );
 });
 
+test("same-head evidence revision obtains new immutable custody without changing source or prior proof", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const seed = fixture("review-packet-merge-ready.valid.json");
+  const repo = seed.landing_unit.repos[0];
+  const source = { base_commit: repo.base_commit, base_ref: repo.base_ref,
+    branch: repo.branch, changed_files: repo.changed_files,
+    head_commit: repo.head_commit, repo_name: repo.repo_name, state: "pushed" };
+  const project = currentDocument => projectDeliveryArtReviewEvidence({
+    architecture, currentDocument, source, workStart,
+  }).evidence_document;
+  let document = project({ acquisition: { state: "ready" }, evidence: seed.evidence, exceptions: seed.exceptions });
+  // Seed with the production author's current identity, not a legacy fixture
+  // id: otherwise a legacy-id migration can hide same-source key collisions.
+  const first = durable(createDeliveryArtReviewPacketV2Draft({
+    createdAt: seed.created_at, evidence: document.evidence,
+    exceptions: document.exceptions, landingUnit: seed.landing_unit,
+    operator: seed.operator, workStart,
+  }), { status: "merge-ready", readiness: seed.readiness });
+  const original = structuredClone(first);
+  const evidencePath = `${repoRoot}/.art/review-packets/evidence.json`;
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]: architecture,
+    [evidencePath]: document,
+    [`${repoRoot}/.art/review-packets/review.json`]: first,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  Object.assign(setup.source, source);
+  Object.assign(setup.pullRequest, { head_commit: repo.head_commit, state: "open", url: repo.pr_url });
+  const registry = new Map([[first.packet_id, first.integrity.content_digest]]);
+  setup.brokerAdapter.request = async request => {
+    setup.requests.push(request);
+    if (request.path === "/v1/delivery-art/review-packets") {
+      const input = request.body.input;
+      return { ok: true, body: { review_packet: createDeliveryArtReviewPacketV2Draft({
+        createdAt: input.created_at, evidence: input.evidence,
+        exceptions: input.exceptions, landingUnit: input.landing_unit,
+        operator: first.operator, workStart,
+      }) } };
+    }
+    assert.equal(request.path, "/v1/delivery-art/review-packets/readiness");
+    const draft = request.body.review_packet;
+    const next = durable(draft, { status: "merge-ready", readiness: { ...draft.readiness, level: "merge-ready" } });
+    // The real registry is append-only by artifact identity. Model that actual
+    // rejection here rather than accepting every mock persistence request.
+    const previousDigest = registry.get(next.packet_id);
+    assert.ok(!previousDigest || previousDigest === next.integrity.content_digest,
+      "immutable registry key cannot accept revised proof bytes");
+    registry.set(next.packet_id, next.integrity.content_digest);
+    return { ok: true, body: { artifact: next } };
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+  const unchanged = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(unchanged.executed_actions, []);
+  assert.equal(unchanged.projection.gate, "source-merge");
+
+  document = structuredClone(document);
+  document.evidence.validations[0].summary += " Includes the independently reviewed complete CI command, fetched base and passing result.";
+  document = project(document);
+  setup.files.set(evidencePath, document);
+  const pending = await controller.inspect(finalizationPlan);
+  assert.equal(pending.facts.review_packet_evidence, "stale");
+  assert.equal(pending.projection.next_action, "draft-review-packet");
+  const revised = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(revised.executed_actions, ["draft-review-packet", "mark-merge-ready"]);
+  assert.equal(revised.projection.gate, "source-merge");
+  assert.notEqual(revised.artifacts.review_packet.packet_id, first.packet_id);
+  assert.equal(revised.artifacts.review_packet.landing_unit.repos[0].head_commit, repo.head_commit);
+  assert.equal(registry.size, 2);
+  assert.deepEqual(first, original);
+  assert.equal(registry.get(first.packet_id), original.integrity.content_digest);
+  const repeated = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(repeated.executed_actions, []);
+  assert.equal(registry.size, 2);
+});
+
 test("reconciliation replaces a legacy local draft before merge-readiness", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const workStart = fixture("work-start-record.valid.json");
@@ -1137,7 +1214,7 @@ test("reconciliation replaces a legacy local draft before merge-readiness", asyn
   assert.equal(result.projection.gate, "source-merge");
   assert.equal(
     revisedDraft.packet_id,
-    deliveryArtPreMergeReviewPacketId(workStart, mergeReady.landing_unit),
+    deliveryArtPreMergeReviewPacketId(workStart, revisedDraft.landing_unit, revisedDraft.evidence, revisedDraft.exceptions),
   );
   assert.deepEqual(
     setup.requests.map((request) => request.path),

@@ -145,28 +145,27 @@ function assertDurableWorkStart(workStart) {
   }
 }
 
-function reviewPacketSourceRevision(landingUnit) {
-  const repos = (landingUnit?.repos ?? [])
-    .map((repo) => ({
-      base_commit: repo.base_commit ?? null,
-      base_ref: repo.base_ref ?? null,
-      branch: repo.branch ?? null,
-      head_commit: repo.head_commit ?? null,
-      pr_url: repo.pr_url ?? null,
-      repo_name: repo.repo_name ?? null,
-    }))
-    .sort((left, right) => String(left.repo_name).localeCompare(String(right.repo_name)));
+function reviewPacketRevision(workStart, landingUnit, evidence, exceptions) {
+  // Hash the normalized immutable review payload. Source alone cannot name
+  // the lifecycle's existing same-head evidence-revision transition. Authoring
+  // time and custody are excluded; unchanged proof does not need another id.
   return canonicalDigest({
-    evidence_kind: landingUnit?.evidence_kind ?? null,
-    repos,
+    landing_unit: {
+      decision: workStart.landing_unit.decision,
+      evidence_kind: landingUnit?.evidence_kind ?? null,
+      rollback_boundary: landingUnit?.rollback_boundary ?? null,
+      repos: landingUnit?.repos ?? [],
+    },
+    evidence: evidence ?? null,
+    exceptions: exceptions ?? [],
   }).replace(/^sha256:/, "");
 }
 
-export function deliveryArtPreMergeReviewPacketId(workStart, landingUnit) {
+export function deliveryArtPreMergeReviewPacketId(workStart, landingUnit, evidence, exceptions = []) {
   return [
     workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
     "source",
-    reviewPacketSourceRevision(landingUnit),
+    reviewPacketRevision(workStart, landingUnit, evidence, exceptions),
   ].join("-");
 }
 
@@ -249,7 +248,7 @@ export function createDeliveryArtReviewPacketV2Draft({
     }
   }
 
-  const packetId = deliveryArtPreMergeReviewPacketId(workStart, landingUnit);
+  const packetId = deliveryArtPreMergeReviewPacketId(workStart, landingUnit, evidence, exceptions);
   const candidate = {
     schema_version: 2,
     artifact_type: "art_review_packet",

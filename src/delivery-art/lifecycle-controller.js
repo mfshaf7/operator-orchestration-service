@@ -233,6 +233,8 @@ function reviewPacketState(plan, artifactState, workStart) {
     return artifact.packet_id === deliveryArtPreMergeReviewPacketId(
       workStart,
       artifact.landing_unit,
+      artifact.evidence,
+      artifact.exceptions,
     )
       ? "local-draft"
       : "legacy-local-draft";
