@@ -105,3 +105,14 @@ post-apply source revision.
 Configured failures never fall back to local fixture state. Suspend the
 Refinement profile and worker independently if rollback is required; preserve
 run and receipt history for review.
+
+## Projection receipt verification
+
+OOS verifies CGG's `request_digest` over the canonical projection envelope:
+`{binding, refinement_context: assist_request}`. The separate
+`binding.context_digest` must equal the canonical assist-request digest. These
+values serve different bindings and must not be compared as the same digest.
+Caller, operator, workflow/execution, packet/source revision, field selection,
+task, request time, budget, redaction and suggestion-only authority checks all
+remain required before model invocation. A mismatch fails closed; refresh the
+original projection and investigate its owner receipt rather than applying advice.
