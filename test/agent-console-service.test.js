@@ -237,6 +237,8 @@ function gatewayFor(request, overrides = {}) {
     caller_id: "operator-orchestration-service/agent-console",
     invocation_path: "governed-ai-gateway",
     binding_selection_ref: "platform://profiles/agent-console-assistant-v1",
+    effective_selection: { revision: 2, configuration_digest: `sha256:${"a".repeat(64)}`, task: `agent-console-assistant-v1/${request.task.kind}`,
+      selection_ref: `ai-routing-selection:${"b".repeat(64)}`, attempts: [{ backend_id: "codex", model: "test-model", effort: "medium", outcome: "suggestion-produced" }] },
     task: request.task,
     output: { text: "The admitted context is healthy." },
     audit_ref: "local-ledger:agent-console-1",
@@ -295,6 +297,7 @@ test("Agent Console orders CGG before governed AI and seals deterministic replay
   const completed = await invoke(service);
   assert.deepEqual(calls.map(([kind]) => kind), ["context", "gateway"]);
   assert.equal(completed.latest_invocation.state, "completed");
+  assert.equal(completed.latest_invocation.model.effective_selection.attempts[0].effort, "medium");
   assert.deepEqual(completed.latest_invocation.result, { text: "The admitted context is healthy." });
   assert.match(completed.latest_invocation.receipt_ref.digest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(calls[0][1].caller_id, undefined);

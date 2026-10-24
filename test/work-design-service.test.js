@@ -194,6 +194,8 @@ function gatewayResult(overrides = {}) {
     caller_id: "operator-orchestration-service/work-design-assist",
     invocation_path: "governed-ai-gateway",
     binding_selection_ref: "platform://profiles/delivery-work-design-advisor-v1",
+    effective_selection: { revision: 2, configuration_digest: `sha256:${"a".repeat(64)}`, task: "delivery-work-design-advisor-v1/tree_advice",
+      selection_ref: `ai-routing-selection:${"b".repeat(64)}`, attempts: [{ backend_id: "codex", model: "test-model", effort: "high", outcome: "suggestion-produced" }] },
     task: {
       kind: "tree_advice",
       contract_ref: "oos.delivery-work-design.v1",
@@ -340,6 +342,7 @@ test("Work Design assist binds current source, CGG projection, and governed advi
 
   assert.equal(result.status, "ready");
   assert.equal(result.evidence.gateway_audit_ref, "local-ledger:work-design-1");
+  assert.equal(result.evidence.effective_selection.attempts[0].effort, "high");
   assert.equal(
     projectionRequest.context_digest,
     `sha256:${createHash("sha256").update(projectionRequest.context).digest("hex")}`,

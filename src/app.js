@@ -23,6 +23,7 @@ import {
   createWgcfMutationDraft,
 } from "./wgcf-art-handshake.js";
 import { HttpError, OpenProjectError } from "./errors.js";
+import { ModelOwnerError } from "./model-operations/platform-client.js";
 import {
   getDeliveryInitiativeGovernanceMissingConfig,
   getDeliveryPlanApplyMissingConfig,
@@ -3922,6 +3923,28 @@ function modelProfileOperatorId(request) {
   return value.trim();
 }
 
+async function handleModelOperations({ action, config, modelOperationsService, request, requestId, response, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Model operations");
+  if (!modelOperationsService) throw new HttpError(503, "model_operations_not_active", "Model operations have not been commissioned.");
+  const operatorId = modelProfileOperatorId(request);
+  const options = { callerId: caller.id, operatorId, requestId };
+  try {
+    let result;
+    if (action === "registry") result = await modelOperationsService.registry(options);
+    else if (action === "catalogue") result = await modelOperationsService.catalogue({ ...options, backendId: url.searchParams.get("backend_id"), model: url.searchParams.get("model") });
+    else if (action === "list") result = await modelOperationsService.list({ ...options, cursor: url.searchParams.get("cursor"), limit: url.searchParams.has("limit") ? parsePositiveInteger(url.searchParams.get("limit"), "limit", { max: 100 }) : 50 });
+    else if (action === "read") result = await modelOperationsService.get(options);
+    else result = await modelOperationsService[action]({ ...options, input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }) });
+    sendJson(response, action === "create" ? 202 : 200, result);
+  } catch (error) {
+    if (error instanceof ModelOwnerError) {
+      throw new HttpError(error.status === 403 ? 503 : error.status, `model_operations_${error.code}`, "The Platform model owner is unavailable or rejected this request. Refresh its authoritative status.");
+    }
+    throw error;
+  }
+}
+
 async function handleModelProfileRequest({
   action,
   config,
@@ -5538,6 +5561,7 @@ export function createApp({
   ideaService,
   lifecycleTransitionService = null,
   modelProfileRequestService = null,
+  modelOperationsService = null,
   openProjectClient,
   orchestrationService,
   platformOperationService = null,
@@ -5648,6 +5672,20 @@ export function createApp({
           workflowActivityService,
         });
         return;
+      }
+
+      if (url.pathname.startsWith("/v1/model-operations/")) {
+        let action = null, requestId;
+        if (request.method === "GET" && url.pathname === "/v1/model-operations/registry") action = "registry";
+        else if (request.method === "GET" && url.pathname === "/v1/model-operations/catalogue") action = "catalogue";
+        else if (request.method === "GET" && url.pathname === "/v1/model-operations/requests") action = "list";
+        else if (request.method === "POST" && url.pathname === "/v1/model-operations/requests") action = "create";
+        else if (request.method === "GET" && /^\/v1\/model-operations\/requests\/[^/]+$/.test(url.pathname)) { action = "read"; requestId = decodeURIComponent(url.pathname.split("/")[4]); }
+        else if (request.method === "POST" && /^\/v1\/model-operations\/requests\/[^/]+\/controls$/.test(url.pathname)) { action = "control"; requestId = decodeURIComponent(url.pathname.split("/")[4]); }
+        if (action) {
+          await handleModelOperations({ action, config, modelOperationsService, request, requestId, response, url });
+          return;
+        }
       }
 
       if (request.method === "POST" && url.pathname === "/v1/model-profile-requests") {

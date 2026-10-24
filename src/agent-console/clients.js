@@ -55,5 +55,5 @@ export function createAgentConsoleContextClient({ baseUrl, callerId, callerSecre
 
 export function createAgentConsoleGatewayClient({ baseUrl, fetchImpl = globalThis.fetch }) {
   const post = postClient({ baseUrl, fetchImpl, headers: {}, label: "governed Agent Console model access" });
-  return { invoke: (request, options) => post("/v1/governed-ai/invoke", request, options) };
+  return { invoke: (request, options) => post("/v1/governed-ai/invoke", { ...request, selection_evidence_version: 1 }, options) };
 }

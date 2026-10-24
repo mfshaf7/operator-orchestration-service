@@ -30426,6 +30426,683 @@
           }
         }
       }
+    },
+    "/v1/model-operations/registry": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "readModelOperationsRegistry",
+        "summary": "Read admitted backends and revisioned configuration",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsRegistry"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "tasks": [],
+                  "backends": [],
+                  "configuration": {
+                    "revision": 0,
+                    "current_revision": 0,
+                    "digest": "sha256:f2a5b1f6f96c528d3655fb4aebb84468b7197740bc281edf7edaffa215389640",
+                    "configuration": {
+                      "backends": {},
+                      "models": {},
+                      "default": null,
+                      "overrides": {}
+                    },
+                    "history": [
+                      {
+                        "revision": 0,
+                        "digest": "sha256:f2a5b1f6f96c528d3655fb4aebb84468b7197740bc281edf7edaffa215389640"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/catalogue": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "readModelOperationsCatalogue",
+        "summary": "Discover admitted provider models and native effort metadata",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "backend_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsCatalogue"
+                },
+                "example": {
+                  "backend_id": "local",
+                  "models": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/requests": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "listModelOperations",
+        "summary": "List caller-owned model operations",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsList"
+                },
+                "example": {
+                  "requests": [
+                    {
+                      "schema_version": 1,
+                      "workflow_id": "model-operations",
+                      "request_id": "model-operation:register-local",
+                      "revision": 1,
+                      "request": {
+                        "schema_version": 1,
+                        "request_id": "model-operation:register-local",
+                        "idempotency_key": "register-local-v1",
+                        "expected_configuration_revision": 0,
+                        "action": "backend.register",
+                        "input": {
+                          "backend_id": "local"
+                        }
+                      },
+                      "state": "queued",
+                      "owner_command_id": "oos-model:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
+                      "attempt": 1,
+                      "owner_receipt": null,
+                      "applied_configuration": null,
+                      "account_login": null,
+                      "failure": null,
+                      "history": [
+                        {
+                          "sequence": 1,
+                          "type": "operator-intent-accepted",
+                          "state": "queued",
+                          "occurred_at": "2026-10-24T09:00:00Z"
+                        }
+                      ],
+                      "next_action": "reconcile-original-operation"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "createModelOperation",
+        "summary": "Submit or replay immutable model-management intent",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-owned intent or revision-bound recovery control; caller and operator authority come from authenticated headers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelOperationsRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "model-operation:register-local",
+                "idempotency_key": "register-local-v1",
+                "expected_configuration_revision": 0,
+                "action": "backend.register",
+                "input": {
+                  "backend_id": "local"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-operations",
+                  "request_id": "model-operation:register-local",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-operation:register-local",
+                    "idempotency_key": "register-local-v1",
+                    "expected_configuration_revision": 0,
+                    "action": "backend.register",
+                    "input": {
+                      "backend_id": "local"
+                    }
+                  },
+                  "state": "queued",
+                  "owner_command_id": "oos-model:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
+                  "attempt": 1,
+                  "owner_receipt": null,
+                  "applied_configuration": null,
+                  "account_login": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "type": "operator-intent-accepted",
+                      "state": "queued",
+                      "occurred_at": "2026-10-24T09:00:00Z"
+                    }
+                  ],
+                  "next_action": "reconcile-original-operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/requests/{request_id}": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "readModelOperation",
+        "summary": "Read actual owner progress and safe next action",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-operations",
+                  "request_id": "model-operation:register-local",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-operation:register-local",
+                    "idempotency_key": "register-local-v1",
+                    "expected_configuration_revision": 0,
+                    "action": "backend.register",
+                    "input": {
+                      "backend_id": "local"
+                    }
+                  },
+                  "state": "queued",
+                  "owner_command_id": "oos-model:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
+                  "attempt": 1,
+                  "owner_receipt": null,
+                  "applied_configuration": null,
+                  "account_login": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "type": "operator-intent-accepted",
+                      "state": "queued",
+                      "occurred_at": "2026-10-24T09:00:00Z"
+                    }
+                  ],
+                  "next_action": "reconcile-original-operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/requests/{request_id}/controls": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "controlModelOperation",
+        "summary": "Retry, reconcile or cancel the retained operation",
+        "description": "Platform owns model-management effects. OOS authenticates and retains exact operator intent, owner evidence and recovery. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-owned intent or revision-bound recovery control; caller and operator authority come from authenticated headers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelOperationsControl"
+              },
+              "example": {
+                "control_id": "reconcile-v1",
+                "expected_revision": 1,
+                "action": "reconcile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-operations",
+                  "request_id": "model-operation:register-local",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-operation:register-local",
+                    "idempotency_key": "register-local-v1",
+                    "expected_configuration_revision": 0,
+                    "action": "backend.register",
+                    "input": {
+                      "backend_id": "local"
+                    }
+                  },
+                  "state": "queued",
+                  "owner_command_id": "oos-model:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
+                  "attempt": 1,
+                  "owner_receipt": null,
+                  "applied_configuration": null,
+                  "account_login": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "type": "operator-intent-accepted",
+                      "state": "queued",
+                      "occurred_at": "2026-10-24T09:00:00Z"
+                    }
+                  ],
+                  "next_action": "reconcile-original-operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -43889,6 +44566,82 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 512
+              },
+              "effective_selection": {
+                "title": "Platform effective model selection evidence",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "revision",
+                  "configuration_digest",
+                  "task",
+                  "attempts",
+                  "selection_ref"
+                ],
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "configuration_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "task": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "selection_ref": {
+                    "type": "string",
+                    "pattern": "^ai-routing-selection:[0-9a-f]{64}$"
+                  },
+                  "attempts": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "backend_id",
+                        "model",
+                        "effort",
+                        "outcome"
+                      ],
+                      "properties": {
+                        "backend_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          ]
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]{0,100}$"
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -45081,6 +45834,82 @@
               },
               "gateway_audit_ref": {
                 "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "effective_selection": {
+                "title": "Platform effective model selection evidence",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "revision",
+                  "configuration_digest",
+                  "task",
+                  "attempts",
+                  "selection_ref"
+                ],
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "configuration_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "task": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "selection_ref": {
+                    "type": "string",
+                    "pattern": "^ai-routing-selection:[0-9a-f]{64}$"
+                  },
+                  "attempts": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "backend_id",
+                        "model",
+                        "effort",
+                        "outcome"
+                      ],
+                      "properties": {
+                        "backend_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          ]
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]{0,100}$"
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -70747,6 +71576,82 @@
                       "audit_ref": {
                         "type": "string",
                         "minLength": 1
+                      },
+                      "effective_selection": {
+                        "title": "Platform effective model selection evidence",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "revision",
+                          "configuration_digest",
+                          "task",
+                          "attempts",
+                          "selection_ref"
+                        ],
+                        "properties": {
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "configuration_digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                          },
+                          "task": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          },
+                          "selection_ref": {
+                            "type": "string",
+                            "pattern": "^ai-routing-selection:[0-9a-f]{64}$"
+                          },
+                          "attempts": {
+                            "type": "array",
+                            "maxItems": 5,
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "backend_id",
+                                "model",
+                                "effort",
+                                "outcome"
+                              ],
+                              "properties": {
+                                "backend_id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300
+                                },
+                                "model": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "effort": {
+                                  "anyOf": [
+                                    {
+                                      "type": "null"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    }
+                                  ]
+                                },
+                                "outcome": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9-]{0,100}$"
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -80159,6 +81064,989 @@
           "candidate_digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "ModelOperationsSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "model_id",
+          "effort"
+        ],
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ModelOperationsRoute": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "primary",
+              "fallbacks",
+              "on_exhausted"
+            ],
+            "properties": {
+              "primary": {
+                "$ref": "#/components/schemas/ModelOperationsSelection"
+              },
+              "fallbacks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ModelOperationsSelection"
+                },
+                "maxItems": 4
+              },
+              "on_exhausted": {
+                "const": "fail-closed"
+              }
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ModelOperationsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "idempotency_key",
+          "expected_configuration_revision",
+          "action",
+          "input"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "expected_configuration_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "action": {
+            "enum": [
+              "backend.register",
+              "backend.remove",
+              "model.register",
+              "model.remove",
+              "routing.save",
+              "routing.rollback",
+              "account.login.start",
+              "account.login.cancel"
+            ]
+          },
+          "input": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "backend.register"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "backend_id"
+                  ],
+                  "properties": {
+                    "backend_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "backend.remove"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "backend_id"
+                  ],
+                  "properties": {
+                    "backend_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "model.register"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "backend_id",
+                    "model"
+                  ],
+                  "properties": {
+                    "backend_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "model.remove"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "model_id"
+                  ],
+                  "properties": {
+                    "model_id": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "routing.save"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "default",
+                    "overrides"
+                  ],
+                  "properties": {
+                    "default": {
+                      "$ref": "#/components/schemas/ModelOperationsRoute"
+                    },
+                    "overrides": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/ModelOperationsRoute"
+                      },
+                      "maxProperties": 100
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "routing.rollback"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "revision"
+                  ],
+                  "properties": {
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "account.login.start"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "backend_id"
+                  ],
+                  "properties": {
+                    "backend_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "account.login.cancel"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "login_command_id"
+                  ],
+                  "properties": {
+                    "login_command_id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelOperationsControl": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "control_id",
+          "expected_revision",
+          "action"
+        ],
+        "properties": {
+          "control_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "action": {
+            "enum": [
+              "retry",
+              "reconcile",
+              "cancel"
+            ]
+          }
+        }
+      },
+      "ModelOperationsVerifiedModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "backend_id",
+          "model",
+          "supported_efforts",
+          "model_digest",
+          "runtime_version",
+          "verification_ref"
+        ],
+        "properties": {
+          "backend_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "supported_efforts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "minItems": 1
+          },
+          "model_digest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runtime_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "verification_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "ModelOperationsConfiguration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "current_revision",
+          "digest",
+          "history",
+          "configuration"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "current_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "revision",
+                "digest"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            }
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backends",
+              "models",
+              "default",
+              "overrides"
+            ],
+            "properties": {
+              "backends": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "backend_id"
+                  ],
+                  "properties": {
+                    "backend_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              },
+              "models": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ModelOperationsVerifiedModel"
+                }
+              },
+              "default": {
+                "$ref": "#/components/schemas/ModelOperationsRoute"
+              },
+              "overrides": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ModelOperationsRoute"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ModelOperationsReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "command_digest",
+          "actor",
+          "action",
+          "previous_revision",
+          "revision",
+          "configuration_digest",
+          "receipt_digest"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "command_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "enum": [
+              "backend.register",
+              "backend.remove",
+              "model.register",
+              "model.remove",
+              "routing.save",
+              "routing.rollback"
+            ]
+          },
+          "previous_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "configuration_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "receipt_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "ModelOperationsLogin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "request_digest",
+          "backend_id",
+          "actor",
+          "state",
+          "verification_url",
+          "user_code",
+          "failure"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "request_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "backend_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "waiting-for-operator",
+              "cancel-requested",
+              "connected",
+              "cancelled",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "verification_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ModelOperationsProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "revision",
+          "request",
+          "state",
+          "owner_command_id",
+          "attempt",
+          "owner_receipt",
+          "applied_configuration",
+          "account_login",
+          "failure",
+          "history",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "model-operations"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request": {
+            "$ref": "#/components/schemas/ModelOperationsRequest"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting-account",
+              "retryable",
+              "unknown",
+              "blocked",
+              "completed",
+              "cancelled",
+              "rejected"
+            ]
+          },
+          "owner_command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "owner_receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelOperationsReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applied_configuration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelOperationsConfiguration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account_login": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelOperationsLogin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sequence",
+                "type",
+                "state",
+                "occurred_at"
+              ],
+              "properties": {
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "state": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "maxItems": 128
+          },
+          "next_action": {
+            "enum": [
+              "await-progress",
+              "complete-account-sign-in",
+              "retry-or-cancel",
+              "reconcile-original-operation",
+              "review-owner-evidence",
+              "complete",
+              "refresh-and-create-corrected-request"
+            ]
+          }
+        }
+      },
+      "ModelOperationsRegistry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "tasks",
+          "backends",
+          "configuration"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "backends": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "backend_id",
+                "provider",
+                "allowed_tasks",
+                "registered",
+                "account_login_supported",
+                "availability"
+              ],
+              "properties": {
+                "backend_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "provider": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "allowed_tasks": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "registered": {
+                  "type": "boolean"
+                },
+                "account_login_supported": {
+                  "type": "boolean"
+                },
+                "availability": {
+                  "const": "not-probed"
+                }
+              }
+            }
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/ModelOperationsConfiguration"
+          }
+        }
+      },
+      "ModelOperationsCatalogue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "backend_id",
+          "models"
+        ],
+        "properties": {
+          "backend_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "model",
+                "supported_efforts",
+                "model_digest",
+                "runtime_version"
+              ],
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "supported_efforts": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "minItems": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "model_digest": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "runtime_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              }
+            }
+          }
+        }
+      },
+      "ModelOperationsList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requests",
+          "next_cursor"
+        ],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelOperationsProjection"
+            },
+            "maxItems": 100
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

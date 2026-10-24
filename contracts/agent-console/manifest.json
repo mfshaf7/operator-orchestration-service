@@ -30,7 +30,7 @@
     "cgg-projection-result.schema.json": "45f22dd3d32cefeb20910ec9fc4857ecd336f27196c1ab101020baeefc578c0b",
     "invocation-request.schema.json": "32eae45ab22675484283df84b4e66d4e3a22d5d40e9aec554c76d5846d488cdc",
     "model-response.schema.json": "0278481332ac0f6f42a320db7258796ba4a62bd47ebf224bc27cbb0e99f1aee0",
-    "session-projection.schema.json": "78f7e1235a6a28078f0b094b7333a92fe8059f94c3db0e2ca747f457b202a7a9",
+    "session-projection.schema.json": "ddee8336235924f92283c56b1b19f1a38be3dd8f6fbd8cd4415a7b476ea22c5c",
     "session-request.schema.json": "5b69ae17d29e93e9b9416bf7b3d22c1219efe60395bcdc5e34d1ccdeb7c7a1a5"
   }
 }

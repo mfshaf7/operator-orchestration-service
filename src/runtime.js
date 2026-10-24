@@ -51,6 +51,7 @@ import { createProposalTargetRuntime } from "./proposal-target-application/runti
 import { createPrototypeMaturityRuntime } from "./prototype-maturity/runtime.js";
 import { createPrototypeClosureRuntime } from "./prototype-closure/runtime.js";
 import { createModelProfileRequestRuntime } from "./model-profile-request/runtime.js";
+import { createModelOperationsRuntime } from "./model-operations/runtime.js";
 import { createProductPublicationRuntime } from "./product-publication/runtime.js";
 import { createPlatformOperationRuntime } from "./platform-operation/runtime.js";
 import { createWorkflowActivityService } from "./workflow-activity/service.js";
@@ -308,6 +309,7 @@ export function createRuntime({
     audit,
     config: config.modelProfileRequest,
   });
+  const modelOperationsService = createModelOperationsRuntime({ audit, config: config.modelOperations, fetchImpl });
   const productPublicationService = createProductPublicationRuntime({
     audit,
     config: config.productPublication,
@@ -396,6 +398,7 @@ export function createRuntime({
     ideaService,
     lifecycleTransitionService,
     modelProfileRequestService,
+    modelOperationsService,
     openProjectClient,
     orchestrationService,
     proposalWorkflowService,
@@ -432,6 +435,7 @@ export function createRuntime({
     ideaService,
     lifecycleTransitionService,
     modelProfileRequestService,
+    modelOperationsService,
     openProjectClient,
     orchestrationService,
     platformOperationService,
