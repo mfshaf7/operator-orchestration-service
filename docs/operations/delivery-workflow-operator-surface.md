@@ -1370,9 +1370,10 @@ Treat these outcomes distinctly:
   continuation may automatically acquire, draft and seal before returning to
   the next operator gate; it does not promise a pause between those steps
 - legacy local pre-merge draft: lifecycle reconciliation recognizes a valid
-  current-head draft whose packet id predates source-scoped identity, repeats
+  current-head draft whose packet id predates inclusion of the full reviewed
+  payload, repeats
   the clean-source, exact-PR, and current-evidence checks, and re-authors it
-  under the canonical source-scoped id before requesting merge-readiness. Do
+  under the current deterministic id before requesting merge-readiness. Do
   not submit the legacy id directly or delete earlier durable packet history
 - OpenProject projection failure: WGCF custody already succeeded; retain the
   returned safe refs and retry the same canonical digest
