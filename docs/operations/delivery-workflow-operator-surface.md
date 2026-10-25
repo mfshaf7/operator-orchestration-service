@@ -1851,3 +1851,10 @@ discoverable and reviewable from the normal Console.
 Closeout history preserves the native `receipt.ref` and `receipt.digest`; the
 separate `outcome_ref` remains linked evidence. A Proposal handoff whose original
 source version is not retained reports `not-projected`, never its current version.
+
+Intake target enumeration uses the configured Epic type with explicit all-status
+collection filtering and retained local parent/type checks. Proposal rows reuse
+the fresh owner collection snapshot and reread their exact reciprocal source
+proof; Prototype rows retain trusted native activity reads. This prevents
+repeated descendant scans and schema-form reads from turning normal visible
+workspace refresh into a readiness timeout. No cross-request proof cache exists.

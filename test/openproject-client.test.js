@@ -14253,6 +14253,9 @@ test("Prototype Delivery target methods preserve marker descriptions and owner c
       title: "Existing Prototype target",
     },
   ]);
+  const collection = calls.find(({options, url}) => options.method === "GET" && new URL(url).pathname.endsWith("/projects/workspace-delivery-art/work_packages"));
+  assert.deepEqual(JSON.parse(new URL(collection.url).searchParams.get("filters")),
+    [{type:{operator:"=",values:[String(config.deliveryTopLevelTypeId)]}}]);
   assert.deepEqual(target, targets[0]);
   assert.equal(created.recordRef, "openproject://work_packages/902");
   assert.equal(created.recordVersion, 1);
