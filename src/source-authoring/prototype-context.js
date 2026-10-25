@@ -1,6 +1,6 @@
 import { canonicalDigest, canonicalStringify } from "../delivery-art/canonical-json.js";
 import { assertSourceCredentialSubject, assertSourceCredentialTimestamp } from "../platform-operation/source-credentials.js";
-import { assertLifecycleContextResult, textDigest } from "./context-contract.js";
+import { assertLifecycleContextResult, lifecycleContextDigest, textDigest } from "./context-contract.js";
 import { prototypeAuthoringError } from "./prototype-contracts.js";
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
@@ -84,7 +84,7 @@ export function buildPrototypeContextRequest({ record, capture, executionId, bud
     workflow_session_id: record.session.session_id, execution_id: executionId, subject,
     landing_unit_id: record.binding.source_start.landing_unit_id, operator: { id: record.operator_id },
     lifecycle: { operation: "continue", state: "source-work", next_action: "prototype-source-draft-required" },
-    requested_at: capturedAt, sources, sources_digest: canonicalDigest(sources), budget_tokens: budgetTokens };
+    requested_at: capturedAt, sources, sources_digest: lifecycleContextDigest(sources), budget_tokens: budgetTokens };
 }
 
 export function createPrototypeLifecycleContext({ client, store }) {
@@ -104,7 +104,7 @@ export function createPrototypeLifecycleContext({ client, store }) {
       if (request.workflow_session_id !== record.session?.session_id || request.operator?.id !== record.operator_id ||
           request.subject?.prototype_id !== record.request.prototype_id || request.landing_unit_id !== record.binding.source_start.landing_unit_id ||
           canonicalDigest({ ...request.subject, source_revision: record.binding.subject.source_revision }) !== canonicalDigest(record.binding.subject) ||
-          request.sources_digest !== canonicalDigest(request.sources)) {
+          request.sources_digest !== lifecycleContextDigest(request.sources)) {
         throw prototypeAuthoringError("context_request_mismatch", "Retained context request does not belong to this canonical Prototype session.");
       }
       const result = assertLifecycleContextResult(await client.project(request), request, client.callerId,

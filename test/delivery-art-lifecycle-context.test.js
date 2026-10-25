@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +17,9 @@ import { createDeliveryArtWorkSessionStore } from
   "../src/delivery-art/work-session-store.js";
 
 const NOW = "2026-09-24T01:00:00.000Z";
+const pythonWireDigest = value => execFileSync("python3", ["-c",
+  "import hashlib,json,sys; print('sha256:'+hashlib.sha256(json.dumps(json.load(sys.stdin),ensure_ascii=True,separators=(',',':'),sort_keys=True).encode()).hexdigest())"],
+  { input: JSON.stringify(value), encoding: "utf8" }).trim();
 
 function valid() {
   return { errors: [], valid: true };
@@ -289,6 +293,30 @@ test("OOS projects CGG context by default and binds safe packet references to th
   assert.equal(JSON.stringify(ledger).includes("changed_files"), false);
 });
 
+test("Delivery Unicode authoring reaches the same Python CGG wire contract and retains source bytes", async () => {
+  const content = "\uFEFFcafé — 你好 😀\u007f\r\n", objective = "Explain local storage — café / 你好";
+  const observed = [];
+  const { service } = await harness({ client: { configured: true, async project(value) {
+    observed.push(structuredClone(value));
+    assert.equal(value.sources_digest, pythonWireDigest(value.sources));
+    assert.notEqual(value.sources_digest, canonicalDigest(value.sources));
+    const repository = JSON.parse(value.sources.find(source => source.source_class === "repository").content);
+    assert.equal(repository.source_realization_context.files[0].content, content);
+    const response = cggResult(value);
+    response.request_digest = pythonWireDigest({ binding: response.binding, lifecycle_sources: value.sources });
+    return response;
+  } } });
+  const args = { callerId: "governance-operations-console", operatorId: "operator:workspace-owner", request: request(), workItemId: "1165",
+    sourceRealization: { objective, objective_digest: canonicalDigest(objective), repository_context: {
+      schema_version: 1, session_id: session().session_id, head_commit: "a".repeat(40), clean: true,
+      tree: { paths: ["README.md"], total_path_count: 1, truncated: false }, files: [{ path: "README.md", content }], context_digest: `sha256:${"e".repeat(64)}`,
+    } } };
+  const first = await service.project(args), replay = await service.project(args);
+  assert.equal(first.mode, "packet"); assert.equal(replay.replayed, true);
+  assert.deepEqual(observed[1], observed[0]);
+  assert.equal(first.measurements.raw_fallback_count, 0);
+});
+
 test("raw fallback is explicit, reasoned, measured, and replay-safe", async () => {
   const { service } = await harness();
   const input = request({
@@ -432,5 +460,15 @@ test("CGG lifecycle client bounds upstream errors before HTTP projection", async
     });
     assert.doesNotMatch(JSON.stringify(error.toResponse()), /internal_detail/);
     return true;
+  });
+});
+
+test("CGG lifecycle client preserves actual FastAPI nested owner errors without exposing private detail", async () => {
+  const client = createDeliveryArtLifecycleContextClient({ baseUrl: "http://cgg.test", callerSecret: "dedicated-lifecycle-secret",
+    async fetchImpl() { return new Response(JSON.stringify({ detail: { code: "context_projection_invalid",
+      message: "sources_digest does not match the canonical source list", retryable: false, internal_detail: "private-diagnostic-only" } }), { status: 400 }); } });
+  await assert.rejects(client.project({ request_id: "request-nested-error" }), error => {
+    assert.deepEqual(error.toResponse(), { error: "context_projection_invalid", message: "sources_digest does not match the canonical source list", details: { retryable: false } });
+    assert.doesNotMatch(JSON.stringify(error.toResponse()), /private-diagnostic|internal_detail/);return true;
   });
 });

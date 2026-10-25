@@ -6,7 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
-import { assertLifecycleContextResult, sourceSummary, textDigest } from "../source-authoring/context-contract.js";
+import { assertLifecycleContextResult, lifecycleContextDigest, sourceSummary, textDigest } from "../source-authoring/context-contract.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
 const CONTRACT_ROOT = fileURLToPath(
@@ -336,7 +336,7 @@ export function createDeliveryArtLifecycleContextService({
       const sources = buildDeliveryArtLifecycleSources(rawProjection, capturedAt, {
         sourceRealization,
       });
-      const sourcesDigest = canonicalDigest(sources);
+      const sourcesDigest = lifecycleContextDigest(sources);
       const lifecycle = {
         operation: contextRequest.operation,
         state: rawProjection.state,
