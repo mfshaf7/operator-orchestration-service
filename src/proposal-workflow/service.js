@@ -472,11 +472,12 @@ export function createProposalWorkflowService({
     };
   }
 
-  async function readAllEvents(recordId) {
+  async function readAllEvents(recordId, onFirstPage = null) {
     const events = [];
     let page = 1;
     for (let index = 0; index < MAX_ACTIVITY_PAGES && page !== null; index += 1) {
       const result = await readEventPage({ page, recordId });
+      if (index === 0) onFirstPage?.(result);
       events.push(...result.events);
       page = result.nextPage;
     }
@@ -541,11 +542,11 @@ export function createProposalWorkflowService({
     });
   }
 
-  async function getRecordAndEvents(proposalId) {
+  async function getRecordAndEvents(proposalId, onFirstPage = null) {
     const recordId = parseIdeaId(proposalId);
     const [record, events] = await Promise.all([
       openProjectClient.getIdea(recordId),
-      readAllEvents(recordId),
+      readAllEvents(recordId, onFirstPage),
     ]);
     if (!record) {
       throw new HttpError(404, "proposal_not_found", "Proposal was not found.");
@@ -590,6 +591,27 @@ export function createProposalWorkflowService({
       status: "succeeded",
     });
     return history;
+  }
+
+  // List clients need the projection and the original first history page.
+  // Read one fresh record/event scan, rather than racing two independent scans.
+  async function getSnapshot({ callerId, correlationId, proposalId }) {
+    let first;
+    const { events, record } = await getRecordAndEvents(proposalId, page => { first = page; });
+    const projection = projectionFromRecord(record, events);
+    const history = assertProposalHistory({
+      schema_version: 1, proposal_id: proposalId,
+      record_version: proposalRecordVersion(record.lockVersion),
+      events: first.events,
+      next_cursor: first.nextPage === null ? null : `activity-page:${first.nextPage}`,
+    });
+    audit?.emit({ caller: { id: callerId }, correlation_id: correlationId,
+      event_type: "proposal.projection.read", proposal_id: proposalId,
+      record_version: projection.record_version, status: "succeeded" });
+    audit?.emit({ caller: { id: callerId }, correlation_id: correlationId,
+      event_type: "proposal.history.read", proposal_id: proposalId,
+      event_count: history.events.length, status: "succeeded" });
+    return { schema_version: 1, workflow_id: "proposal-read-snapshot", projection, history };
   }
 
   async function getEvent({ callerId, correlationId, eventId, proposalId }) {
@@ -1165,5 +1187,6 @@ export function createProposalWorkflowService({
     getEvent,
     getHistory,
     getProjection,
+    getSnapshot,
   };
 }

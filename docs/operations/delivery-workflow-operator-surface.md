@@ -1822,6 +1822,33 @@ The Console uses the existing canonical initiative inventory with completed and
 inactive records included, then declares whether the operator is viewing current
 work or retained history. Inventory visibility never grants execution eligibility.
 
+The Console reads `GET /v1/delivery-initiatives?view=console` for a complete
+global package register and full active/parked execution trees. All root statuses
+are included in this view, independently of the legacy `include_done` and
+`include_inactive` flags. Existing default inventory clients keep those filters.
+Done and retired child graphs are explicitly deferred, never projected as empty
+or zero descendants. Original stage history and exact command/readiness reads
+remain independent. The overview admits at most8192 roots; its operational tree
+projection retains the existing8192-node and512-initiative consumer bounds.
+
+Intake does not block initial inventory display. Normal Console reads use
+`GET /v1/delivery-intake/sources?limit=20&page=1`, then `page.has_more` to
+continue. Each request inspects at most20 native target candidates. Its
+`inspected_target_refs` includes roots without ingress, so the Console can
+verify the whole scan against the global inventory before showing global
+admission totals. Optional `search` scopes that page by native title. Use
+`delivery_id=delivery-<id>` instead of `page` for one exact package. Cursor,
+page and exact-target modes cannot be mixed. A changing inventory, duplicate
+identity, unavailable owner or incomplete scan is explicit partial/unavailable
+coverage; it never becomes a successful empty history. Operational custody can
+load through exact target reads before retained History is requested.
+
+Simultaneous Console GETs with the same authority may share only their pending
+request; completed reads and all commands remain fresh. An unavailable refresh
+may retain last verified rows with their original observation and stale label.
+Denied identity clears those rows. Stale display and list metadata grant no
+work-start, review, mutation or completion authority.
+
 - `GET /v1/delivery-intake/sources?limit=20&cursor=after:<target-id>` lists
   target-backed Proposal and Prototype admissions. Every consumed row binds the
   original source, applied target, approved custody and native receipt. It does
@@ -1830,6 +1857,8 @@ work or retained history. Inventory visibility never grants execution eligibilit
   that cannot be verified is reported in `issues`, not treated as success or
   silently counted as an empty register. Follow `next_cursor` within the bounded
   inventory; repeated identities or malformed cursors are rejected.
+  This compatibility scan retains its512-target bound; normal paged Console
+  reads do not scan that whole collection on each request.
 - `GET /v1/delivery-initiatives/{delivery_id}/history` reads the exact Delivery
   target and original Intake, Work Design, Refinement and closeout evidence.
   Every section declares current, unavailable or not-recorded coverage. The

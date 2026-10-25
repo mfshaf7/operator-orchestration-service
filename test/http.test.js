@@ -214,6 +214,23 @@ test("capture endpoint enforces caller auth before invoking the service", async 
   });
 });
 
+test("optional Console overview and Proposal snapshot preserve source envelope negotiation and authenticated owner binding",async()=>{
+ const calls=[];
+ const app=createApp({config:createBaseConfig(),ideaService:{},openProjectClient:{},
+  deliveryService:{async listDeliveryConsoleOverview(input){calls.push(['overview',input.callerId]);return {schema_version:1,workflow_id:'delivery-console-overview',roots:[],operational_initiatives:[],deferred_history_refs:[],project:{identifier:'workspace-delivery-art'},mutation_authority:'none'};}},
+  proposalWorkflowService:{async getSnapshot(input){calls.push(['snapshot',input.callerId]);return {schema_version:1,workflow_id:'proposal-read-snapshot',projection:{proposal_id:input.proposalId,record_ref:'openproject://work_packages/851',record_version:'version-1'},history:{proposal_id:input.proposalId,record_version:'version-1',events:[],next_cursor:null}};}}
+ });
+ const headers={'x-oos-caller-id':'openclaw-telegram-enhanced','x-oos-caller-secret':'test-secret',accept:'application/vnd.mfshaf7.console-source-projection+json; version=1'};
+ for(const [url,ref,workflow] of [['/v1/delivery-initiatives?view=console','openproject://projects/workspace-delivery-art/initiatives','delivery-console-overview'],['/v1/proposals/idea-851/projection?include_history=true','openproject://work_packages/851','proposal-read-snapshot']]){
+  const response=await executeRequest(app,{headers,method:'GET',url});assert.equal(response.statusCode,200);assert.equal(response.body.binding.record_ref,ref);assert.equal(response.body.projection.workflow_id,workflow);
+  const denied=await executeRequest(app,{headers:{},method:'GET',url});assert.equal(denied.statusCode,401);
+ }
+ assert.deepEqual(calls,[['overview','openclaw-telegram-enhanced'],['snapshot','openclaw-telegram-enhanced']]);
+ for(const url of ['/v1/delivery-initiatives?view=register','/v1/proposals/idea-851/projection?include_history=anything']){
+  const response=await executeRequest(app,{headers,method:'GET',url});assert.equal(response.statusCode,400);
+ }
+});
+
 test("Proposal workflow routes expose the typed service without bypassing caller identity", async () => {
   const calls = [];
   const proposalWorkflowService = {

@@ -63,11 +63,11 @@ function toIdeaListItem(result) {
 function buildIdeaListResponse({ items, limit, offset, total }) {
   const count = items.length;
   const nextOffset =
-    offset + count <= total
-      ? offset + count
+    count > 0 && offset * limit < total
+      ? offset + 1
       : null;
   const previousOffset =
-    offset > 1 ? Math.max(1, offset - limit) : null;
+    offset > 1 ? offset - 1 : null;
 
   return {
     ideas: items.map((entry) => toIdeaListItem(entry)),
@@ -86,6 +86,7 @@ function buildIdeaListResponse({ items, limit, offset, total }) {
 async function listIdeasByStatus({ openProjectClient, status }) {
   const matches = [];
   let offset = 1;
+  let inspected = 0;
 
   while (true) {
     const result = await openProjectClient.listIdeas({
@@ -97,10 +98,8 @@ async function listIdeasByStatus({ openProjectClient, status }) {
     );
     matches.push(...filteredItems);
 
-    const nextOffset =
-      result.offset + result.count <= result.total
-        ? result.offset + result.count
-        : null;
+    inspected += result.count;
+    const nextOffset = result.count > 0 && inspected < result.total ? offset + 1 : null;
     if (nextOffset === null) {
       break;
     }
@@ -114,6 +113,7 @@ async function listIdeasByStatus({ openProjectClient, status }) {
 async function listIdeasForDeliveryCloseout({ openProjectClient }) {
   const matches = [];
   let offset = 1;
+  let inspected = 0;
 
   while (true) {
     const result = await openProjectClient.listIdeas({
@@ -128,10 +128,8 @@ async function listIdeasForDeliveryCloseout({ openProjectClient }) {
       ),
     );
 
-    const nextOffset =
-      result.offset + result.count <= result.total
-        ? result.offset + result.count
-        : null;
+    inspected += result.count;
+    const nextOffset = result.count > 0 && inspected < result.total ? offset + 1 : null;
     if (nextOffset === null) {
       return matches;
     }
@@ -335,7 +333,7 @@ export function createIdeaService({ openProjectClient, audit }) {
             status,
           });
           response = buildIdeaListResponse({
-            items: filteredItems.slice(offset - 1, offset - 1 + limit),
+            items: filteredItems.slice((offset - 1) * limit, offset * limit),
             limit,
             offset,
             total: filteredItems.length,

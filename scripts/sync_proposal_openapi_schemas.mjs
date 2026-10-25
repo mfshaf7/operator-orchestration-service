@@ -62,6 +62,26 @@ resolutionPath.post["x-oos-primary-caller"] = "governance-operations-console";
 resolutionPath.post.requestBody = { required: true, description: "Current accepted Proposal source, exact successful custody receipt, and operator-reviewed resolution notes. Retain identical inputs for interrupted acknowledgement replay.", content: { "application/json": { schema: { $ref: "#/components/schemas/ProposalRepositoryResolutionV1" }, example: resolutionExample } } };
 synchronized = upsertOpenApiPath(synchronized, "/v1/proposals/{proposal_id}/repository-resolution", resolutionPath);
 
+synchronized = upsertOpenApiComponent(synchronized, "ProposalReadSnapshotV1", {
+  type: "object", additionalProperties: false,
+  required: ["schema_version", "workflow_id", "projection", "history"],
+  properties: { schema_version: { type: "integer", const: 1 }, workflow_id: { type: "string", const: "proposal-read-snapshot" },
+    projection: { $ref: "#/components/schemas/ProposalWorkflowProjectionV1" },
+    history: { $ref: "#/components/schemas/ProposalWorkflowHistoryV1" } },
+});
+const projectionPath = structuredClone(spec.paths["/v1/proposals/{proposal_id}/projection"]);
+projectionPath.get.parameters = [...projectionPath.get.parameters.filter(p => p.name !== "include_history"),
+  { in: "query", name: "include_history", required: false, schema: { type: "boolean", default: false },
+    description: "Return the projection and original first history page from one fresh owner record/event scan." }];
+projectionPath.get.responses["200"].content["application/json"].schema = {
+  oneOf: [{ $ref: "#/components/schemas/ProposalWorkflowProjectionV1" }, { $ref: "#/components/schemas/ProposalReadSnapshotV1" }],
+};
+projectionPath.get.responses["200"].content["application/json"].example = spec.components.schemas.ProposalWorkflowProjectionV1.example;
+projectionPath.get.responses["200"].content["application/vnd.mfshaf7.console-source-projection+json"] = {
+  schema: { $ref: "#/components/schemas/ConsoleSourceProjectionV1" },
+};
+synchronized = upsertOpenApiPath(synchronized, "/v1/proposals/{proposal_id}/projection", projectionPath);
+
 if (process.argv.includes("--check")) {
   if (synchronized !== original) {
     console.error(

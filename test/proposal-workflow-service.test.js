@@ -872,3 +872,17 @@ test("Proposal history ignores event-like comments not authored by OOS", async (
   });
   assert.deepEqual(history.events, []);
 });
+
+test("Proposal snapshot preserves native projection/history with one record and event scan", async () => {
+  const h = createHarness();
+  const input = { callerId: "governance-operations-console", proposalId: "idea-851" };
+  const expectedProjection = await h.service.getProjection(input);
+  const expectedHistory = await h.service.getHistory(input);
+  h.calls.length = 0;
+  const snapshot = await h.service.getSnapshot(input);
+  assert.deepEqual(snapshot.projection, expectedProjection);
+  assert.deepEqual(snapshot.history, expectedHistory);
+  assert.equal(h.calls.filter(([name]) => name === "getIdea").length, 1);
+  assert.equal(h.calls.filter(([name]) => name === "listProposalActivities").length, 1);
+  assert.equal(h.calls.some(([name]) => ["applyProposalWorkflowMutation", "addProposalEvent"].includes(name)), false);
+});

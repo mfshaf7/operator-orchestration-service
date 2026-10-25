@@ -2680,3 +2680,37 @@ test("createDeliveryWorkItem returns null when the backend reports not found", a
 
   assert.equal(result, null);
 });
+
+test("Delivery global overview retains every root and batches only operational trees, including parked work", async () => {
+  const targets = ["done", "parked", "retired", "in-progress"].map((status, i) => ({ recordId: i + 1,
+    recordRef: `openproject://work_packages/${i + 1}`, title: `Package ${i + 1}`, status, ownerRepo: "sample-owner" }));
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient: {
+    async listPrototypeDeliveryApplicationTargets() { return structuredClone(targets); },
+    async listDeliveryScopedInitiatives({ recordIds }) {
+      assert.deepEqual(recordIds, [2, 4]);
+      return targets.filter(t => recordIds.includes(t.recordId)).map(t => ({epic:{id:t.recordId,record_ref:t.recordRef,status:t.status}}));
+    },
+    async listDeliveryInitiatives() { throw Error("Must not scan the full execution graph"); },
+  } });
+  const all = await service.listDeliveryConsoleOverview({});
+  assert.equal(all.roots.length, 4);assert.equal(all.mutation_authority, "none");
+  assert.ok(all.roots.every(p => !("open_child_count" in p) && !("workflow_phase" in p)));
+  assert.deepEqual(all.deferred_history_refs, [targets[0].recordRef,targets[2].recordRef]);
+  targets.push(targets[0]);
+  await assert.rejects(service.listDeliveryConsoleOverview({}), /identity/);
+});
+
+test("thousands of archived roots do not cause per-project execution scans or hide global packages", async () => {
+  const targets=Array.from({length:2003},(_,i)=>({recordId:i+1,recordRef:`openproject://work_packages/${i+1}`,title:`Package ${i+1}`,status:i<2000?'done':'in-progress'}));
+  let rootReads=0,treeReads=0;
+  const client={
+    async listPrototypeDeliveryApplicationTargets(){rootReads++;return targets;},
+    async listDeliveryScopedInitiatives({recordIds}){treeReads++;assert.deepEqual(recordIds,[2001,2002,2003]);return recordIds.map(id=>({epic:{id,record_ref:`openproject://work_packages/${id}`,status:'in-progress'}}));},
+  };
+  const service=createDeliveryService({audit:createAudit(),openProjectClient:client});
+  const result=await service.listDeliveryConsoleOverview({});
+  assert.equal(result.roots.length,2003);assert.equal(result.deferred_history_refs.length,2000);
+  assert.equal(rootReads,1);assert.equal(treeReads,1);
+  client.listDeliveryScopedInitiatives=async()=>Array(3).fill(result.operational_initiatives[0]);
+  await assert.rejects(service.listDeliveryConsoleOverview({}),/changed/);
+});

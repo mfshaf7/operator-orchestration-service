@@ -7,9 +7,29 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { assertProposalTargetArtifact, bindProposalTarget } from "../src/proposal-target-application/contracts.js";
 import { createPrototypeLandingSourceClient } from "../src/prototype-landing/source-client.js";
+import { readPrototypeRecords } from "../src/prototype-landing/records-client.js";
 
 const execute = promisify(execFile);
 const git = async (root, ...args) => (await execute("git", ["-C", root, ...args])).stdout.trim();
+
+test("immutable owner snapshot scales with bounded cold reads and rechecks authority on every warm read", async t => {
+  const {root,minimumRevision,commit}=await fixture(t);
+  await mkdir(path.join(root,'records/design-baselines/synthetic'),{recursive:true});
+  for(let i=0;i<480;i++)await writeFile(path.join(root,`records/design-baselines/synthetic/${i}.json`),JSON.stringify({synthetic:true,index:i}));
+  const revision=await commit();await git(root,'update-ref','refs/remotes/origin/main',revision);
+  const calls=[];let running=0,maximum=0;
+  const counted=async(root,...args)=>{calls.push(args);running++;maximum=Math.max(maximum,running);try{return await git(root,...args);}finally{running--;}};
+  const snapshotCache={};
+  const read=()=>readPrototypeRecords({git:counted,authorityRoot:root,revision,minimumRevision,snapshotCache});
+  const first=await read();assert.equal(Object.keys(first.documents).length,481);assert.equal(maximum,4);
+  const shows=calls.filter(c=>c[0]==='show').length;
+  first.registry.prototypes.push({id:'untrusted-local-mutation'});
+  const warm=await read();assert.deepEqual(warm.registry.prototypes,[]);
+  assert.equal(calls.filter(c=>c[0]==='show').length,shows);
+  assert.deepEqual(calls.slice(-2).map(c=>c[0]),['merge-base','merge-base']);
+  await git(root,'update-ref','-d','refs/remotes/origin/main');
+  await assert.rejects(read(),/canonical Prototype records are unavailable/);
+});
 
 function capture() {
   const at = "2026-10-01T00:00:00.000Z";

@@ -129,6 +129,34 @@
               "type": "string",
               "pattern": "^after:[1-9][0-9]*$"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based native target page. Cannot be combined with cursor. A page inspects at most limit targets, including targets without ingress proof. Follow page.has_more; global totals are incomplete until all inspected targets match the root inventory.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          {
+            "name": "delivery_id",
+            "in": "query",
+            "description": "Read one exact root package; cannot be combined with cursor, page or search.",
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Optional native title search in page mode; never changes the meaning of global totals.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -1507,6 +1535,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Return the projection and original first history page from one fresh owner record/event scan."
           }
         ],
         "responses": {
@@ -1520,7 +1558,47 @@
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProposalReadSnapshotV1"
+                    }
+                  ]
+                },
+                "example": {
+                  "schema_version": 1,
+                  "proposal_id": "idea-851",
+                  "record_ref": "openproject://work_packages/851",
+                  "record_system": "openproject",
+                  "record_project": "workspace-proposals",
+                  "record_version": "version-18",
+                  "projection_state": "current",
+                  "status": "triaged",
+                  "title": "Live Proposal integration",
+                  "body": "Build the live Proposal integration.",
+                  "triage_summary": "The Proposal is ready for a bounded disposition decision.",
+                  "decision_notes": null,
+                  "route": null,
+                  "handoff": {
+                    "state": "not-requested",
+                    "packet_ref": null,
+                    "target_receipt_ref": null,
+                    "target_record_ref": null
+                  },
+                  "source": {
+                    "ingress": "console",
+                    "surface": "governance-operations-console",
+                    "context_ref": {
+                      "conversation_id": "proposal-851"
+                    },
+                    "native_ref": {
+                      "message_id": "851"
+                    }
+                  },
+                  "last_event_ref": "proposal-event:851:triage-1",
+                  "updated_at": "2026-08-16T03:10:00Z"
                 }
               }
             }
@@ -2637,6 +2715,18 @@
           },
           {
             "$ref": "#/components/parameters/IncludeInactiveParam"
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "console"
+              ]
+            },
+            "description": "Complete global package register with full active and parked execution trees. Done and retired child graphs are explicitly deferred to exact owner inspection. This view always includes every root, independently of include_done/include_inactive; default reads preserve the original filter semantics. No mutation authority."
           }
         ],
         "responses": {
@@ -2650,7 +2740,38 @@
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeliveryInitiativeListResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeliveryInitiativeListResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeliveryConsoleOverviewV1"
+                    }
+                  ]
+                },
+                "example": {
+                  "initiatives": [
+                    {
+                      "id": 38,
+                      "owner_repo": "workspace-governance",
+                      "record_ref": "openproject://work_packages/38",
+                      "status": "in-progress",
+                      "subject": "Establish the governed enterprise AI agent control plane and runtime foundation",
+                      "target_pi": "PI-2026-02",
+                      "type": "Epic"
+                    }
+                  ],
+                  "project": {
+                    "identifier": "workspace-delivery-art",
+                    "record_ref": "openproject://projects/workspace-delivery-art"
+                  },
+                  "summary": {
+                    "by_status": {
+                      "in-progress": 1
+                    },
+                    "total": 1
+                  },
+                  "workflow_id": "delivery-initiatives"
                 }
               }
             }
@@ -4265,22 +4386,37 @@
     },
     "/v1/delivery-work-items/{work_item_id}/status": {
       "get": {
-        "tags": ["Delivery Work Items"],
+        "tags": [
+          "Delivery Work Items"
+        ],
         "summary": "Read one authoritative Delivery work-item status",
         "description": "Returns only the current OpenProject status after verifying the work item belongs to the Delivery ART project. Lifecycle gates use this bounded read; evidence routes remain separate.",
         "operationId": "getDeliveryWorkItemStatus",
-        "security": [{ "CallerIdHeader": [], "CallerSecretHeader": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/WorkItemIdParam" }],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Current work-item status.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DeliveryWorkItemStatusResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemStatusResponse"
+                }
               }
             }
           },
-          "404": { "$ref": "#/components/responses/WorkItemNotFoundError" }
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
         },
         "x-oos-owner": "operator-orchestration-service",
         "x-oos-primary-caller": "codex-local",
@@ -16388,8 +16524,15 @@
     },
     "/v1/prototype-closures/owner-readbacks": {
       "post": {
-        "tags": ["Prototype Closure"],
-        "security": [{"CallerIdHeader": [], "CallerSecretHeader": []}],
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
         "description": "WGCF-only read of current baseline, Delivery, Platform, retirement or native finalized source-import evidence. Caller-specific WGCF authentication and the commissioned dev-integration Closure composition are required. Source-only owner proof is limited to current Inventory-bound public synthetic repositories; it does not execute application code or authorize runtime/publication.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "workspace-governance-control-fabric",
@@ -16405,21 +16548,80 @@
               "schema": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["field", "prototype_id", "source_revision"],
+                "required": [
+                  "field",
+                  "prototype_id",
+                  "source_revision"
+                ],
                 "properties": {
-                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref", "prior_retirement_receipt_ref", "runtime_disposition_plan_ref", "runtime_disposition_proof_ref", "durable_owner_acceptance_ref", "source_transfer_receipt_ref", "already_owned_source_proof_ref"]},
-                  "ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "owner_ref": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-                  "subject_ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "operator_id": {"type": "string", "minLength": 1, "maxLength": 128},
-                  "retirement_reason": {"type": "string", "maxLength": 1024},
-                  "durable_owner_acceptance_ref": {"type": "string", "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$"},
-                  "prototype_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-                  "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                  "source_packet_ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "target_delivery_ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "accepted_delivery_target_receipt_ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "retirement_ref": {"type": "string", "minLength": 1, "maxLength": 512}
+                  "field": {
+                    "enum": [
+                      "accepted_baseline_receipt_ref",
+                      "target_delivery_ref",
+                      "accepted_delivery_target_receipt_ref",
+                      "prior_retirement_receipt_ref",
+                      "runtime_disposition_plan_ref",
+                      "runtime_disposition_proof_ref",
+                      "durable_owner_acceptance_ref",
+                      "source_transfer_receipt_ref",
+                      "already_owned_source_proof_ref"
+                    ]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "owner_ref": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  "subject_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "operator_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "retirement_reason": {
+                    "type": "string",
+                    "maxLength": 1024
+                  },
+                  "durable_owner_acceptance_ref": {
+                    "type": "string",
+                    "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$"
+                  },
+                  "prototype_id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "source_packet_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "target_delivery_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "accepted_delivery_target_receipt_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "retirement_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
                 }
               },
               "example": {
@@ -16437,35 +16639,91 @@
         "responses": {
           "200": {
             "description": "Current owner-backed evidence readback.",
-            "content": {"application/json": {"schema": {
-              "type": "object", "additionalProperties": false,
-              "required": ["ref", "owner_ref", "digest", "state", "subject_ref", "source_revision", "source_packet_ref", "prototype_id"],
-              "properties": {
-                "ref": {"type": "string"}, "owner_ref": {"type": "string"},
-                "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-                "state": {"enum": ["accepted"]},
-                "subject_ref": {"type": ["string", "null"]},
-                "source_revision": {"type": ["string", "null"]},
-                "source_packet_ref": {"type": ["string", "null"]},
-                "prototype_id": {"type": "string"}
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ref",
+                    "owner_ref",
+                    "digest",
+                    "state",
+                    "subject_ref",
+                    "source_revision",
+                    "source_packet_ref",
+                    "prototype_id"
+                  ],
+                  "properties": {
+                    "ref": {
+                      "type": "string"
+                    },
+                    "owner_ref": {
+                      "type": "string"
+                    },
+                    "digest": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "state": {
+                      "enum": [
+                        "accepted"
+                      ]
+                    },
+                    "subject_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_revision": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_packet_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "prototype_id": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ref": "openproject://work_packages/100",
+                  "owner_ref": "workspace-delivery-art",
+                  "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "state": "accepted",
+                  "subject_ref": null,
+                  "source_revision": null,
+                  "source_packet_ref": "record://delivery-packets/sample-tool",
+                  "prototype_id": "sample-tool"
+                }
               }
-            }, "example": {
-              "ref": "openproject://work_packages/100",
-              "owner_ref": "workspace-delivery-art",
-              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-              "state": "accepted",
-              "subject_ref": null,
-              "source_revision": null,
-              "source_packet_ref": "record://delivery-packets/sample-tool",
-              "prototype_id": "sample-tool"
-            }}}
+            }
           },
-          "400": {"description": "Invalid bounded lookup."},
-          "401": {"description": "Caller authentication failed."},
-          "403": {"description": "Caller identity is not WGCF-bound."},
-          "404": {"description": "Owner receipt was not found."},
-          "409": {"description": "Owner receipt binding differs."},
-          "503": {"description": "Owner readback is not activated or unavailable."}
+          "400": {
+            "description": "Invalid bounded lookup."
+          },
+          "401": {
+            "description": "Caller authentication failed."
+          },
+          "403": {
+            "description": "Caller identity is not WGCF-bound."
+          },
+          "404": {
+            "description": "Owner receipt was not found."
+          },
+          "409": {
+            "description": "Owner receipt binding differs."
+          },
+          "503": {
+            "description": "Owner readback is not activated or unavailable."
+          }
         }
       }
     },
@@ -33038,6 +33296,33 @@
           "projected_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "page": {
+            "type": "object",
+            "required": [
+              "number",
+              "has_more"
+            ],
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "has_more": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "inspected_target_refs": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+            }
           }
         },
         "required": [
@@ -33049,7 +33334,15 @@
           "coverage",
           "projected_at"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "dependentRequired": {
+          "page": [
+            "inspected_target_refs"
+          ],
+          "inspected_target_refs": [
+            "page"
+          ]
+        }
       },
       "DeliveryOwnerHistoryRecordV1": {
         "type": "object",
@@ -33341,7 +33634,7 @@
         ],
         "additionalProperties": false
       },
-"ConsoleSourceProjectionV1": {
+      "ConsoleSourceProjectionV1": {
         "title": "Console canonical source projection",
         "type": "object",
         "additionalProperties": false,
@@ -33361,13 +33654,13 @@
             "const": "console-source-projection"
           },
           "binding": {
-            "$ref": "#/$defs/binding"
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/binding"
           },
           "revision": {
-            "$ref": "#/$defs/revision"
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/revision"
           },
           "freshness": {
-            "$ref": "#/$defs/freshness"
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/freshness"
           },
           "projection": {}
         },
@@ -33388,16 +33681,16 @@
             ],
             "properties": {
               "authority": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               },
               "record_ref": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               },
               "source_owner": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               },
               "source_ref": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               }
             }
           },
@@ -33411,14 +33704,14 @@
             ],
             "properties": {
               "event_cursor": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               },
               "event_sequence": {
                 "type": "integer",
                 "minimum": 0
               },
               "source_revision": {
-                "$ref": "#/$defs/text"
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
               }
             }
           },
@@ -33451,8 +33744,7 @@
           }
         },
         "x-oos-canonical-schema": "contracts/console-source-authority/console-source-projection.schema.json"
-      }
-    ,
+      },
       "OrchestrationAdmissionGate": {
         "type": "object",
         "required": [
@@ -40816,7 +41108,7 @@
           "workflow_health": {
             "compatible_views": {
               "pm2_phase_board": {
-                "phase_field": "PM² Phase",
+                "phase_field": "PM\u00b2 Phase",
                 "retired_status": "retired",
                 "truthful": true
               },
@@ -40893,7 +41185,7 @@
           "quality_pack": {
             "compatible_views": {
               "pm2_phase_board": {
-                "phase_field": "PM² Phase",
+                "phase_field": "PM\u00b2 Phase",
                 "retired_status": "retired",
                 "truthful": true
               },
@@ -41547,16 +41839,28 @@
       "DeliveryWorkItemStatusResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status", "work_item_id", "workflow_id"],
+        "required": [
+          "status",
+          "work_item_id",
+          "workflow_id"
+        ],
         "example": {
           "status": "in-progress",
           "work_item_id": "work-item-1109",
           "workflow_id": "delivery-work-item-status"
         },
         "properties": {
-          "status": { "type": "string", "minLength": 1 },
-          "work_item_id": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" },
-          "workflow_id": { "const": "delivery-work-item-status" }
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "work_item_id": {
+            "type": "string",
+            "pattern": "^work-item-[1-9][0-9]*$"
+          },
+          "workflow_id": {
+            "const": "delivery-work-item-status"
+          }
         }
       },
       "DeliveryWorkItemEvidencePacketResponse": {
@@ -67639,117 +67943,6 @@
           }
         }
       },
-      "ConsoleSourceProjectionV1": {
-        "title": "Console canonical source projection",
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "artifact_type",
-          "binding",
-          "revision",
-          "freshness",
-          "projection"
-        ],
-        "properties": {
-          "schema_version": {
-            "const": 1
-          },
-          "artifact_type": {
-            "const": "console-source-projection"
-          },
-          "binding": {
-            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/binding"
-          },
-          "revision": {
-            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/revision"
-          },
-          "freshness": {
-            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/freshness"
-          },
-          "projection": {}
-        },
-        "$defs": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 1024
-          },
-          "binding": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "authority",
-              "record_ref",
-              "source_owner",
-              "source_ref"
-            ],
-            "properties": {
-              "authority": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              },
-              "record_ref": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              },
-              "source_owner": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              },
-              "source_ref": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              }
-            }
-          },
-          "revision": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "event_cursor",
-              "event_sequence",
-              "source_revision"
-            ],
-            "properties": {
-              "event_cursor": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              },
-              "event_sequence": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "source_revision": {
-                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
-              }
-            }
-          },
-          "freshness": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "observed_at",
-              "state",
-              "valid_until"
-            ],
-            "properties": {
-              "observed_at": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "state": {
-                "enum": [
-                  "current",
-                  "stale",
-                  "unavailable",
-                  "unknown"
-                ]
-              },
-              "valid_until": {
-                "type": "string",
-                "format": "date-time"
-              }
-            }
-          }
-        },
-        "x-oos-canonical-schema": "contracts/console-source-authority/console-source-projection.schema.json"
-      },
       "LifecycleTransitionProjection": {
         "title": "Lifecycle Transition Source Projection",
         "type": "object",
@@ -84528,6 +84721,158 @@
           "accepted",
           "operator_draft"
         ]
+      },
+      "ProposalReadSnapshotV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "projection",
+          "history"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "workflow_id": {
+            "type": "string",
+            "const": "proposal-read-snapshot"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+          },
+          "history": {
+            "$ref": "#/components/schemas/ProposalWorkflowHistoryV1"
+          }
+        }
+      },
+      "DeliveryConsoleOverviewV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "project",
+          "roots",
+          "operational_initiatives",
+          "deferred_history_refs",
+          "mutation_authority"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "delivery-console-overview"
+          },
+          "project": {
+            "type": "object",
+            "required": [
+              "identifier"
+            ],
+            "properties": {
+              "identifier": {
+                "const": "workspace-delivery-art"
+              }
+            },
+            "additionalProperties": false
+          },
+          "roots": {
+            "type": "array",
+            "maxItems": 8192,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "record_ref",
+                "subject",
+                "status",
+                "owner_repo",
+                "record_version",
+                "target_pi",
+                "architecture_anchor_ref",
+                "required_upstream_ref"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "record_ref": {
+                  "type": "string",
+                  "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "enum": [
+                    "new",
+                    "ready",
+                    "in-progress",
+                    "blocked",
+                    "done",
+                    "parked",
+                    "retired"
+                  ]
+                },
+                "owner_repo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "record_version": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "target_pi": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "architecture_anchor_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "required_upstream_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "operational_initiatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "deferred_history_refs": {
+            "type": "array",
+            "maxItems": 8192,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+            }
+          },
+          "mutation_authority": {
+            "const": "none"
+          }
+        }
       }
     }
   }

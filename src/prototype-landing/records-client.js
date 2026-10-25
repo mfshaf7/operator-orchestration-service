@@ -13,11 +13,15 @@ const ROOTS = [
 
 // Immutable Git reads only. The provider revision must already be available in
 // the deployment-owned trusted ref; neither this reader nor WGCF fetches Git.
-export async function readPrototypeRecords({ git, authorityRoot, revision, minimumRevision }) {
+export async function readPrototypeRecords({ git, authorityRoot, revision, minimumRevision, snapshotCache = null }) {
   try {
     if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error("invalid revision");
     await git(authorityRoot, "merge-base", "--is-ancestor", minimumRevision, revision);
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");
+    // Content-addressed owner records are immutable. Membership and current
+    // authority admission are still checked on every request; mutable workflow
+    // journals are joined separately and never stored in this parsed snapshot.
+    if (snapshotCache?.revision === revision) return structuredClone(snapshotCache.value);
     const files = (await git(authorityRoot, "ls-tree", "-r", "-z", revision, "--", "prototypes.yaml", "schemas/prototype-registry.schema.json", ...ROOTS))
       .split("\0").filter(Boolean).map((line) => {
         const match = /^(100644) blob [0-9a-f]{40}\t([^\0]+)$/.exec(line);
@@ -29,12 +33,17 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
     }
     let total = 0;
     const documents = {};
-    for (const name of files.sort()) {
-      const raw = await git(authorityRoot, "show", `${revision}:${name}`);
+    const ordered = files.sort();
+    for (let offset = 0; offset < ordered.length; offset += 4) {
+      const batch = ordered.slice(offset, offset + 4);
+      const values = await Promise.all(batch.map(name => git(authorityRoot, "show", `${revision}:${name}`)));
+      for (let index = 0; index < batch.length; index++) {
+      const name = batch[index], raw = values[index];
       total += Buffer.byteLength(raw);
       if (Buffer.byteLength(raw) > 262144 || total > 2 * 1024 * 1024) throw new Error("owner records exceed limit");
       documents[name] = name.endsWith(".json") ? JSON.parse(raw) : parseYaml(raw, { maxAliasCount: 0, uniqueKeys: true });
       if (!documents[name] || Array.isArray(documents[name]) || typeof documents[name] !== "object") throw new Error("invalid owner record document");
+      }
     }
     const registry = documents["prototypes.yaml"];
     const ajv = new Ajv2020({ allErrors: true, strict: false });
@@ -60,11 +69,13 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
     delete documents["schemas/prototype-registry.schema.json"];
     const sequence = Number(await git(authorityRoot, "rev-list", "--count", revision));
     if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error("invalid source sequence");
-    return {
+    const result = {
       schema_version: 1, workflow_id: "prototype-records",
       authority_revision: revision, authority_sequence: sequence,
       registry, captures, documents, canonical_mutation: false,
     };
+    if (snapshotCache) { snapshotCache.revision = revision;snapshotCache.value = structuredClone(result); }
+    return result;
   } catch {
     throw prototypeLandingError("records_unavailable", "Current canonical Prototype records are unavailable; no fixture fallback is permitted.", 503);
   }

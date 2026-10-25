@@ -14,6 +14,18 @@ function createAudit() {
   };
 }
 
+test("idea continuation uses one-based page numbers and terminates at the actual final page", async()=>{
+ const requested=[];
+ const service=createIdeaService({audit:createAudit(),openProjectClient:{async listIdeas({limit,offset}){
+  requested.push(offset);const count=Math.max(0,Math.min(limit,52-(offset-1)*limit));
+  return {items:Array.from({length:count},(_,i)=>({ideaId:`idea-${(offset-1)*limit+i+1}`,status:'captured'})),count,limit,offset,total:52};
+ }}});
+ const ids=[];let offset=1;
+ while(offset!==null){const result=await service.listIdeas({limit:25,offset});ids.push(...result.ideas.map(i=>i.idea_id));offset=result.page.next_offset;}
+ assert.deepEqual(requested,[1,2,3]);assert.equal(new Set(ids).size,52);
+ const beyond=await service.listIdeas({limit:25,offset:5});assert.equal(beyond.page.has_more,false);assert.equal(beyond.page.previous_offset,4);
+});
+
 test("listIdeas filters by canonical status across backend pages", async () => {
   const audit = createAudit();
   const openProjectClient = {
@@ -97,7 +109,7 @@ test("listIdeas filters by canonical status across backend pages", async () => {
   );
   assert.equal(result.page.count, 2);
   assert.equal(result.page.has_more, true);
-  assert.equal(result.page.next_offset, 3);
+  assert.equal(result.page.next_offset, 2);
   assert.equal(result.page.total, 3);
   assert.equal(audit.events.at(-1)?.status_filter, "captured");
 });
