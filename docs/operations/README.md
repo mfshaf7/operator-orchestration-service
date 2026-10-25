@@ -20,6 +20,7 @@ completed ART items are historical evidence, not live feature flags.
 ## Prototype
 
 - [Prototype Source Authoring](prototype-source-authoring-operator-surface.md)
+- [Operator Source Editing And Import](operator-source-editing.md)
 - [Prototype Landing](prototype-landing-operator-surface.md)
 - [Prototype Maturity](prototype-maturity-operator-surface.md)
 - [Prototype Delivery Application](prototype-delivery-application.md)

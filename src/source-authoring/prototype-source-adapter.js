@@ -188,13 +188,27 @@ export function createPrototypeSourceAdapter({ workspaceRoot, python = "python3"
     },
     publishAgentSource(input) { return source.publishAgentSource(session(input)); },
     prepareOwner,
+    validateSourceRealization(input) {
+      const selected = session(input);
+      if (selected.owner_preparation) throw prototypeAuthoringError("owner_change_set_invalid", "Trusted owner preparations remain read-only in the source editor.");
+      assertPrototypeChangeSet(input.change_set, selected);
+      return source.validateSourceRealization(selected, input.change_set);
+    },
     async captureRealizationContext(input) {
       const selected = session(input);
+      const explicit = input.requested_paths;
+      if (explicit !== undefined && (!Array.isArray(explicit) || explicit.length > 48 ||
+          new Set(explicit).size !== explicit.length || explicit.some(value => !prototypeSourcePathAllowed(value, selected.model_source_scope)))) {
+        throw prototypeAuthoringError("context_scope_denied", "Read only a bounded set of files from this Prototype's canonical app/design scope.");
+      }
+      if (input.tree_only !== undefined && typeof input.tree_only !== "boolean") throw prototypeAuthoringError("context_scope_denied", "Use the exact source-tree selector.");
       const worktree = await source.resolveWorktree(selected);
       if (!worktree) throw prototypeAuthoringError("worktree_missing", "Authorize and prepare this Prototype source session before capture.");
       const paths = git(worktree, "ls-files").split("\n").filter(value => prototypeSourcePathAllowed(value, selected.model_source_scope)).sort();
-      if (!paths.length) throw prototypeAuthoringError("source_empty", "The selected Prototype has no readable app or design source.");
-      const capture = await source.captureRealizationContext(selected, { requestedPaths: paths.slice(0, 48) });
+      if (!paths.length && input.tree_only !== true) throw prototypeAuthoringError("source_empty", "The selected Prototype has no readable app or design source.");
+      const capture = await source.captureRealizationContext(selected, {
+        requestedPaths: explicit ?? paths.slice(0, 48), treeOnly: input.tree_only ?? false,
+      });
       // The shared Git reader may inspect owner metadata internally, but only
       // the selected Prototype's file names and bytes may leave this adapter.
       const { context_digest: _digest, ...body } = capture;

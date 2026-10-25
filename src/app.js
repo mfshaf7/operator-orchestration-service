@@ -2036,26 +2036,35 @@ async function handleDeliveryArtSourceRealization({
   request,
   response,
   workItemId,
+  url,
 }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Delivery source realization");
   const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
   assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
-  if (action === "read") {
-    const result = await deliveryArtWorkSessionService.readRealization({
+  if (["read", "files", "draft"].includes(action)) {
+    const requestedPaths = action === "files" ? sourceFileSelectors(url) : [];
+    const args = {
       callerId: caller.id,
       operatorId,
       workItemId,
-    });
+    };
+    const result = action === "read" ? await deliveryArtWorkSessionService.readRealization(args)
+      : await deliveryArtWorkSessionService.readRealizationSource({ ...args, kind: action, requestedPaths });
     sendSourceProjection(response, request, result, () => ({
-      recordRef: `openproject://work_packages/${String(workItemId).replace(/^work-item-/, "")}/source-realization`,
+      recordRef: `openproject://work_packages/${String(workItemId).replace(/^work-item-/, "")}/source-realization${action === "read" ? "" : `/${action}`}`,
       sourceOwner: "workspace-delivery-art",
       sourceRevision: sourceRevisionDigest(result),
-      sourceTimestamp: result.revision,
+      sourceTimestamp: result.revision ?? new Date().toISOString(),
     }));
     return;
   }
   const body = await readDeliveryArtJsonBody(request);
+  assertDeliveryMutationAuthority(caller);
+  assertObject(body, "source realization request");
+  if (action === "saveDraft" && Object.keys(body).some(key => key !== "realization")) {
+    throw new HttpError(400, "delivery_art_source_draft_request_invalid", "A draft save accepts only its exact realization command, not caller-selected source authority.");
+  }
   assertObject(body.realization, "realization");
   const controller = new AbortController();
   request.once?.("aborted", () => controller.abort());
@@ -2068,6 +2077,15 @@ async function handleDeliveryArtSourceRealization({
     signal: controller.signal,
     workItemId,
   }));
+}
+
+function sourceFileSelectors(url) {
+  if ([...url.searchParams.keys()].some(key => key !== "path")) throw new HttpError(400, "source_file_selector_invalid", "Use only bounded relative source-file selectors.");
+  const paths = url.searchParams.getAll("path");
+  if (paths.length > 48 || new Set(paths).size !== paths.length || paths.some(value => !value || value.length > 240)) {
+    throw new HttpError(400, "source_file_selector_invalid", "Select at most 48 distinct relative source files.");
+  }
+  return paths;
 }
 
 async function handleDraftDeliveryWorkStart({
@@ -3813,19 +3831,20 @@ async function handlePrototypeSource({ action, config, prototypeAuthoringService
   assertCallerIdentityBound(caller, "Prototype source authoring");
   if (!prototypeAuthoringService) throw new HttpError(503, "prototype_source_authoring_not_active", "Prototype source authoring awaits its reviewed composition and activation; no fixture or CLI fallback is substituted.");
   try {
-    if (["list", "read", "draft"].includes(action)) {
-      const args = action === "list" ? { callerId: caller.id, limit: Number(url.searchParams.get("limit") ?? "100") } : { callerId: caller.id, requestId };
+    if (["list", "read", "draft", "files"].includes(action)) {
+      const args = action === "list" ? { callerId: caller.id, limit: Number(url.searchParams.get("limit") ?? "100") }
+        : { callerId: caller.id, requestId, ...(action === "files" ? { requestedPaths: sourceFileSelectors(url) } : {}) };
       const result = await prototypeAuthoringService[action](args);
       const times = action === "list" ? result.requests.map(record => record.updated_at).sort() : [];
       sendSourceProjection(response, request, result, () => ({
-        recordRef: action === "list" ? "oos://prototype-source-requests" : `oos://prototype-source-requests/${requestId}${action === "draft" ? "/draft" : ""}`,
+        recordRef: action === "list" ? "oos://prototype-source-requests" : `oos://prototype-source-requests/${requestId}${["draft", "files"].includes(action) ? `/${action}` : ""}`,
         sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
-        sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
+        sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at ?? new Date().toISOString(),
       }));
       return;
     }
     assertDeliveryMutationAuthority(caller);
-    const input = await readJsonBody(request, { canonical: true, maxBytes: 65_536 });
+    const input = await readJsonBody(request, { canonical: true, maxBytes: action === "saveDraft" ? 1024 * 1024 : 65_536 });
     sendJson(response, 200, await prototypeAuthoringService[action]({ callerId: caller.id, requestId, input }));
   } catch (error) {
     if (error instanceof DeliveryArtLifecycleContextUpstreamError || error instanceof DeliveryArtSourceRealizationError || error instanceof DeliveryArtSourceExecutorError) {
@@ -5864,6 +5883,22 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/files$/.test(url.pathname)) {
+        await handleDeliveryArtSourceRealization({ action: "files", config, deliveryArtWorkSessionService,
+          request, response, url, workItemId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/draft$/.test(url.pathname)) {
+        await handleDeliveryArtSourceRealization({ action: "draft", config, deliveryArtWorkSessionService,
+          request, response, url, workItemId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/draft$/.test(url.pathname)) {
+        await handleDeliveryArtSourceRealization({ action: "saveDraft", config, deliveryArtWorkSessionService,
+          request, response, url, workItemId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+
       if (
         request.method === "GET" &&
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization$/.test(url.pathname)
@@ -6166,6 +6201,12 @@ export function createApp({
       }
       if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+$/.test(url.pathname)) {
         await handlePrototypeSource({ action: "read", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+\/files$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "files", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/draft$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "saveDraft", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
       }
       if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+\/draft$/.test(url.pathname)) {
         await handlePrototypeSource({ action: "draft", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;

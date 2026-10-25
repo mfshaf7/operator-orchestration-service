@@ -6,11 +6,13 @@ Delivery work, graduation or product runtime activation.
 
 ## Availability and ownership
 
-Source preparation is in progress. Platform's corresponding model profile is
-suspended. Existing source-work configuration is not acceptance of that new
-purpose. Console controls and
-fresh exact composed Security acceptance/commissioning remain required before
-normal availability. Tests or an existing route are not operating acceptance.
+The existing bounded purpose is active in Platform's governed profile registry
+and operates only through its accepted dev-integration composition. New manual
+editing/import is the Delivery1323 source extension and requires coordinated
+Console source, fresh exact composed Security acceptance and commissioning
+before operating qualification. Tests or an existing route are not operating
+acceptance. Follow [Operator source editing](operator-source-editing.md) for
+the shared manual/import/amend path; model generation is optional.
 
 OOS owns workflow state, actor binding, canonical eligibility, private draft
 custody, exact acceptance and recovery. Studio owns registry/source/design
@@ -53,7 +55,7 @@ root, branch, fetched base, credential or arbitrary executable command.
    generation request/execution ids, budget, time, source intent and `retry_of`
    (`null` initially). OOS captures only selected app/design files, retains the
    exact CGG request before dispatch and sends only its model-safe projection
-   through `prototype-source-authoring-v1`. The existing local model drafts a
+   through `prototype-source-authoring-v1`. The configured governed model drafts a
    bounded change set; it cannot select tools, owner controls, profiles, CI,
    credentials, approval, publication, merge or activation.
 5. Inspect `GET .../draft` as inert source text. `POST .../accept` carries

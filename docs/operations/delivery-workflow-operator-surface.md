@@ -1090,6 +1090,10 @@ caller-secret projection.
 
 ### Bounded Source Realization
 
+For manual editing, VS Code text-file/folder import and amendments of a model
+proposal, follow [Operator source editing](operator-source-editing.md). These
+use the same retained draft and separate exact-digest acceptance path below.
+
 Normal source realization is a Console-driven staged operation on the active
 Delivery work session. It is not a chat instruction and does not grant the
 model repository or shell access.

@@ -1,3 +1,4 @@
+import { sourceEditorSchemas, mergeSourceEditorPaths } from "./source_editor_openapi_tools.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
 import { addConsoleSourceProjectionMedia } from "./console_source_authority_openapi_tools.mjs";
@@ -51,6 +52,7 @@ function fixDeliveryPreparationRefs(value) {
 }
 fixDeliveryPreparationRefs(deliveryPreparation);
 const schemas = {
+  ...sourceEditorSchemas,
   PrototypeDeliveryPreparation: deliveryPreparation,
   PrototypeOwnerPreparation: { oneOf: [ref("PrototypeDeliveryPreparation"), closed({ kind: { const: "preview-profile" }, port: { type: "integer", minimum: 1024, maximum: 65535 },
     support_profile: { enum: ["interactive", "unattended"] }, runtime_activation: { type: "boolean" },
@@ -66,7 +68,7 @@ const schemas = {
   PrototypeSourceSummaryList: closed({ workflow_id: { const: "prototype-source-authoring-list" }, requests: { type: "array", maxItems: 200, items: ref("PrototypeSourceSummary") } }),
   PrototypeSourceRealization: closed({ schema_version: { const: 1 }, workflow_id: { const: "prototype-source-realization" }, session_id: id, revision: timestamp,
     state: { enum: ["not-started", "accepted", "draft-ready", "applying", "apply-unknown", "source-created", "failed", "cancelled"] }, replayed: { type: "boolean" }, next_action: nextAction,
-    attempt: nullable(closed({ request: ref("PrototypeSourceGeneration"), request_id: id, execution_id: id, retry_of: nullable(id), state: id, requested_at: timestamp, completed_at: nullable(timestamp), objective_digest: digest,
+    attempt: nullable(closed({ request: { oneOf: [ref("PrototypeSourceGeneration"), ref("OperatorSourceDraftRequestSummary")] }, operator_draft: ref("OperatorSourceDraftProvenance"), request_id: id, execution_id: id, retry_of: nullable(id), state: id, requested_at: timestamp, completed_at: nullable(timestamp), objective_digest: digest,
       context: nullable(ownedEvidence), model: nullable(ownedEvidence), owner_preparation: closed({ plan_digest: digest, request_digest: digest,
         authority: { const: "workspace-prototype-studio" }, model_invoked: { const: false }, runtime_activated: { const: false } }),
       change_set: nullable(closed({ digest, change_set_id: id, commit_message: { type: "string" }, operations: { type: "array", maxItems: 64, items: summaryOperation } })),
@@ -80,7 +82,7 @@ const schemas = {
   PrototypeSourceDeliveryControl: closed({ command: closed({ ...commandFields, expected_pull_request: pr }) }),
   PrototypeSourcePublication: closed({ command: closed({ ...commandFields, expected_pull_request: { type: "null" } }), source_intent_ref: sourceIntent }),
   PrototypeSourceDraft: closed({ schema_version: { const: 1 }, workflow_id: { const: "prototype-source-draft" }, request_id: id, session_id: id, revision: timestamp,
-    digest, change_set: ref("PrototypeSourceChangeSet"), accepted: { type: "boolean" } }),
+    digest, change_set: ref("PrototypeSourceChangeSet"), accepted: { type: "boolean" }, operator_draft: nullable(ref("OperatorSourceDraftProvenance")) }, ["schema_version", "workflow_id", "request_id", "session_id", "revision", "digest", "change_set", "accepted"]),
 };
 const NOW = "2026-10-18T14:00:00Z"; const SHA = `sha256:${"a".repeat(64)}`; const BASE = "a".repeat(40);
 const requestExample = { schema_version: 1, request_id: "prototype-source-request:sample:1", prototype_id: "prototype:sample",
@@ -135,6 +137,7 @@ const paths = {
 for (const action of ["review", "merge", "close"]) paths[`/v1/prototype-source-requests/{request_id}/${action}`] = { post: operation(action[0].toUpperCase() + action.slice(1),
   { review: "Human-review the exact source PR head", merge: "Merge the exact approved source PR", close: "Revoke owned credentials and retire proven source resources" }[action], "PrototypeSourceDeliveryControl",
   { command: { ...command, expected_pull_request: { url: "https://github.com/example/workspace-prototype-studio/pull/1", head_commit: BASE } } }, "PrototypeSourceProjection") };
+mergeSourceEditorPaths(paths, "prototype");
 let synchronized = original;
 for (const [name, value] of Object.entries(schemas)) synchronized = upsertOpenApiComponent(synchronized, name, value);
 for (const [route, value] of Object.entries(paths)) synchronized = upsertOpenApiPath(synchronized, route, value.get ? addConsoleSourceProjectionMedia(value, "get") : value);

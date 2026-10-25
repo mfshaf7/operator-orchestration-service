@@ -32,6 +32,7 @@ const ACTIONS = Object.freeze({
   "bootstrap.retire-pristine-resources": bootstrapAction("retirePristineResources"),
   "prototype.ensure-owned-worktree": ({ prototypeSource }, input) => prototypeSource.ensureOwnedWorktree(input),
   "prototype.capture-source-context": ({ prototypeSource }, input) => prototypeSource.captureRealizationContext(input),
+  "prototype.validate-source-realization": ({ prototypeSource }, input) => prototypeSource.validateSourceRealization(input),
   "prototype.prepare-owner": ({ prototypeSource }, input) => prototypeSource.prepareOwner(input),
   "prototype.apply-source-realization": ({ prototypeSource }, input) => prototypeSource.applySourceRealization(input),
   "prototype.inspect-agent-source": ({ prototypeSource }, input) => prototypeSource.inspectAgentSource(input),
@@ -65,9 +66,12 @@ const ACTIONS = Object.freeze({
     workSource.ensureWorktree(input.session),
   "work.apply-source-realization": ({ workSource }, input) =>
     workSource.applySourceRealization(input.session, input.change_set),
+  "work.validate-source-realization": ({ workSource }, input) =>
+    workSource.validateSourceRealization(input.session, input.change_set),
   "work.capture-source-realization-context": ({ workSource }, input) =>
     workSource.captureRealizationContext(input.session, {
       requestedPaths: input.requested_paths ?? [],
+      treeOnly: input.tree_only ?? false,
     }),
   "work.inspect-configured-path": ({ workSource }, input) =>
     workSource.inspectConfiguredPath(input.session, {
@@ -435,6 +439,16 @@ export function createDeliveryArtSourceExecutorClient({
       context.assert_source_lease?.(input.session);
     }
     const { assert_source_lease: _localGuard, ...wireContext } = context;
+    if (action.endsWith(".validate-source-realization")) {
+      // A future acceptance can use any admitted command identity. Prove its
+      // actual serialized envelope fits now, including JSON escaping and the
+      // owner session, without issuing or journaling a fictional command.
+      const futureApply = { schema_version: 1, action: action.replace(".validate-", ".apply-"),
+        context: { ...wireContext, command_id: "x".repeat(256) }, input };
+      if (Buffer.byteLength(JSON.stringify(futureApply)) > MAX_BODY_BYTES) {
+        throw new DeliveryArtSourceExecutorError("delivery_art_source_draft_oversized", "The source draft exceeds the existing executor's serialized wire budget.", { statusCode: 413 });
+      }
+    }
     const response = await socketRequest({
       body: { action, context: wireContext, input, schema_version: 1 },
       executorId,
@@ -457,13 +471,16 @@ export function createDeliveryArtSourceExecutorClient({
       }),
   };
   const workSource = {
+    validateSourceRealization: (session, changeSet) =>
+      invoke("work.validate-source-realization", { change_set: changeSet, session }),
     applySourceRealization: (session, changeSet) =>
       invoke("work.apply-source-realization", {
         change_set: changeSet,
         session,
       }),
-    captureRealizationContext: (session, { requestedPaths = [] } = {}) =>
+    captureRealizationContext: (session, { requestedPaths = [], treeOnly = false } = {}) =>
       invoke("work.capture-source-realization-context", {
+        tree_only: treeOnly,
         requested_paths: requestedPaths,
         session,
       }),
@@ -523,6 +540,7 @@ export function createDeliveryArtSourceExecutorClient({
     prototypeSource: {
       ensureOwnedWorktree: input => invoke("prototype.ensure-owned-worktree", input),
       captureRealizationContext: input => invoke("prototype.capture-source-context", input),
+      validateSourceRealization: input => invoke("prototype.validate-source-realization", input),
       prepareOwner: input => invoke("prototype.prepare-owner", input),
       applySourceRealization: input => invoke("prototype.apply-source-realization", input),
       inspectAgentSource: input => invoke("prototype.inspect-agent-source", input),

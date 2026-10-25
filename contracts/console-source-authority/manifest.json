@@ -42,7 +42,10 @@
     { "method": "get", "path": "/v1/prototype-closures/requests/{request_id}" },
     { "method": "get", "path": "/v1/lifecycle-transitions/{transition_id}" },
     { "method": "get", "path": "/v1/model-profile-requests/{request_id}" },
-    { "method": "get", "path": "/v1/product-publications/{request_id}" }
+    { "method": "get", "path": "/v1/product-publications/{request_id}" },
+    { "method": "get", "path": "/v1/prototype-source-requests/{request_id}/files" },
+    { "method": "get", "path": "/v1/delivery-work-items/{work_item_id}/work-session/realization/files" },
+    { "method": "get", "path": "/v1/delivery-work-items/{work_item_id}/work-session/realization/draft" }
   ],
   "freshness_states": [
     "current",

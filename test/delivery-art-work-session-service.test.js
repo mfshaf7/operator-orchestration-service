@@ -1,6 +1,9 @@
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { createDeliveryArtSourceRealizationService } from "../src/delivery-art/source-realization.js";
+import { loadOpenApiSpec, resolveOperation, validateValueAgainstSchema } from "../scripts/api_contract_tools.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -858,4 +861,55 @@ test("work-session mutations serialize revision checks per work item", async () 
   );
   release();
   await first;
+});
+
+test('Delivery source reads and inert operator saves retain authenticated session identity without minting or leasing source authority',async t=>{
+  const root=await mkdtemp(path.join(tmpdir(),'oos-operator-source-service-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const store=createStore(root);store.writeSession(session());const calls=[];
+  const sourceRealization={read:async()=>({}),start:async()=>({}),continue:async()=>({}),cancel:async()=>({}),recover:async()=>({}),readCompletedCommand:()=>null,
+    files:async input=>{calls.push(['files',input]);return{files:[]};},
+    draft:async input=>{calls.push(['draft',input]);return{digest:'retained-digest'};},
+    saveDraft:async input=>{calls.push(['save',input]);return{state:'draft-ready'};}};
+  const disallow=()=>{throw new Error('inert source input must not issue, renew, stop or lease credentials');};
+  const sourceCredentials={ensureSourceCredential:disallow,withSourceLease:disallow,stopSourceCredential:disallow};
+  const service=createHarness(store,{sourceRealization,sourceCredentials}),args={callerId:'operator:workspace-owner',operatorId:'operator:workspace-owner',workItemId:'1024'};
+  assert.deepEqual(await service.readRealizationSource({...args,kind:'files',requestedPaths:['app/source.js']}),{files:[]});
+  assert.deepEqual(await service.readRealizationSource({...args,kind:'draft'}),{digest:'retained-digest'});
+  assert.deepEqual(await service.executeRealization({...args,action:'saveDraft',request:{command_id:'save:operator'}}),{state:'draft-ready'});
+  assert.equal(calls[0][1].workItemId,'work-item-1024');assert.deepEqual(calls[0][1].requestedPaths,['app/source.js']);assert.equal(calls[2][1].operatorId,args.operatorId);
+  await assert.rejects(service.readRealizationSource({...args,operatorId:'operator:other',kind:'files'}),{code:'delivery_art_work_session_operator_mismatch'});
+  await assert.rejects(service.readRealizationSource({...args,kind:'files',requestedPaths:['app/source.js','app/source.js']}),{code:'delivery_art_source_realization_request_invalid'});
+  assert.equal(calls.length,3);
+});
+
+test('Delivery draft/file/save HTTP routes use the real private draft kernel and canonical source envelope',async t=>{
+  const root=await mkdtemp(path.join(tmpdir(),'oos-delivery-editor-api-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const store=createStore(root),selected=session();store.writeSession(selected);const at='2026-10-25T01:00:00Z',sha='sha256:'+'a'.repeat(64);
+  const sourceRealization=createDeliveryArtSourceRealizationService({store,enabled:true,clock:()=>new Date('2026-10-25T02:00:00Z'),
+    gatewayClient:{configured:false,invoke:async()=>{throw new Error('manual save must not invoke model');}},lifecycleContext:{project:async()=>{throw new Error('manual save must not invoke CGG');}},workSessionController:{status:async()=>({})},
+    sourceAdapter:{applySourceRealization:async()=>{throw new Error('save must not write Git');},
+      validateSourceRealization:async(s,change)=>({valid:true,session_id:s.session_id,base_commit:s.landing_unit.base_commit,change_set_digest:canonicalDigest(change)}),
+      captureRealizationContext:async(s,{requestedPaths})=>({schema_version:1,session_id:s.session_id,owner_repo:s.owner_repo,landing_unit_id:s.landing_unit_id,head_commit:s.landing_unit.base_commit,clean:true,
+        tree:{paths:['app/example.js'],total_path_count:1,truncated:false},files:requestedPaths.length?[{path:'app/example.js',content:'base\n',content_digest:sha,size_bytes:5}]:[],admitted_bytes:requestedPaths.length?5:0,context_digest:sha})}});
+  const service=createHarness(store,{sourceRealization});
+  const config=loadConfig({CALLER_ALLOWED_IDS:'operator:workspace-owner',CALLER_AUTH_SECRETS_JSON:JSON.stringify({'operator:workspace-owner':'test-secret'}),OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON:JSON.stringify({'operator:workspace-owner':'operator:workspace-owner'})});
+  const app=createApp({config,deliveryArtWorkSessionService:service}),spec=loadOpenApiSpec();
+  async function call(method,url,input,{actor='operator:workspace-owner',canonical=false}={}){
+    const request=Readable.from(input===undefined?[]:[Buffer.from(JSON.stringify(input))]);Object.assign(request,{method,url,headers:{'x-oos-caller-id':'operator:workspace-owner','x-oos-caller-secret':'test-secret','x-oos-operator-id':actor,...(canonical?{accept:'application/vnd.mfshaf7.console-source-projection+json; version=1'}:{})}});
+    let code,raw='';await app(request,{writeHead(value){code=value;},end(value){raw+=value??'';}});const body=JSON.parse(raw);
+    if(code===200){const operation=resolveOperation(spec,method,url.split('?')[0]).operation;
+      if(input!==undefined)assert.deepEqual(validateValueAgainstSchema(spec,operation.requestBody.content['application/json'].schema,input),[]);
+      const media=canonical?'application/vnd.mfshaf7.console-source-projection+json':'application/json';assert.deepEqual(validateValueAgainstSchema(spec,operation.responses['200'].content[media].schema,body),[]);}
+    return{code,body};
+  }
+  const base='/v1/delivery-work-items/1024/work-session/realization';
+  const tree=await call('GET',base+'/files',undefined,{canonical:true});assert.equal(tree.code,200);assert.equal(tree.body.projection.files.length,0);
+  assert.equal((await call('GET',base+'/files?path=app%2Fexample.js',undefined,{canonical:true})).body.projection.files[0].content,'base\n');
+  const initial=await sourceRealization.read({callerId:selected.caller_id,operatorId:selected.operator.id,workItemId:'1024'});
+  const realization={schema_version:1,command_id:'delivery-save:api',execution_id:'execution:api',expected_revision:initial.revision,expected_change_set_digest:null,requested_at:at,objective:'Update the real ordinary application source.',input_origin:'import',retry_of:null,commit_message:'feat: import application source',operations:[{action:'replace',path:'app/example.js',content:'operator source\r\n',expected_digest:sha}]};
+  const saved=await call('POST',base+'/draft',{realization});assert.equal(saved.code,200);assert.equal(saved.body.attempt.operator_draft.input_origin,'import');
+  assert.equal((await call('GET',base+'/draft',undefined,{canonical:true})).body.projection.change_set.operations[0].content,'operator source\r\n');
+  assert.equal((await call('POST',base+'/draft',{realization,repository:'other/repo'})).code,400);
+  assert.equal((await call('GET',base+'/files?path=x&path=x')).code,400);
+  assert.equal((await call('GET',base+'/files',undefined,{actor:'operator:other'})).code,403);
 });

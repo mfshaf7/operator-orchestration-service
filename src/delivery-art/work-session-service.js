@@ -610,7 +610,7 @@ export function createDeliveryArtWorkSessionService({
     if (sourceIntentRef !== null && (typeof sourceIntentRef !== "string" || !SOURCE_INTENT_PATTERN.test(sourceIntentRef))) {
       throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_invalid", "Source realization requires an exact source-intent reference.", { statusCode: 400 });
     }
-    if (!sourceRealization || !["start", "continue", "cancel", "recover"].includes(action)) {
+    if (!sourceRealization || !["start", "continue", "cancel", "recover", "saveDraft"].includes(action)) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_source_realization_unavailable",
         "The requested Delivery source-realization action is unavailable.",
@@ -642,6 +642,21 @@ export function createDeliveryArtWorkSessionService({
       signal,
       workItemId,
     }));
+  }
+
+  async function readRealizationSource({ callerId, operatorId, workItemId: input, kind, requestedPaths = [] }) {
+    await assertExecutorAvailable();
+    if (!sourceRealization || !["files", "draft"].includes(kind) || !Array.isArray(requestedPaths) ||
+        requestedPaths.length > 48 || new Set(requestedPaths).size !== requestedPaths.length ||
+        requestedPaths.some(value => typeof value !== "string" || value.length > 240)) {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_realization_request_invalid", "Use the current source draft or bounded source-file selectors.");
+    }
+    operatorId ??= callerId;
+    const workItemId = normalizeWorkItemId(input), session = store.readByAlias(workItemId);
+    assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    return runWithExecutorContext({ caller_id: callerId, command_id: null, operator_id: operatorId,
+      session_id: session?.session_id ?? null, work_item_id: workItemId },
+    () => sourceRealization[kind]({ callerId, operatorId, workItemId, requestedPaths }));
   }
 
   async function execute({
@@ -841,6 +856,7 @@ export function createDeliveryArtWorkSessionService({
     projectContext,
     read,
     readRealization,
+    readRealizationSource,
     reconstruct,
     start,
     status,

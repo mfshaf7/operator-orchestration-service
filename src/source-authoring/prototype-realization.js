@@ -6,6 +6,7 @@ import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "./bou
 import { prototypeAuthoringError } from "./prototype-contracts.js";
 import { prototypeSourceSession } from "./prototype-session.js";
 import { assertPrototypeOwnerChangeSet } from "./prototype-owner-preparation.js";
+import { createOperatorDraftEditor } from "./operator-drafts.js";
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const CALLER = "operator-orchestration-service/prototype-source-authoring";
@@ -40,6 +41,7 @@ function project(record, configured, replayed = false) {
       request: structuredClone(attempt.request),
       requested_at: attempt.requested_at, completed_at: attempt.completed_at, objective_digest: attempt.objective_digest,
       context: attempt.context ? structuredClone(attempt.context) : null, model: attempt.model ? structuredClone(attempt.model) : null,
+      ...(attempt.operator_draft ? { operator_draft: structuredClone(attempt.operator_draft) } : {}),
       ...(attempt.owner_preparation ? { owner_preparation: structuredClone(attempt.owner_preparation) } : {}),
       change_set: attempt.change_set ? { digest: attempt.change_set_digest, change_set_id: attempt.change_set.change_set_id,
         commit_message: attempt.change_set.commit_message, operations: attempt.change_set.operations.map(({ content, ...operation }) => ({ ...operation,
@@ -63,7 +65,8 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
   if (typeof authoringService?.sourceRecord !== "function" || typeof store?.withActionLock !== "function" ||
       typeof sourceExecutor?.executor?.run !== "function" || typeof lifecycleContext?.prepare !== "function" || typeof lifecycleContext?.project !== "function" ||
       typeof gatewayClient?.invoke !== "function") throw new TypeError("Prototype realization requires the canonical owner workflow, existing source executor, private store, CGG and governed model adapter.");
-  const configured = enabled === true && gatewayClient.configured !== false;
+  const configured = enabled === true;
+  const modelConfigured = configured && gatewayClient.configured !== false;
   const owner = args => authoringService.sourceRecord(args);
   const platform = () => {
     const result = typeof platformOperations === "function" ? platformOperations() : platformOperations;
@@ -98,7 +101,7 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
       if (current.session?.session_id !== session.session_id) throw fail("source_session_changed", "The actual source session changed before retaining its realization.");
       // Every visible attempt/context/control change gets a fresh authority
       // revision, including intermediate writes and same-millisecond effects.
-      record.revision = metadataRevision(current);
+      record.revision = Date.parse(record.revision) > Date.parse(current.updated_at) ? record.revision : metadataRevision(current);
       const reference = store.writeArtifact(session.source_request_id, record);
       put({ ...current, realization_ref: reference, state: "source-work", updated_at: record.revision });
     });
@@ -135,7 +138,7 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
   async function generate({ callerId, operatorId, requestId, input, signal = null }) {
     closed(input, ["schema_version", "request_id", "execution_id", "expected_revision", "budget_tokens", "retry_of", "requested_at", "source_intent_ref"]);
     timestamp(input.requested_at); timestamp(input.expected_revision); intent(input.source_intent_ref);
-    if (!configured) throw fail("runtime_unavailable", "The bounded Prototype model purpose is not commissioned.", { statusCode: 503 });
+    if (!modelConfigured) throw fail("runtime_unavailable", "The bounded Prototype model purpose is not commissioned.", { statusCode: 503 });
     if (input.schema_version !== 1 || !ID.test(input.request_id ?? "") || !ID.test(input.execution_id ?? "") ||
         (input.retry_of !== null && !ID.test(input.retry_of)) || !Number.isInteger(input.budget_tokens) || input.budget_tokens < 1 || input.budget_tokens > 8000) throw fail("command_invalid", "Prototype generation requires bounded immutable request, execution and budget fields.", { statusCode: 400 });
     const metadata = retainedSession({ callerId, operatorId, requestId });
@@ -291,13 +294,57 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
       }
     });
   };
+  const save = createOperatorDraftEditor({ enabled: configured,
+    sessionFor: args => { const metadata = retainedSession(args); return { ...metadata.session, created_at: metadata.created_at }; },
+    assertIdentity(session, callerId, operatorId) {
+      if (session.caller_id !== callerId || session.operator.id !== operatorId) throw fail("identity_forbidden", "This source session belongs to another caller/operator.", { statusCode: 403 });
+    },
+    readRecord, writeRecord, withLock: (session, operation) => store.withActionLock(session.session_id, operation),
+    putArtifact: (session, _name, value) => store.writeArtifact(session.source_request_id, value),
+    readArtifact: (_session, reference) => store.readArtifact(reference),
+    commitRecord: (session, record, command, commandDigest) => store.transact(session.source_request_id, ({ current, put }) => {
+      if (current.session?.session_id !== session.session_id) throw fail("source_session_changed", "The source session changed before saving.");
+      record.revision = metadataRevision(current);
+      const acknowledgement = project(record, configured);
+      const ackRef = store.writeArtifact(session.source_request_id, acknowledgement);
+      record.operator_saves = [...(record.operator_saves ?? []), { command_id: command.command_id, command_digest: commandDigest, ack_ref: ackRef, ack_digest: canonicalDigest(acknowledgement) }];
+      const reference = store.writeArtifact(session.source_request_id, record);
+      put({ ...current, realization_ref: reference, state: "source-work", updated_at: record.revision });
+      return acknowledgement;
+    }),
+    canonicalObjective: session => store.get(session.source_request_id).request.objective,
+    assertEditable(session) {
+      if (session.owner_preparation) throw fail("owner_change_set_invalid", "Trusted owner preparations remain inspect-only.");
+    },
+    async validateDraft(session, changeSet, command) {
+      assertPrototypeChangeSet(changeSet, session);
+      const metadata = store.get(session.source_request_id);
+      const result = await run(metadata, command.command_id, () => sourceExecutor.prototypeSource.validateSourceRealization({ ...sourceInput(metadata), change_set: changeSet }));
+      if (result?.valid !== true || result.session_id !== session.session_id || result.base_commit !== session.landing_unit.base_commit || result.change_set_digest !== canonicalDigest(changeSet)) {
+        throw fail("validation_mismatch", "The source owner did not validate this exact Prototype draft.", { statusCode: 502 });
+      }
+    },
+    nextRevision: record => new Date(Math.max(clock().getTime(), Date.parse(record.revision) + 1)).toISOString(),
+    project: record => project(record, configured), clock, error: fail,
+  });
   return { configured, read, startSession, generate, continue: apply("continue"), recover: apply("recover"),
+    saveDraft({ callerId, operatorId, requestId, input }) {
+      return save({ callerId, operatorId, subjectRef: { callerId, operatorId, requestId }, request: input });
+    },
+    async files({ callerId, operatorId, requestId, requestedPaths = [] }) {
+      const metadata = retainedSession({ callerId, operatorId, requestId });
+      if (metadata.session.owner_preparation) throw fail("owner_change_set_invalid", "Trusted owner preparations expose their exact retained draft only.");
+      return run(metadata, `source-files:${metadata.session.session_id}`, () => sourceExecutor.prototypeSource.captureRealizationContext({
+        ...sourceInput(metadata), requested_paths: requestedPaths, tree_only: requestedPaths.length === 0,
+      }));
+    },
     publish: deliver("publish"), review: deliver("review"), merge: deliver("merge"), close: deliver("close"),
     draft(args) {
       const metadata = retainedSession(args); const record = readRecord(metadata.session); const attempt = record.attempts.at(-1);
       if (!attempt?.change_set) throw fail("draft_missing", "No retained source draft is available for this request.", { statusCode: 404 });
       return { schema_version: 1, workflow_id: "prototype-source-draft", request_id: metadata.request.request_id, session_id: metadata.session.session_id, revision: record.revision,
-        digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created" };
+        digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
+        operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
     },
     cancelAttempt: ({ callerId, operatorId, requestId, input }) => actions.cancel({ callerId, operatorId, subjectRef: { callerId, operatorId, requestId }, request: input }) };
 }

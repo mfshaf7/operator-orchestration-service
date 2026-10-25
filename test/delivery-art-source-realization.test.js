@@ -6,16 +6,18 @@ import {
   createDeliveryArtSourceRealizationService,
 } from "../src/delivery-art/source-realization.js";
 
-function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
+function fixture({ applyFailures = 0, gatewayResult = null, modelAvailable = true } = {}) {
   const session = {
+    created_at: "2026-10-14T00:00:00.000Z",
     session_id: "work-session:delivery-1275:delivery-1275-source-realization",
-    work_item_id: "work-item-1285",
+    covered_work_item_ids: ["work-item-1285"],
     caller_id: "governance-operations-console",
     operator: { id: "operator:workspace-owner" },
     landing_unit_id: "delivery-1275-source-realization",
     landing_unit: { base_commit: "a".repeat(40) },
   };
   let artifact = null;
+  const privateArtifacts = new Map();
   let applyCount = 0;
   let remainingApplyFailures = applyFailures;
   let projectionInput = null;
@@ -45,7 +47,7 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
     clock: () => new Date(timestamps.shift() ?? "2026-10-14T01:00:05.000Z"),
     enabled: true,
     gatewayClient: {
-      configured: true,
+      configured: modelAvailable,
       async invoke(request) {
         assert.equal(request.caller_identity.caller_workflow,
           request.caller_identity.caller_id.split("/")[1]);
@@ -85,6 +87,9 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
       },
     },
     sourceAdapter: {
+      async validateSourceRealization(selected, change) {
+        return { valid: true, session_id: selected.session_id, base_commit: selected.landing_unit.base_commit, change_set_digest: canonicalDigest(change) };
+      },
       async captureRealizationContext() {
         return {
           schema_version: 1,
@@ -119,10 +124,10 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
       },
     },
     store: {
-      readArtifact() { return artifact ? structuredClone(artifact) : null; },
+      readArtifact(_session, file) { return file === "source-realization.json" ? artifact ? structuredClone(artifact) : null : structuredClone(privateArtifacts.get(file)); },
       readByAlias() { return session; },
       async withLock(_key, operation) { return operation(); },
-      writeArtifact(_session, _file, value) { artifact = structuredClone(value); },
+      writeArtifact(_session, file, value) { if (file === "source-realization.json") artifact = structuredClone(value); else privateArtifacts.set(file, structuredClone(value)); },
     },
     workSessionController: {
       async status() {
@@ -136,7 +141,7 @@ function fixture({ applyFailures = 0, gatewayResult = null } = {}) {
     },
   });
   return {
-    changeSet,
+    changeSet, session, privateArtifacts,
     getApplyCount: () => applyCount,
     getProjectionInput: () => projectionInput,
     objective,
@@ -477,4 +482,21 @@ test("source realization recovers a process crash retained in applying state", a
   });
   assert.equal(recovered.state, "source-created");
   assert.equal(getApplyCount(), 1);
+});
+
+test('ordinary Delivery manual/import drafts have the same retained amendment/replay path without a model',async()=>{
+  const f=fixture({modelAvailable:false});const args={callerId:f.session.caller_id,operatorId:f.session.operator.id,workItemId:f.session.covered_work_item_ids[0]};
+  const initial=await f.service.read(args);const command={schema_version:1,command_id:'save:delivery:1',execution_id:'execution:delivery:1',expected_revision:initial.revision,
+    expected_change_set_digest:null,requested_at:'2026-10-14T00:59:00Z',objective:f.objective,input_origin:'manual',retry_of:null,commit_message:'feat: author actual application source',operations:f.changeSet.operations};
+  const saved=await f.service.saveDraft({...args,request:command});assert.equal(saved.state,'draft-ready');assert.equal(saved.attempt.model,null);assert.equal(saved.attempt.context,null);assert.equal(f.getApplyCount(),0);
+  const changed={...command,command_id:'save:delivery:2',expected_revision:saved.revision,expected_change_set_digest:saved.attempt.change_set.digest,
+    input_origin:'import',operations:[{...command.operations[0],content:'export const imported = true;\r\n'}]};
+  const amended=await f.service.saveDraft({...args,request:changed});assert.notEqual(amended.attempt.change_set.digest,saved.attempt.change_set.digest);
+  assert.deepEqual(await f.service.saveDraft({...args,request:command}),{...saved,replayed:true});
+  const draft=await f.service.draft(args);assert.equal(draft.revision,amended.revision);assert.equal(draft.change_set.operations[0].content,changed.operations[0].content);
+  assert.equal(draft.operator_draft.input_origin,'import');
+  await assert.rejects(f.service.draft({...args,operatorId:'other'}),{code:'delivery_art_source_realization_identity_mismatch'});
+  await assert.rejects(f.service.files({...args,callerId:'other'}),{code:'delivery_art_source_realization_identity_mismatch'});
+  await assert.rejects(f.service.saveDraft({...args,request:{...changed,command_id:'save:delivery:stale'}}),{code:'delivery_art_source_realization_revision_stale'});
+  assert.equal((await f.service.read(args)).revision,amended.revision);
 });
