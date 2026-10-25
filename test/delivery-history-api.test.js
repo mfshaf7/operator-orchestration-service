@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Readable} from 'node:stream';
+import {createApp} from '../src/app.js';
+const config={callerAuth:{allowedIds:['governance-operations-console'],callerSecrets:{},sharedSecret:'synthetic-only'}};
+async function read(app,path,authorized=true){const request=Readable.from([]);request.method='GET';request.url=path;request.headers=authorized?{'x-oos-caller-id':'governance-operations-console','x-oos-caller-secret':'synthetic-only'}:{};let status,body='';await app(request,{writeHead(s){status=s;},end(v=''){body+=v;}});return {status,body:body?JSON.parse(body):null};}
+test('read composition authenticates before inspecting any target and validates intake bounds',async()=>{let reads=0;const app=createApp({config,prototypeDeliveryApplicationService:{async listTargets(){reads++;return [];},readTarget(){throw Error('not called');}}});assert.equal((await read(app,'/v1/delivery-intake/sources',false)).status,401);assert.equal(reads,0);assert.equal((await read(app,'/v1/delivery-intake/sources?limit=100')).status,400);assert.equal(reads,0);const result=await read(app,'/v1/delivery-intake/sources?limit=20');assert.equal(result.status,200);assert.equal(result.body.workflow_id,'delivery-intake-sources');assert.deepEqual(result.body.sources,[]);assert.equal(result.body.coverage.state,'current');});
+test('history read cannot target an absent or foreign Delivery package',async()=>{const app=createApp({config,deliveryService:{async getDeliveryExecutionSummary(){return null;}},prototypeDeliveryApplicationService:{readTarget(){throw Error('must not read a foreign target');}}});const result=await read(app,'/v1/delivery-initiatives/delivery-42/history');assert.equal(result.status,404);});
+
+test('native history GETs negotiate exact source envelopes without obtaining mutation authority', async () => {
+ const ref='openproject://work_packages/42';
+ const target={recordId:42,recordRef:ref,recordVersion:2,title:'Synthetic product',status:'done',ownerRepo:'sample-owner',description:'',originIdeaRef:'idea-10'};
+ const dependencies={config,deliveryService:{async getDeliveryExecutionSummary(){return {delivery_record_ref:ref};}},prototypeDeliveryApplicationService:{async listTargets(){return [target];},async readTarget(){return {target,source_kind:'proposal',application:null};}},proposalWorkflowService:{async getProjection(){return {record_ref:'openproject://work_packages/10',record_version:'v1',route:{target:'delivery',source_custody:{classification:'non-source-work',owner:'sample-owner',rationale:'Approved non-source work',repository_gate_state:'not-required'}},handoff:{state:'applied',packet_ref:'packet:original',target_record_ref:ref,target_receipt_ref:'receipt:original'}};}},workDesignService:{async project(){return {source:{ref},state:'not-started',history:[]};}},refinementService:{async project(){return {packet:{source:{source_ref:ref}},latest_run:null,history:[]};}},deliveryCloseoutService:{async getProjection(){return {record_ref:ref,package:{status:'done'},outcome_history:[]};}}};
+ const app=createApp(dependencies);
+ for(const [path,expectedRef,workflow] of [['/v1/delivery-intake/sources','openproject://projects/workspace-delivery-art/intake','delivery-intake-sources'],['/v1/delivery-initiatives/delivery-42/history',ref,'delivery-package-history']]){
+  const request=Readable.from([]);request.method='GET';request.url=path;request.headers={'x-oos-caller-id':'governance-operations-console','x-oos-caller-secret':'synthetic-only',accept:'application/vnd.mfshaf7.console-source-projection+json; version=1'};
+  let status,headers,body;await app(request,{writeHead(s,h){status=s;headers=h;},end(v){body=JSON.parse(v);}});
+  assert.equal(status,200);assert.match(new Headers(headers).get('content-type'),/console-source-projection/);assert.equal(body.binding.record_ref,expectedRef);assert.equal(body.binding.source_owner,'workspace-delivery-art');assert.equal(body.projection.workflow_id,workflow);
+  if(workflow==='delivery-package-history'){assert.equal(body.projection.mutation_authority,'none');assert.equal(body.projection.sections.intake.data.receipt_ref,'receipt:original');assert.equal(body.projection.sections.intake.data.recorded_at,null);}
+ }
+});

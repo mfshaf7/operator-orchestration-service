@@ -97,6 +97,299 @@
     }
   ],
   "paths": {
+    "/v1/delivery-intake/sources": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "List target-backed Delivery Intake evidence",
+        "description": "Read-only composition of retained owner evidence. Missing proof is unavailable, never a fabricated success or verified empty history. Existing workflow command eligibility and approval remain separate.",
+        "operationId": "readDeliveryIntakeSources",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^after:[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List target-backed Delivery Intake evidence",
+            "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryIntakeSourcesReadV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-intake-sources",
+                  "sources": [
+                    {
+                      "source_id": "prototype-ingress:sample",
+                      "source_kind": "prototype",
+                      "source_ref": "record://prototypes/sample",
+                      "source_version": "version-1",
+                      "packet_ref": "record://delivery-packets/sample",
+                      "delivery_id": "delivery-42",
+                      "target_ref": "openproject://work_packages/42",
+                      "title": "Synthetic product",
+                      "owner_repo": "sample-owner",
+                      "state": "consumed",
+                      "custody": {
+                        "classification": "existing-repo",
+                        "owner": "sample-owner",
+                        "rationale": "Approved original source custody",
+                        "source_ref": "repo://sample-owner",
+                        "repository_gate_state": "resolved"
+                      },
+                      "receipt_ref": "oos://receipts/prototype-delivery-application/sample",
+                      "receipt_digest": "sha256:sample",
+                      "recorded_at": "2026-10-26T00:00:00.000Z",
+                      "actor": "operator:sample",
+                      "evidence_refs": [
+                        "openproject://work_packages/42/activities/1"
+                      ]
+                    }
+                  ],
+                  "issues": [],
+                  "next_cursor": null,
+                  "coverage": {
+                    "state": "current",
+                    "detail": "Target-backed native admissions"
+                  },
+                  "projected_at": "2026-10-26T00:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/history": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read original native Delivery workflow history",
+        "description": "Read-only composition of retained owner evidence. Missing proof is unavailable, never a fabricated success or verified empty history. Existing workflow command eligibility and approval remain separate.",
+        "operationId": "readDeliveryOwnerHistory",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read original native Delivery workflow history",
+            "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryOwnerHistoryReadV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "delivery-package-history",
+                  "delivery_id": "delivery-42",
+                  "record_ref": "openproject://work_packages/42",
+                  "package": {
+                    "title": "Synthetic product",
+                    "status": "done",
+                    "owner_repo": "sample-owner"
+                  },
+                  "sections": {
+                    "intake": {
+                      "state": "current",
+                      "detail": "Original native consumption",
+                      "data": {
+                        "source_id": "prototype-ingress:sample",
+                        "source_kind": "prototype",
+                        "source_ref": "record://prototypes/sample",
+                        "source_version": "version-1",
+                        "packet_ref": "record://delivery-packets/sample",
+                        "delivery_id": "delivery-42",
+                        "target_ref": "openproject://work_packages/42",
+                        "title": "Synthetic product",
+                        "owner_repo": "sample-owner",
+                        "state": "consumed",
+                        "custody": {
+                          "classification": "existing-repo",
+                          "owner": "sample-owner",
+                          "rationale": "Approved original source custody",
+                          "source_ref": "repo://sample-owner",
+                          "repository_gate_state": "resolved"
+                        },
+                        "receipt_ref": "oos://receipts/prototype-delivery-application/sample",
+                        "receipt_digest": "sha256:sample",
+                        "recorded_at": "2026-10-26T00:00:00.000Z",
+                        "actor": "operator:sample",
+                        "evidence_refs": [
+                          "openproject://work_packages/42/activities/1"
+                        ]
+                      }
+                    },
+                    "work_design": {
+                      "state": "current",
+                      "detail": "Original owner history",
+                      "data": {
+                        "state": "applied",
+                        "source_ref": "openproject://work_packages/42",
+                        "records": [],
+                        "total_records": 0,
+                        "truncated": false
+                      }
+                    },
+                    "refinement": {
+                      "state": "current",
+                      "detail": "Original owner history",
+                      "data": {
+                        "state": "completed",
+                        "source_ref": "openproject://work_packages/42",
+                        "records": [],
+                        "total_records": 0,
+                        "truncated": false
+                      }
+                    },
+                    "closeout": {
+                      "state": "current",
+                      "detail": "Original owner history",
+                      "data": {
+                        "state": "done",
+                        "source_ref": "openproject://work_packages/42",
+                        "records": [],
+                        "total_records": 0,
+                        "truncated": false
+                      }
+                    }
+                  },
+                  "events": [],
+                  "event_count": 0,
+                  "history_state": "current",
+                  "mutation_authority": "none",
+                  "projected_at": "2026-10-26T00:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
     "/healthz": {
       "get": {
         "tags": [
@@ -32573,6 +32866,481 @@
       }
     },
     "schemas": {
+      "DeliveryIntakeSourceReadV1": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_kind": {
+            "enum": [
+              "proposal",
+              "prototype"
+            ]
+          },
+          "source_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packet_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "target_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner_repo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "const": "consumed"
+          },
+          "custody": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          },
+          "receipt_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "receipt_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 2048
+          }
+        },
+        "required": [
+          "source_id",
+          "source_kind",
+          "source_ref",
+          "source_version",
+          "packet_ref",
+          "delivery_id",
+          "target_ref",
+          "title",
+          "owner_repo",
+          "state",
+          "custody",
+          "receipt_ref",
+          "receipt_digest",
+          "recorded_at",
+          "actor",
+          "evidence_refs"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryIntakeSourcesReadV1": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "delivery-intake-sources"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryIntakeSourceReadV1"
+            },
+            "maxItems": 20
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "target_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "const": "unavailable"
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "target_ref",
+                "state",
+                "detail"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "enum": [
+                  "current",
+                  "partial"
+                ]
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "state",
+              "detail"
+            ],
+            "additionalProperties": false
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "sources",
+          "issues",
+          "next_cursor",
+          "coverage",
+          "projected_at"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryOwnerHistoryRecordV1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 2048
+          },
+          "tone": {
+            "enum": [
+              "ok",
+              "info",
+              "danger"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "state",
+          "at",
+          "actor",
+          "receipt_ref",
+          "digest",
+          "evidence_refs",
+          "tone"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryOwnerHistorySectionV1": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "current",
+              "unavailable",
+              "not-recorded"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryIntakeSourceReadV1"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "records": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/DeliveryOwnerHistoryRecordV1"
+                    },
+                    "maxItems": 200
+                  },
+                  "total_records": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "state",
+                  "source_ref",
+                  "records",
+                  "total_records",
+                  "truncated"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "detail",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryOwnerHistoryReadV1": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "delivery-package-history"
+          },
+          "delivery_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "record_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "package": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "owner_repo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "title",
+              "status",
+              "owner_repo"
+            ],
+            "additionalProperties": false
+          },
+          "sections": {
+            "type": "object",
+            "properties": {
+              "intake": {
+                "$ref": "#/components/schemas/DeliveryOwnerHistorySectionV1"
+              },
+              "work_design": {
+                "$ref": "#/components/schemas/DeliveryOwnerHistorySectionV1"
+              },
+              "refinement": {
+                "$ref": "#/components/schemas/DeliveryOwnerHistorySectionV1"
+              },
+              "closeout": {
+                "$ref": "#/components/schemas/DeliveryOwnerHistorySectionV1"
+              }
+            },
+            "required": [
+              "intake",
+              "work_design",
+              "refinement",
+              "closeout"
+            ],
+            "additionalProperties": false
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "actor": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "receipt_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxItems": 2048
+                },
+                "tone": {
+                  "enum": [
+                    "ok",
+                    "info",
+                    "danger"
+                  ]
+                }
+              },
+              "required": [
+                "event_id",
+                "title",
+                "occurred_at",
+                "actor",
+                "receipt_ref",
+                "evidence_refs",
+                "tone"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "event_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "history_state": {
+            "enum": [
+              "current",
+              "partial"
+            ]
+          },
+          "mutation_authority": {
+            "const": "none"
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "delivery_id",
+          "record_ref",
+          "package",
+          "sections",
+          "events",
+          "event_count",
+          "history_state",
+          "mutation_authority",
+          "projected_at"
+        ],
+        "additionalProperties": false
+      },
 "ConsoleSourceProjectionV1": {
         "title": "Console canonical source projection",
         "type": "object",

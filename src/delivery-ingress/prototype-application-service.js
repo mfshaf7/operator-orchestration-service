@@ -230,5 +230,18 @@ export function createPrototypeDeliveryApplicationService({
     });
   }
 
-  return { apply, get, readAcceptedReceipt };
+  async function readTarget({ recordId }) {
+    const found = await adapter.inspectTarget(recordId);
+    if (!found) throw new HttpError(404, "delivery_not_found", "Delivery target was not found.");
+    return { target: found.target, source_kind: found.marker ? "prototype" :
+      found.target.originIdeaRef ? "proposal" : null,
+      application: found.appliedEvent ? prototypeDeliveryResultFromEvent({
+        activityId: found.appliedEvent.activityId, event: found.appliedEvent.event,
+        resolution: "read",
+      }) : null };
+  }
+
+  return { apply, get, readAcceptedReceipt, readTarget,
+    listTargets: () => adapter.listTargets() };
+
 }
