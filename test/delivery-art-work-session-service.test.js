@@ -903,13 +903,23 @@ test('Delivery draft/file/save HTTP routes use the real private draft kernel and
     return{code,body};
   }
   const base='/v1/delivery-work-items/1024/work-session/realization';
+  const absent=await call('GET',base+'/draft',undefined,{canonical:true});
+  assert.equal(absent.code,404);assert.equal(absent.body.error,'delivery_art_source_realization_draft_missing');
+  assert.equal((await sourceRealization.read({callerId:selected.caller_id,operatorId:selected.operator.id,workItemId:'1024'})).attempt,null);
   const tree=await call('GET',base+'/files',undefined,{canonical:true});assert.equal(tree.code,200);assert.equal(tree.body.projection.files.length,0);
   assert.equal((await call('GET',base+'/files?path=app%2Fexample.js',undefined,{canonical:true})).body.projection.files[0].content,'base\n');
   const initial=await sourceRealization.read({callerId:selected.caller_id,operatorId:selected.operator.id,workItemId:'1024'});
   const realization={schema_version:1,command_id:'delivery-save:api',execution_id:'execution:api',expected_revision:initial.revision,expected_change_set_digest:null,requested_at:at,objective:'Update the real ordinary application source.',input_origin:'import',retry_of:null,commit_message:'feat: import application source',operations:[{action:'replace',path:'app/example.js',content:'operator source\r\n',expected_digest:sha}]};
   const saved=await call('POST',base+'/draft',{realization});assert.equal(saved.code,200);assert.equal(saved.body.attempt.operator_draft.input_origin,'import');
   assert.equal((await call('GET',base+'/draft',undefined,{canonical:true})).body.projection.change_set.operations[0].content,'operator source\r\n');
+  const replay=await call('POST',base+'/draft',{realization});assert.equal(replay.code,200);assert.equal(replay.body.replayed,true);
+  const stale=await call('POST',base+'/draft',{realization:{...realization,command_id:'delivery-save:stale'}});
+  assert.equal(stale.code,409);assert.equal(stale.body.error,'delivery_art_source_realization_revision_stale');
+  assert.equal((await call('GET',base+'/draft',undefined,{canonical:true})).body.projection.digest,saved.body.attempt.change_set.digest);
   assert.equal((await call('POST',base+'/draft',{realization,repository:'other/repo'})).code,400);
   assert.equal((await call('GET',base+'/files?path=x&path=x')).code,400);
   assert.equal((await call('GET',base+'/files',undefined,{actor:'operator:other'})).code,403);
+  sourceRealization.files=async()=>{throw new Error('PRIVATE-SENTINEL-unknown-source-failure');};
+  const unexpected=await call('GET',base+'/files',undefined,{canonical:true});assert.equal(unexpected.code,500);
+  assert.deepEqual(unexpected.body,{error:'internal_error',message:'Unexpected server error.'});
 });

@@ -7942,7 +7942,8 @@ export function createApp({
 
       if (
         error instanceof DeliveryArtLifecycleContextError ||
-        error instanceof DeliveryArtLifecycleContextUpstreamError
+        error instanceof DeliveryArtLifecycleContextUpstreamError ||
+        error instanceof DeliveryArtSourceRealizationError
       ) {
         sendJson(response, error.statusCode, error.toResponse
           ? error.toResponse()
