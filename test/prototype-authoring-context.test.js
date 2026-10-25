@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
-import { sourceSummary, textDigest } from "../src/source-authoring/context-contract.js";
+import { assertLifecycleContextResult, sourceSummary, textDigest } from "../src/source-authoring/context-contract.js";
 import { assertPrototypeSourceCapture, buildPrototypeContextRequest, createPrototypeLifecycleContext, prototypeSourcePathAllowed } from "../src/source-authoring/prototype-context.js";
 import { createPrototypeAuthoringStore } from "../src/source-authoring/prototype-store.js";
 
 const A = "a".repeat(40); const B = "b".repeat(40); const NOW = "2026-10-18T14:00:00Z";
+// Independent oracle: the existing CGG lifecycle protocol uses Python's
+// ASCII-escaped compact sorted JSON, including surrogate pairs and DEL.
+const pythonWireDigest = value => execFileSync("python3", ["-c",
+  "import hashlib,json,sys; print('sha256:'+hashlib.sha256(json.dumps(json.load(sys.stdin),ensure_ascii=True,separators=(',',':'),sort_keys=True).encode()).hexdigest())"],
+  { input: JSON.stringify(value), encoding: "utf8" }).trim();
 function fixture() {
   const record = { request: { request_id: "prototype-source-request:42:1", prototype_id: "prototype:proposal-42", objective: "Build a synthetic local example." },
     request_digest: textDigest("immutable request"), operator_id: "operator:owner", session: { session_id: "prototype-session:42:1" },
@@ -46,6 +52,25 @@ test("Prototype context retains separate registry/source revisions and real subj
   assert.equal(request.sources.at(-1).unavailable_reason, "not_configured");
   assert.equal(request.sources_digest, canonicalDigest(request.sources));
   for (const source of request.sources.filter(value => value.availability === "available")) assert.equal(source.content_digest, textDigest(source.content));
+});
+
+test("Prototype Unicode source list and response envelope match the Python CGG wire contract without changing source bytes", () => {
+  const f = fixture(), content = "\uFEFFcafé — 你好 😀\u007f\r\n";
+  f.record.request.objective = "Explain local storage — café / 你好 😀";
+  f.capture.files[0] = { ...f.capture.files[0], content, content_digest: textDigest(content), size_bytes: Buffer.byteLength(content) };
+  f.capture.admitted_bytes = Buffer.byteLength(content);
+  const { context_digest: _old, ...body } = f.capture;
+  f.capture = { ...body, context_digest: textDigest(JSON.stringify(body)) };
+  const request = buildPrototypeContextRequest(f);
+  assert.equal(request.sources_digest, pythonWireDigest(request.sources));
+  assert.notEqual(request.sources_digest, canonicalDigest(request.sources));
+  assert.equal(JSON.parse(request.sources.find(source => source.source_class === "repository").content).files[0].content, content);
+  const response = result(request);
+  response.request_digest = pythonWireDigest({ binding: response.binding, lifecycle_sources: request.sources });
+  assert.doesNotThrow(() => assertLifecycleContextResult(response, request, "operator-orchestration-service"));
+  assert.throws(() => assertLifecycleContextResult({ ...response,
+    request_digest: canonicalDigest({ binding: response.binding, lifecycle_sources: request.sources }) }, request, "operator-orchestration-service"),
+    { code: "lifecycle_context_response_invalid" });
 });
 
 test("Prototype capture rejects sibling source, owner controls, forged content and wrong session", () => {

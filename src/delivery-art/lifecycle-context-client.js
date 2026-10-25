@@ -71,11 +71,11 @@ export function createDeliveryArtLifecycleContextClient({
     }
     if (!response.ok) {
       throw new DeliveryArtLifecycleContextUpstreamError(
-        payload?.code ?? "lifecycle_context_rejected",
+        payload?.code ?? payload?.detail?.code ?? "lifecycle_context_rejected",
         payload?.message ?? payload?.detail?.message ?? "CGG rejected lifecycle context.",
         {
           payload,
-          retryable: payload?.retryable === true || response.status >= 500,
+          retryable: payload?.retryable === true || payload?.detail?.retryable === true || response.status >= 500,
           statusCode: response.status,
         },
       );

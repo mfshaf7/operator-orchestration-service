@@ -25,6 +25,13 @@ create a source session, obtain a credential or invoke a model. A freshly merged
 Landing therefore requires no operator Git refresh. An unmerged object or failed
 canonical fetch remains unavailable; no stale or arbitrary source is adopted.
 
+Optional model drafting uses the existing CGG lifecycle projection in both
+Prototype and Delivery. Its source-list and response-envelope digests follow
+CGG's compact sorted ASCII-escaped JSON format; source text and its UTF-8 content
+digests stay unchanged, as do ART and private source-custody formats. A CGG denial
+retains the typed owner reason. Resolve that prerequisite and use the explicitly
+linked generation retry; never replace the failed attempt or use raw context.
+
 The caller/operator, owner, source root, branch and fetched base come from that
 owner session. Browser input cannot replace them. Trusted Preview/Delivery
 owner-preparation requests remain inspect-only; this editor cannot alter their
