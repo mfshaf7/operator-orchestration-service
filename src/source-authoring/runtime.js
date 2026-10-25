@@ -20,6 +20,8 @@ export function createPrototypeAuthoringFacade({ authoringService, realizationSe
     list(args) { return authoringService.list(identity(args)); },
     read: args => realizationService.read(identity(args)),
     draft: args => realizationService.draft(identity(args)),
+    files: args => realizationService.files(identity(args)),
+    saveDraft: args => realizationService.saveDraft(identity(args)),
     startSession: args => realizationService.startSession(identity(args)),
     generate: args => realizationService.generate(identity(args)),
     accept: args => realizationService.continue(identity(args)),

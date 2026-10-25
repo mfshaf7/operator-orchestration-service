@@ -533,3 +533,19 @@ test("source executor client reports an absent socket as unavailable", async () 
     statusCode: 503,
   });
 });
+
+test('operator draft preflight is an uncached read and proves the actual future apply wire budget before dispatch',async t=>{
+  const root=mkdtempSync(path.join(tmpdir(),'oos-operator-draft-wire-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const socketPath=path.join(root,'source.sock');let validations=0;
+  const server=createDeliveryArtSourceExecutorServer({executorId:'source-test',secret:SECRET,adapters:{...adapters([]),workSource:{...adapters([]).workSource,
+    validateSourceRealization:async(session,change)=>{validations++;return{valid:true,session_id:session.session_id,change_set_id:change.change_set_id};}
+  }}});
+  await listen(server,socketPath);t.after(()=>close(server));
+  const client=createDeliveryArtSourceExecutorClient({executorId:'source-test',secret:SECRET,socketPath,requireSourceLease:true});
+  const session={session_id:'work-session:test'};const change={change_set_id:'change:operator',operations:[{action:'create',path:'app/main.js',content:'const title = "你好";\r\n',expected_digest:null}]};
+  const run=()=>client.executor.run(context(),()=>client.workSource.validateSourceRealization(session,change));
+  assert.equal((await run()).valid,true);assert.equal((await run()).valid,true);assert.equal(validations,2);
+  const escaped={...change,operations:Array.from({length:3},(_,i)=>({action:'create',path:`app/file${i}.txt`,content:'\x01'.repeat(60000),expected_digest:null}))};
+  await assert.rejects(client.executor.run(context(),()=>client.workSource.validateSourceRealization(session,escaped)),{code:'delivery_art_source_draft_oversized',statusCode:413});
+  assert.equal(validations,2);
+});

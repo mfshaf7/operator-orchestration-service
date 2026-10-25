@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -199,4 +199,48 @@ test("native Prototype review gate binds owner CI and human head, then squash cl
   assert.equal(git(f.repo, "ls-remote", "--heads", "origin", branch), "");
   assert.equal(git(f.repo, "show", "main:prototypes/sample/index.html"), changeSet(f).operations[0].content.trim());
   assert.equal(git(f.repo, "status", "--porcelain"), "");
+});
+
+test('operator file-tree/read and draft validation keep the actual Prototype base clean and scoped before Gary apply',async t=>{
+  const f=setup(t);await f.adapter.ensureOwnedWorktree(f.input);
+  const tree=await f.adapter.captureRealizationContext({...f.input,requested_paths:[],tree_only:true});
+  assert.equal(tree.files.length,0);assert.equal(tree.admitted_bytes,0);
+  assert.equal(tree.tree.paths.includes('README.md'),false);assert.equal(tree.tree.paths.includes('prototypes/other/private.txt'),false);
+  const selected=await f.adapter.captureRealizationContext({...f.input,requested_paths:['prototypes/sample/README.md'],tree_only:false});
+  assert.equal(selected.files[0].content,'Prototype source\n');
+  const change=changeSet(f);change.operations[0].content='\uFEFF<!doctype html>\r\n<title>你好</title>\r\n';
+  const valid=await f.adapter.validateSourceRealization({...f.input,change_set:change});
+  assert.equal(valid.valid,true);assert.equal(valid.change_set_digest,canonicalDigest(change));
+  const worktree=path.join(f.root,'.worktrees',f.record.session.landing_unit_id,'workspace-prototype-studio');
+  assert.equal(git(worktree,'rev-parse','HEAD'),f.base);assert.equal(git(worktree,'status','--porcelain'),'');
+  for(const file of ['README.md','prototypes/other/private.txt','prototypes/sample/.env','prototypes/sample/.github/workflows/pwn.yml']){
+    await assert.rejects(async()=>f.adapter.validateSourceRealization({...f.input,change_set:{...change,operations:[{...change.operations[0],path:file}]}}));
+    await assert.rejects(f.adapter.captureRealizationContext({...f.input,requested_paths:[file]}));
+  }
+  const replaced={...change,operations:[{action:'replace',path:'prototypes/sample/README.md',content:'changed\r\n',expected_digest:textDigest('wrong base')}]};
+  await assert.rejects(f.adapter.validateSourceRealization({...f.input,change_set:replaced}),{code:'delivery_art_source_realization_source_drift'});
+  const committed=await f.adapter.applySourceRealization({...f.input,change_set:change});
+  assert.equal(committed.outcome,'committed');assert.equal(readFileSync(path.join(worktree,change.operations[0].path),'utf8'),change.operations[0].content);
+  assert.match(git(worktree,'show','-s','--format=%an'),/^Agent Gary$/);
+  await assert.rejects(f.adapter.validateSourceRealization({...f.input,change_set:change}),{code:'delivery_art_source_realization_source_drift'});
+});
+
+test('malformed UTF-8, binary and linked existing source cannot be silently normalized by operator read or draft validation',async t=>{
+  const f=setup(t),directory=path.join(f.repo,'prototypes/sample');
+  writeFileSync(path.join(directory,'invalid.txt'),Buffer.from([0xc0,0xaf]));writeFileSync(path.join(directory,'binary.txt'),Buffer.from([65,0,66]));
+  symlinkSync('../../README.md',path.join(directory,'linked.txt'));symlinkSync('../../absent-target',path.join(directory,'dangling.txt'));writeFileSync(path.join(f.repo,'.gitignore'),'prototypes/sample/ignored/\n');git(f.repo,'add','.');git(f.repo,'commit','-m','Synthetic unsupported source baseline');
+  const base=git(f.repo,'rev-parse','HEAD');f.base=base;f.record.binding.subject.source_revision=base;f.record.binding.source_start.fetched_base=base;
+  f.record.session=prototypeSourceSession(f.record);f.input.session=f.record.session;await f.adapter.ensureOwnedWorktree(f.input);
+  for(const filename of ['invalid.txt','binary.txt','linked.txt','dangling.txt']){
+    const path='prototypes/sample/'+filename;
+    await assert.rejects(f.adapter.captureRealizationContext({...f.input,requested_paths:[path]}));
+    await assert.rejects(async()=>f.adapter.validateSourceRealization({...f.input,change_set:{...changeSet(f),operations:[{action:'replace',path,content:'replacement\n',expected_digest:textDigest('unreadable original')}]}}));
+  }
+  const worktree=path.join(f.root,'.worktrees',f.record.session.landing_unit_id,'workspace-prototype-studio');
+  assert.equal(git(worktree,'rev-parse','HEAD'),base);assert.equal(git(worktree,'status','--porcelain'),'');
+  assert.deepEqual(readFileSync(path.join(worktree,'prototypes/sample/invalid.txt')),Buffer.from([0xc0,0xaf]));
+  mkdirSync(path.join(worktree,'prototypes/sample/ignored'));writeFileSync(path.join(worktree,'prototypes/sample/ignored/private.txt'),'ignored local dependency text');
+  await assert.rejects(f.adapter.captureRealizationContext({...f.input,requested_paths:['prototypes/sample/ignored/private.txt']}));
+  await assert.rejects(async()=>f.adapter.validateSourceRealization({...f.input,change_set:{...changeSet(f),operations:[{action:'create',path:'prototypes/sample/ignored/new.txt',content:'must not stage ignored material',expected_digest:null}]}}));
+  assert.equal(git(worktree,'status','--porcelain'),'');
 });

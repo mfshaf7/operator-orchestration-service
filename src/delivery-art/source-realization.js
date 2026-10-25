@@ -8,6 +8,7 @@ import addFormats from "ajv-formats";
 
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "../source-authoring/bounded-actions.js";
+import { createOperatorDraftEditor } from "../source-authoring/operator-drafts.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
 const CONTRACT_ROOT = fileURLToPath(
@@ -105,6 +106,7 @@ function attemptProjection(attempt) {
     objective_digest: attempt.objective_digest,
     context: attempt.context ? structuredClone(attempt.context) : null,
     model: attempt.model ? structuredClone(attempt.model) : null,
+    ...(attempt.operator_draft ? { operator_draft: structuredClone(attempt.operator_draft) } : {}),
     change_set: attempt.change_set
       ? {
           change_set_id: attempt.change_set.change_set_id,
@@ -348,16 +350,21 @@ export function createDeliveryArtSourceRealizationService({
     if (typeof store?.[method] !== "function") throw new Error(`store.${method} is required`);
   }
   if (typeof workSessionController?.status !== "function") throw new Error("workSessionController.status is required");
-  const configured = enabled === true && gatewayClient.configured !== false;
+  const configured = enabled === true;
+  const modelConfigured = configured && gatewayClient.configured !== false;
 
   function sessionFor(workItemId) {
-    const session = store.readByAlias(normalizeWorkItemId(workItemId));
+    const target = normalizeWorkItemId(workItemId);
+    const session = store.readByAlias(target);
     if (!session) {
       throw new DeliveryArtSourceRealizationError(
         "delivery_art_source_realization_session_missing",
         "Start the Delivery work session before source realization.",
         { statusCode: 409 },
       );
+    }
+    if (!session.covered_work_item_ids?.includes(target)) {
+      throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_session_mismatch", "The actual source session does not cover this work item.", { statusCode: 409 });
     }
     return session;
   }
@@ -392,7 +399,7 @@ export function createDeliveryArtSourceRealizationService({
       schema_version: 1,
       artifact_type: "delivery_art_source_realization_record",
       session_id: session.session_id,
-      work_item_id: session.work_item_id,
+      work_item_id: normalizeWorkItemId(workItemId),
       attempts: [],
       revision: session.updated_at ?? session.created_at ?? null,
     }, configured);
@@ -402,7 +409,7 @@ export function createDeliveryArtSourceRealizationService({
   // successful response must remain recoverable after approval expires/stops.
 
   async function start({ callerId, operatorId, request: input, signal = null, workItemId }) {
-    if (!configured) {
+    if (!modelConfigured) {
       throw new DeliveryArtSourceRealizationError(
         "delivery_art_source_realization_runtime_unavailable",
         "The bounded source-realization runtime is not commissioned.",
@@ -455,7 +462,7 @@ export function createDeliveryArtSourceRealizationService({
           { statusCode: 409 },
         );
       }
-      const status = await workSessionController.status(session.work_item_id);
+      const status = await workSessionController.status(normalizeWorkItemId(workItemId));
       if (
         status.session_revision !== request.expected_session_revision ||
         status.next_action?.code !== "source-work-required" ||
@@ -502,7 +509,7 @@ export function createDeliveryArtSourceRealizationService({
         schema_version: 1,
         artifact_type: "delivery_art_source_realization_record",
         session_id: session.session_id,
-        work_item_id: session.work_item_id,
+        work_item_id: normalizeWorkItemId(workItemId),
         attempts: [],
         revision: now,
       };
@@ -528,7 +535,7 @@ export function createDeliveryArtSourceRealizationService({
             objective_digest: attempt.objective_digest,
             repository_context: repositoryContext,
           },
-          workItemId: session.work_item_id,
+          workItemId: normalizeWorkItemId(workItemId),
         });
         const source = {
           session_id: session.session_id,
@@ -584,6 +591,38 @@ export function createDeliveryArtSourceRealizationService({
     error: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
   });
   const bind = action => args => actions[action]({ ...args, subjectRef: args.workItemId });
+  const save = createOperatorDraftEditor({ enabled: configured, sessionFor, assertIdentity,
+    readRecord: (session, workItemId) => readRecord(session) ?? { schema_version: 1, artifact_type: "delivery_art_source_realization_record",
+      session_id: session.session_id, work_item_id: normalizeWorkItemId(workItemId), attempts: [], revision: session.updated_at ?? session.created_at },
+    writeRecord, withLock: (session, operation) => store.withLock(`source-realization:${session.session_id}`, operation),
+    putArtifact(session, name, value) { store.writeArtifact(session, name, value); return name; },
+    readArtifact: (session, reference) => store.readArtifact(session, reference),
+    validateDraft: async (session, changeSet, command) => {
+      if (command.objective.length < 20 || command.objective.length > 12000) throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_invalid", "Keep the bounded Delivery source objective between 20 and 12000 characters.");
+      assertChangeSet(changeSet, { baseCommit: session.landing_unit.base_commit, objectiveDigest: changeSet.objective_digest, sessionId: session.session_id });
+      if (typeof sourceAdapter.validateSourceRealization !== "function") throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_runtime_unavailable", "The source owner has not commissioned operator draft validation.", { statusCode: 503 });
+      const result = await sourceAdapter.validateSourceRealization(session, changeSet);
+      if (result?.valid !== true || result.session_id !== session.session_id || result.base_commit !== session.landing_unit.base_commit || result.change_set_digest !== canonicalDigest(changeSet)) {
+        throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_validation_mismatch", "The owner draft preflight does not match the exact source session and content.", { statusCode: 502 });
+      }
+    },
+    nextRevision: record => new Date(Math.max(clock().getTime(), Date.parse(record.revision) + 1)).toISOString(),
+    project: record => project(record, configured), clock,
+    error: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
+  });
+  async function files({ callerId, operatorId, workItemId, requestedPaths = [] }) {
+    const session = sessionFor(workItemId); assertIdentity(session, callerId, operatorId);
+    return sourceAdapter.captureRealizationContext(session, { requestedPaths, treeOnly: requestedPaths.length === 0 });
+  }
+  async function draft({ callerId, operatorId, workItemId }) {
+    const session = sessionFor(workItemId); assertIdentity(session, callerId, operatorId);
+    const record = readRecord(session), attempt = record?.attempts.at(-1);
+    if (!attempt?.change_set) throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_missing", "No retained source draft is available.", { statusCode: 404 });
+    return { schema_version: 1, workflow_id: "delivery-art-source-draft", session_id: session.session_id,
+      revision: record.revision, digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
+      operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
+  }
   return { configured, read, start, cancel: bind("cancel"), continue: bind("continue"),
+    saveDraft: args => save({ ...args, subjectRef: args.workItemId }), files, draft,
     recover: bind("recover"), readCompletedCommand: bind("readCompletedCommand") };
 }

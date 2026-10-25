@@ -859,11 +859,11 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     let current = path.resolve(worktree);
     for (const segment of normalized.split("/").slice(0, -1)) {
       current = path.join(current, segment);
-      if (existsSync(current) && lstatSync(current).isSymbolicLink()) {
+      if (lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
         throw new Error(`Source realization path traverses a symbolic link: ${normalized}.`);
       }
     }
-    if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
+    if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) {
       throw new Error(`Source realization target is a symbolic link: ${normalized}.`);
     }
     return { normalized, target };
@@ -876,7 +876,8 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     if (!stat.isFile() || stat.size > MAX_REALIZATION_FILE_BYTES) return null;
     const content = readFileSync(target);
     if (content.includes(0)) return null;
-    const text = content.toString("utf8");
+    let text;
+    try { text = strictSourceText(content); } catch { return null; }
     return {
       path: normalized,
       content: text,
@@ -885,7 +886,8 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     };
   }
 
-  async function captureRealizationContext(session, { requestedPaths = [] } = {}) {
+  async function captureRealizationContext(session, { requestedPaths = [], treeOnly = false } = {}) {
+    if (!Array.isArray(requestedPaths) || requestedPaths.length > MAX_REALIZATION_FILES || typeof treeOnly !== "boolean") throw new Error("Use bounded source-file selectors.");
     const worktree = await resolveWorktree(session);
     if (!worktree) {
       const error = new Error("Prepare or reconstruct the managed worktree through authorized work continuation before capturing source context.");
@@ -916,6 +918,11 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       .map(normalizedRealizationPath)
       .sort();
     const explicit = [...new Set(requestedPaths.map(normalizedRealizationPath))];
+    if (explicit.some(candidate => !allPaths.includes(candidate))) {
+      const error = new Error("Requested source files are absent from the clean versioned source tree.");
+      error.code = "delivery_art_source_realization_context_unavailable";
+      throw error;
+    }
     const preferred = explicit.length > 0
       ? explicit
       : allPaths.sort((left, right) => {
@@ -929,7 +936,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         });
     const files = [];
     let admittedBytes = 0;
-    for (const candidate of preferred) {
+    for (const candidate of treeOnly ? [] : preferred) {
       if (files.length >= MAX_REALIZATION_FILES) break;
       const file = readableRealizationFile(worktree, candidate);
       if (!file) continue;
@@ -937,7 +944,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       files.push(file);
       admittedBytes += file.size_bytes;
     }
-    if (explicit.length > 0) {
+    if (explicit.length > 0 && !treeOnly) {
       const admitted = new Set(files.map((file) => file.path));
       const missing = explicit.filter((entry) => !admitted.has(entry));
       if (missing.length > 0) {
@@ -964,7 +971,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     return { ...context, context_digest: contentDigest(JSON.stringify(context)) };
   }
 
-  async function applySourceRealization(session, changeSet) {
+  function assertRealizationBinding(session, changeSet) {
     if (
       changeSet?.schema_version !== 1 ||
       changeSet?.session_id !== session.session_id ||
@@ -981,6 +988,85 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       error.code = "delivery_art_source_realization_change_set_invalid";
       throw error;
     }
+  }
+
+  function strictSourceText(bytes) {
+    if (bytes.includes(0)) throw new Error("Source realization does not admit binary NUL bytes.");
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  }
+
+  function prepareRealizationOperations(worktree, changeSet) {
+    const prepared = [];
+    let totalBytes = 0;
+    for (const operation of changeSet.operations ?? []) {
+      if (!["create", "replace", "delete"].includes(operation?.action)) {
+        throw new Error("Source realization action is not allowlisted.");
+      }
+      const { normalized, target } = realizationTarget(worktree, operation.path);
+      if (optionalCommand(execFileSyncImpl, ["check-ignore", "--no-index", "--", normalized], worktree).ok) {
+        throw new Error(`Source realization cannot write an ignored source path: ${normalized}.`);
+      }
+      const exists = existsSync(target);
+      const current = exists ? lstatSync(target) : null;
+      if (exists && (!current.isFile() || current.isSymbolicLink())) {
+        throw new Error(`Source realization target is not a regular file: ${normalized}.`);
+      }
+      if (current && current.size > MAX_REALIZATION_FILE_BYTES) {
+        throw new Error(`Source realization target exceeds the bounded text-file limit: ${normalized}.`);
+      }
+      const currentContent = exists ? strictSourceText(readFileSync(target)) : null;
+      const currentDigest = currentContent === null ? null : contentDigest(currentContent);
+      if (operation.action === "delete" && operation.content !== null || operation.action === "create" && operation.expected_digest !== null) {
+        throw new Error("Source realization action/content/digest fields are inconsistent.");
+      }
+      if (operation.action === "create" && exists) {
+        throw new Error(`Source realization create target already exists: ${normalized}.`);
+      }
+      if (operation.action !== "create" && !exists) {
+        throw new Error(`Source realization target does not exist: ${normalized}.`);
+      }
+      if (operation.action !== "create" && currentDigest !== operation.expected_digest) {
+        const error = new Error(`Source realization expected digest is stale: ${normalized}.`);
+        error.code = "delivery_art_source_realization_source_drift";
+        throw error;
+      }
+      if (operation.action !== "delete") {
+        if (typeof operation.content !== "string" || !operation.content.isWellFormed() || operation.content.includes("\0")) {
+          throw new Error("Source realization requires well-formed UTF-8 text without binary NUL bytes.");
+        }
+        const size = Buffer.byteLength(operation.content, "utf8");
+        totalBytes += size;
+        if (size > MAX_REALIZATION_FILE_BYTES || totalBytes > 512 * 1024) {
+          throw new Error("Source realization change set exceeds the bounded content limit.");
+        }
+      }
+      prepared.push({
+        ...operation,
+        normalized,
+        target,
+        mode: current?.mode ?? 0o644,
+        original_content: currentContent,
+      });
+    }
+    return prepared;
+  }
+
+  async function validateSourceRealization(session, changeSet) {
+    assertRealizationBinding(session, changeSet);
+    const worktree = await resolveWorktree(session);
+    if (!worktree || command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree) !== session.landing_unit.base_commit ||
+        command(execFileSyncImpl, ["status", "--porcelain", "--untracked-files=normal"], worktree)) {
+      const error = new Error("Draft validation requires the existing clean exact-base managed worktree.");
+      error.code = "delivery_art_source_realization_source_drift";
+      throw error;
+    }
+    prepareRealizationOperations(worktree, changeSet);
+    return { schema_version: 1, session_id: session.session_id, base_commit: session.landing_unit.base_commit,
+      change_set_digest: canonicalDigest(changeSet), valid: true };
+  }
+
+  async function applySourceRealization(session, changeSet) {
+    assertRealizationBinding(session, changeSet);
     const worktree = await ensureWorktree(session);
     const headBefore = command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree);
     const statusBefore = command(
@@ -1043,46 +1129,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       error.code = "delivery_art_source_realization_source_drift";
       throw error;
     }
-    const prepared = [];
-    let totalBytes = 0;
-    for (const operation of changeSet.operations ?? []) {
-      if (!["create", "replace", "delete"].includes(operation?.action)) {
-        throw new Error("Source realization action is not allowlisted.");
-      }
-      const { normalized, target } = realizationTarget(worktree, operation.path);
-      const exists = existsSync(target);
-      const current = exists ? lstatSync(target) : null;
-      if (exists && (!current.isFile() || current.isSymbolicLink())) {
-        throw new Error(`Source realization target is not a regular file: ${normalized}.`);
-      }
-      const currentContent = exists ? readFileSync(target, "utf8") : null;
-      const currentDigest = currentContent === null ? null : contentDigest(currentContent);
-      if (operation.action === "create" && exists) {
-        throw new Error(`Source realization create target already exists: ${normalized}.`);
-      }
-      if (operation.action !== "create" && !exists) {
-        throw new Error(`Source realization target does not exist: ${normalized}.`);
-      }
-      if (operation.action !== "create" && currentDigest !== operation.expected_digest) {
-        const error = new Error(`Source realization expected digest is stale: ${normalized}.`);
-        error.code = "delivery_art_source_realization_source_drift";
-        throw error;
-      }
-      if (operation.action !== "delete") {
-        const size = Buffer.byteLength(operation.content, "utf8");
-        totalBytes += size;
-        if (size > MAX_REALIZATION_FILE_BYTES || totalBytes > 512 * 1024) {
-          throw new Error("Source realization change set exceeds the bounded content limit.");
-        }
-      }
-      prepared.push({
-        ...operation,
-        normalized,
-        target,
-        mode: current?.mode ?? 0o644,
-        original_content: currentContent,
-      });
-    }
+    const prepared = prepareRealizationOperations(worktree, changeSet);
     await prepareAgentSource(session);
     let committed = false;
     try {
@@ -1499,6 +1546,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   return {
     applySourceRealization,
+    validateSourceRealization,
     captureRealizationContext,
     ensureOwnedWorktree,
     ensureWorktree,

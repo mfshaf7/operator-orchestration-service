@@ -313,3 +313,57 @@ test("trusted owner preparation reuses source acceptance, cold lost-ack recovery
   assert.equal((await cold.close({ ...f.args, input: control("close:owner-plan", expected) })).state, "succeeded");
   assert.equal(f.revoked, true); assert.equal(f.cleaned, true); assert.equal(f.invokes, 0);
 });
+
+test('manual and amended Prototype drafts persist through the real private store without inference or source effects',async t=>{
+  const f=fixture(t);await f.create();await f.start();
+  let validations=0;
+  f.dependencies.sourceExecutor.prototypeSource.validateSourceRealization=async({session,change_set})=>{validations++;return{valid:true,session_id:session.session_id,base_commit:A,change_set_digest:canonicalDigest(change_set)};};
+  f.dependencies.gatewayClient.configured=false;
+  const service=createPrototypeSourceRealizationService(f.dependencies);
+  const initial=service.read(f.args).realization;
+  const input={schema_version:1,command_id:'operator-save:prototype:1',execution_id:'operator-execution:prototype:1',
+    expected_revision:initial.revision,expected_change_set_digest:null,objective:f.request.objective,input_origin:'manual',retry_of:null,
+    requested_at:f.clock().toISOString(),commit_message:'feat: author the actual prototype source',operations:[{action:'create',path:'prototypes/example/app.js',content:'\uFEFFconst title = "你好";\r\n',expected_digest:null}]};
+  const saved=await service.saveDraft({...f.args,input});assert.equal(saved.state,'draft-ready');assert.equal(f.invokes,0);assert.equal(f.applyCalls,0);
+  assert.equal(service.read(f.args).realization.revision,saved.revision);assert.equal(service.draft(f.args).change_set.operations[0].content,input.operations[0].content);
+  const spec=loadOpenApiSpec();assert.deepEqual(validateValueAgainstSchema(spec,{$ref:'#/components/schemas/PrototypeSourceRealization'},saved),[]);
+  const second={...input,command_id:'operator-save:prototype:2',expected_revision:saved.revision,expected_change_set_digest:saved.attempt.change_set.digest,
+    requested_at:f.clock().toISOString(),input_origin:'import',operations:[{...input.operations[0],content:'operator imported edit\r\n'}]};
+  const amended=await service.saveDraft({...f.args,input:second});assert.notEqual(amended.attempt.change_set.digest,saved.attempt.change_set.digest);
+  const cold=createPrototypeSourceRealizationService(f.dependencies);assert.deepEqual(await cold.saveDraft({...f.args,input}),{...saved,replayed:true});assert.equal(validations,2);
+  await assert.rejects(cold.continue({...f.args,input:{command:f.command(amended,'accept:old',saved.attempt.change_set.digest),source_intent_ref:INTENT}}),{code:'prototype_source_authoring_acceptance_mismatch'});
+  assert.equal(f.applyCalls,0);
+  const applied=await cold.continue({...f.args,input:{command:f.command(amended,'accept:operator'),source_intent_ref:INTENT}});
+  assert.equal(applied.state,'source-created');assert.equal(f.applyCalls,1);assert.equal(f.invokes,0);
+});
+
+test('authenticated manual Prototype draft and selected-file routes match the closed API and source envelope',async t=>{
+  const f=fixture(t);await f.create();await f.start();const spec=loadOpenApiSpec();
+  f.dependencies.sourceExecutor.prototypeSource.validateSourceRealization=async({session,change_set})=>({valid:true,session_id:session.session_id,base_commit:A,change_set_digest:canonicalDigest(change_set)});
+  f.dependencies.sourceExecutor.prototypeSource.captureRealizationContext=async({session,requested_paths})=>{
+    const body={schema_version:1,session_id:session.session_id,owner_repo:'workspace-prototype-studio',landing_unit_id:session.landing_unit_id,head_commit:A,clean:true,
+      tree:{paths:['prototypes/example/app.js'],total_path_count:1,truncated:false},files:requested_paths.length?[{path:requested_paths[0],content:'base\r\n',content_digest:textDigest('base\r\n'),size_bytes:6}]:[],admitted_bytes:requested_paths.length?6:0};
+    return{...body,context_digest:textDigest(JSON.stringify(body))};
+  };
+  const config=loadConfig({CALLER_ALLOWED_IDS:CALLER,CALLER_AUTH_SECRETS_JSON:JSON.stringify({[CALLER]:'test-secret'})});
+  const app=createApp({config,prototypeAuthoringService:createPrototypeAuthoringFacade({authoringService:f.dependencies.authoringService,realizationService:f.service,operatorBindings:{[CALLER]:OPERATOR}})});
+  async function call(method,url,input,{secret='test-secret',canonical=false}={}){
+    const request=Readable.from(input===undefined?[]:[Buffer.from(JSON.stringify(input))]);Object.assign(request,{method,url,headers:{'x-oos-caller-id':CALLER,'x-oos-caller-secret':secret,...(canonical?{accept:'application/vnd.mfshaf7.console-source-projection+json; version=1'}:{})}});
+    let status,body='';await app(request,{writeHead(value){status=value;},end(value){body+=value??'';}});const result=JSON.parse(body);
+    if(status===200){const operation=resolveOperation(spec,method,url.split('?')[0]).operation;if(input!==undefined)assert.deepEqual(validateValueAgainstSchema(spec,operation.requestBody.content['application/json'].schema,input),[]);
+      const media=canonical?'application/vnd.mfshaf7.console-source-projection+json':'application/json';assert.deepEqual(validateValueAgainstSchema(spec,operation.responses['200'].content[media].schema,result),[]);}
+    return{status,result};
+  }
+  const base=`/v1/prototype-source-requests/${encodeURIComponent(REQUEST)}`;
+  assert.equal((await call('GET',base+'/files',undefined,{canonical:true})).result.projection.files.length,0);
+  const read=await call('GET',base+'/files?path=prototypes%2Fexample%2Fapp.js',undefined,{canonical:true});assert.equal(read.result.projection.files[0].content,'base\r\n');
+  const initial=f.service.read(f.args).realization;
+  const input={schema_version:1,command_id:'save:api:manual',execution_id:'execution:api:manual',expected_revision:initial.revision,expected_change_set_digest:null,requested_at:f.clock().toISOString(),objective:f.request.objective,input_origin:'import',retry_of:null,commit_message:'feat: import actual prototype source',operations:[{action:'replace',path:'prototypes/example/app.js',content:'operator source\r\n',expected_digest:textDigest('base\r\n')}]};
+  const saved=await call('POST',base+'/draft',input);assert.equal(saved.status,200);assert.equal(saved.result.attempt.operator_draft.input_origin,'import');
+  const draft=await call('GET',base+'/draft',undefined,{canonical:true});assert.equal(draft.result.projection.change_set.operations[0].content,'operator source\r\n');
+  assert.equal((await call('GET',base+'/files?path=app.js&path=app.js')).status,400);
+  assert.equal((await call('GET',base+'/files?repository=other')).status,400);
+  assert.equal((await call('POST',base+'/draft',{...input,repository:'other/repo'})).status,400);
+  assert.equal((await call('GET',base+'/files',undefined,{secret:'wrong'})).status,401);
+  assert.equal(f.invokes,0);assert.equal(f.applyCalls,0);
+});

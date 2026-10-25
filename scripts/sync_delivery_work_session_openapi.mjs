@@ -1,3 +1,4 @@
+import { sourceEditorSchemas, mergeSourceEditorPaths } from "./source_editor_openapi_tools.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,6 +79,7 @@ const sourceAuthorization = {
 };
 
 const components = {
+  ...sourceEditorSchemas,
   DeliveryArtArchitecturePacketDraftDecisionV1: {
     type: "object",
     additionalProperties: false,
@@ -1702,6 +1704,7 @@ const paths = {
   }),
 };
 
+mergeSourceEditorPaths(paths, "delivery");
 for (const [route, pathItem] of Object.entries(paths)) {
   synchronized = upsertOpenApiPath(synchronized, route, pathItem);
 }
