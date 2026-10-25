@@ -47,7 +47,7 @@ export function createDeliveryHistoryReader({
       }
       return { state: "current", detail: "Original applied Proposal handoff and reciprocal Delivery target.", data: {
         source_id: projection.handoff.packet_ref, source_kind: "proposal", source_ref: projection.record_ref,
-        source_version: projection.record_version, packet_ref: projection.handoff.packet_ref,
+        source_version: "not-projected", packet_ref: projection.handoff.packet_ref,
         delivery_id: `delivery-${target.recordId}`, target_ref: ref, title: target.title,
         owner_repo: custody.owner, state: "consumed", custody,
         receipt_ref: projection.handoff.target_receipt_ref, receipt_digest: null,
@@ -175,6 +175,6 @@ function historyRecord(kind, item, targetRef) {
   }
   if (item.delivery_id !== `delivery-${targetRef.split("/").at(-1)}` || !item.event_id) return null;
   return { id: item.event_id, title: `Delivery closeout ${item.status}`, state: item.status, at: item.occurred_at,
-    actor: item.operator_id, receipt_ref: item.outcome_ref ?? null, digest: item.command_digest,
-    evidence_refs: [targetRef, item.outcome_ref].filter(Boolean), tone: item.status === "applied" ? "ok" : item.status === "failed" ? "danger" : "info" };
+    actor: item.operator_id, receipt_ref: item.receipt?.ref ?? null, digest: item.receipt?.digest ?? null,
+    evidence_refs: [targetRef, item.outcome_ref].filter(Boolean), tone: item.status === "applied" ? "ok" : ["failed", "rejected"].includes(item.status) ? "danger" : "info" };
 }
