@@ -433,5 +433,33 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
     }
   }
 
-  return { apply, inspect, inspectReceipt, recordEvent };
+  async function inspectTarget(recordId) {
+    const target = await openProjectClient.getPrototypeDeliveryApplicationTarget({ recordId });
+    if (!target) return null;
+    const marker = decodePrototypeDeliveryTargetMarker(target.description);
+    if (!marker) return { target, marker: null, appliedEvent: null };
+    const matching = (await readEvents(recordId)).filter(({ event }) =>
+      event.application_id === marker.application_id);
+    if (matching.length > 1) {
+      throw new HttpError(502, "prototype_delivery_duplicate_events",
+        "More than one trusted event is bound to this Prototype application.");
+    }
+    const appliedEvent = matching[0] ?? null;
+    if (appliedEvent) {
+      const event = appliedEvent.event;
+      if (event.source.record_ref !== marker.source_record_ref ||
+          event.source.packet_ref !== marker.packet_ref ||
+          event.source.packet_digest !== marker.packet_digest ||
+          event.target.record_ref !== target.recordRef ||
+          event.target.record_version > target.recordVersion) {
+        throw new HttpError(502, "prototype_delivery_receipt_binding_invalid",
+          "The retained application does not bind this exact current target.");
+      }
+    }
+    return { target, marker, appliedEvent };
+  }
+
+  return { apply, inspect, inspectReceipt, inspectTarget, recordEvent,
+    listTargets: () => openProjectClient.listPrototypeDeliveryApplicationTargets() };
+
 }

@@ -14244,6 +14244,7 @@ test("Prototype Delivery target methods preserve marker descriptions and owner c
   assert.deepEqual(targets, [
     {
       description: "existing marker description",
+      originIdeaRef: null,
       ownerRepo: "workspace-prototype-studio",
       recordId: 901,
       recordRef: "openproject://work_packages/901",

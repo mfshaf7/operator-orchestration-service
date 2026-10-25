@@ -1814,3 +1814,36 @@ Direct OpenProject runners are allowed only for:
 - platform-admin maintenance that is not part of the delivery execution plane
 
 Those exceptions are not a second supported operator surface.
+
+
+### Retained Intake And Package History Reads
+
+The Console uses the existing canonical initiative inventory with completed and
+inactive records included, then declares whether the operator is viewing current
+work or retained history. Inventory visibility never grants execution eligibility.
+
+- `GET /v1/delivery-intake/sources?limit=20&cursor=after:<target-id>` lists
+  target-backed Proposal and Prototype admissions. Every consumed row binds the
+  original source, applied target, approved custody and native receipt. It does
+  not create an extra Consume operation after the existing native handoff.
+  Unapplied source ideas remain in Proposal or Prototype. Target-backed evidence
+  that cannot be verified is reported in `issues`, not treated as success or
+  silently counted as an empty register. Follow `next_cursor` within the bounded
+  inventory; repeated identities or malformed cursors are rejected.
+- `GET /v1/delivery-initiatives/{delivery_id}/history` reads the exact Delivery
+  target and original Intake, Work Design, Refinement and closeout evidence.
+  Every section declares current, unavailable or not-recorded coverage. The
+  existing owner services retain activity-author, digest, source and target
+  checks. Failed sections remain unavailable while independently verified
+  sections remain readable. Each stage projects up to200 retained records with
+  an explicit total and truncation marker. No history read invokes a model,
+  applies a workflow, obtains source credentials or changes ART state.
+
+The original event time, actor, receipt and target backlinks stay historical.
+A current source update time must not substitute for an unknown historical
+consume time. Retained custody records describe the original admission; the
+current target owner and current command eligibility are separate observations.
+Use Refresh to retry unavailable owner evidence. Repair the actual owner failure
+rather than replacing it with fixture or browser-local success. Current-stage
+filters may hide completed work from active queues; completed history must stay
+discoverable and reviewable from the normal Console.

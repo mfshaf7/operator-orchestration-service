@@ -416,3 +416,36 @@ test("Prototype adapter recovers a committed event when the write response is lo
   assert.equal(recorded.activityId, 71);
   assert.deepEqual(recorded.event, event);
 });
+
+
+test("target history trusts original automation evidence and preserves custody across later ownership changes", async () => {
+  const context = applicationContext();
+  const original = buildPrototypeDeliveryApplicationEvent({
+    applicationId: context.applicationId, ingressId: context.envelope.ingress_id,
+    operatorDecision: context.operatorDecision, packet: context.packet,
+    readiness: context.readiness, recordedAt: NOW,
+    target: { application_state: "created", owner_repo: "workspace-prototype-studio",
+      record_ref: "openproject://work_packages/901", record_version: 1 },
+  });
+  const target = { recordId: 901, recordRef: "openproject://work_packages/901",
+    recordVersion: 8, ownerRepo: "later-durable-owner",
+    description: encodePrototypeDeliveryTargetMarker(context.marker) };
+  let activities = [{ id: 71, userRef: "/api/v3/users/7", comment: encodePrototypeDeliveryApplicationEvent(original) }];
+  const adapter = createPrototypeDeliveryIngressAdapter({openProjectClient: {
+    async getPrototypeDeliveryApplicationTarget() { return target; },
+    async getPrototypeDeliveryAutomationUserRef() { return "/api/v3/users/7"; },
+    async listPrototypeDeliveryApplicationActivities() { return {items: activities, pageSize: 100, total: activities.length}; },
+  }});
+  const observed = await adapter.inspectTarget(901);
+  assert.equal(observed.target.ownerRepo, "later-durable-owner");
+  assert.equal(observed.appliedEvent.event.target.owner_repo, "workspace-prototype-studio");
+  assert.equal(observed.appliedEvent.event.receipt.recorded_at, NOW);
+  activities = activities.map(a => ({...a, userRef: "/api/v3/users/999"}));
+  assert.equal((await adapter.inspectTarget(901)).appliedEvent, null);
+  activities = [{id: 71, userRef: "/api/v3/users/7", comment: encodePrototypeDeliveryApplicationEvent(original)}];
+  target.recordRef = "openproject://work_packages/902";
+  await assert.rejects(adapter.inspectTarget(901), e => e.code === "prototype_delivery_receipt_binding_invalid");
+  target.recordRef = "openproject://work_packages/901";
+  activities.push({...activities[0], id: 72});
+  await assert.rejects(adapter.inspectTarget(901), e => e.code === "prototype_delivery_duplicate_events");
+});

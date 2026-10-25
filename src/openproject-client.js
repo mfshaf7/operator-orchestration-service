@@ -2447,6 +2447,7 @@ function mapWorkPackageToDeliveryRecord(config, payload, fieldMap = null) {
 function mapWorkPackageToPrototypeDeliveryTarget(config, payload, fieldMap) {
   const record = mapWorkPackageToDeliveryRecord(config, payload, fieldMap);
   return {
+    originIdeaRef: record.originIdeaRef,
     description: payload?.description?.raw ?? "",
     ownerRepo: record.ownerRepo,
     recordId: payload.id,

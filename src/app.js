@@ -1,3 +1,4 @@
+import { createDeliveryHistoryReader } from "./delivery-history-reader.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -5602,6 +5603,8 @@ export function createApp({
   workDesignService = null,
   workflowActivityService = null,
 }) {
+  const deliveryHistoryReader = createDeliveryHistoryReader({ deliveryService, prototypeDeliveryApplicationService,
+    proposalWorkflowService, workDesignService, refinementService, deliveryCloseoutService });
   return async function app(request, response) {
     try {
       const url = new URL(request.url, "http://localhost");
@@ -7163,6 +7166,26 @@ export function createApp({
           request,
           response,
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/delivery-intake/sources") {
+        const caller = authenticateCaller(request, config);
+        const result = await deliveryHistoryReader.readIntake({ callerId: caller.id,
+          correlationId: createCorrelationId(request), cursor: url.searchParams.get("cursor"),
+          limit: url.searchParams.get("limit") ?? 20 });
+        sendSourceProjection(response, request, result, () => ({
+          recordRef: "openproject://projects/workspace-delivery-art/intake", sourceOwner: "workspace-delivery-art",
+          sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at,
+        }));
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/delivery-initiatives\/[^/]+\/history$/.test(url.pathname)) {
+        const caller = authenticateCaller(request, config), deliveryId = url.pathname.split("/")[3];
+        const result = await deliveryHistoryReader.readHistory({ callerId: caller.id,
+          correlationId: createCorrelationId(request), deliveryId });
+        sendSourceProjection(response, request, result, () => ({ recordRef: result.record_ref,
+          sourceOwner: "workspace-delivery-art", sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at }));
         return;
       }
 
