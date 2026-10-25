@@ -248,6 +248,9 @@ export function createPrototypeSourceAdapter({ workspaceRoot, python = "python3"
       try {
         // The broker must select a canonical owner-main commit, not an
         // arbitrary branch, object, or browser-selected executable snapshot.
+        // Native Landing may have advanced main without moving this commissioned
+        // code checkout. Refresh its fixed trusted ref, not the working tree.
+        git(owner, "fetch", "origin", "main");
         git(owner, "merge-base", "--is-ancestor", input.source_revision, "refs/remotes/origin/main");
         temporary = mkdtempSync(path.join(tmpdir(), "oos-prototype-inspect-"));
         const snapshot = path.join(temporary, "source");
