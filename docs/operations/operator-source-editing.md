@@ -49,6 +49,9 @@ retain their different source scopes; there is no universal extension allowlist.
    require an absent target. The isolated owner performs the same read-only
    base/path/digest preflight as apply before any draft is retained.
 4. Reload with `GET <base>/draft` and the ordinary realization projection.
+   The caller-bound draft includes the original retained `objective` for cold
+   editing. Its digest must match `change_set.objective_digest`; a consumer
+   must not infer that text from ART metadata or ask for a guessed replacement.
    Saved UTF-8 text, BOM and line endings remain unchanged in private draft
    custody. Native Git attributes and owner validation still govern eventual
    delivery. Saving neither calls a model nor commits, publishes, approves,

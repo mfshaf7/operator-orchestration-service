@@ -95,6 +95,19 @@ composed acceptance; neither is replaced by mocked success.
 
 ## Follow-Up
 
+Console1326 consumer integration also corrects cold objective readback through
+operator-approved maintenance Landing Unit
+`maintenance-1323-source-objective-readback`. The existing private draft GETs
+now return the exact retained original objective for both generated and manual
+drafts. Previously Delivery returned only its digest, requiring a cold editor
+to reconstruct the input before amendment. The additive field preserves the
+existing caller-bound private-read boundary and changes no save, model, source
+or credential authority. Closed OpenAPI schemas/examples and cold private-store
+tests cover the field. This small repair stays attached to active1326 evidence
+under the operator's standing maintenance direction; no new Defect, ART child
+or architecture version is introduced. Exact combined1327 acceptance still
+precedes activation.
+
 - Finish source CI-equivalent checks and native exact-head review/merge.
 - Refresh the existing generated Security change-record index from owner main
   before final source closure; do not treat it as composed runtime acceptance.

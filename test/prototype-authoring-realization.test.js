@@ -331,6 +331,7 @@ test('manual and amended Prototype drafts persist through the real private store
     requested_at:f.clock().toISOString(),input_origin:'import',operations:[{...input.operations[0],content:'operator imported edit\r\n'}]};
   const amended=await service.saveDraft({...f.args,input:second});assert.notEqual(amended.attempt.change_set.digest,saved.attempt.change_set.digest);
   const cold=createPrototypeSourceRealizationService(f.dependencies);assert.deepEqual(await cold.saveDraft({...f.args,input}),{...saved,replayed:true});assert.equal(validations,2);
+  assert.equal(cold.draft(f.args).objective,input.objective);
   await assert.rejects(cold.continue({...f.args,input:{command:f.command(amended,'accept:old',saved.attempt.change_set.digest),source_intent_ref:INTENT}}),{code:'prototype_source_authoring_acceptance_mismatch'});
   assert.equal(f.applyCalls,0);
   const applied=await cold.continue({...f.args,input:{command:f.command(amended,'accept:operator'),source_intent_ref:INTENT}});

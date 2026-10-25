@@ -21,7 +21,7 @@ export const sourceEditorSchemas={
     tree:closed({paths:{type:'array',maxItems:5000,items:{type:'string',maxLength:240}},total_path_count:{type:'integer',minimum:0},truncated:{type:'boolean'}}),
     files:{type:'array',maxItems:48,items:file},admitted_bytes:{type:'integer',minimum:0,maximum:262144},context_digest:digest}),
   DeliveryArtSourceDraft:closed({schema_version:{const:1},workflow_id:{const:'delivery-art-source-draft'},session_id:id,revision:{type:'string',format:'date-time'},digest,
-    change_set:ref('PrototypeSourceChangeSet'),accepted:{type:'boolean'},operator_draft:nullable(ref('OperatorSourceDraftProvenance'))}),
+    objective:{type:'string',minLength:20,maxLength:12000},change_set:ref('PrototypeSourceChangeSet'),accepted:{type:'boolean'},operator_draft:nullable(ref('OperatorSourceDraftProvenance'))}),
 };
 const bearer={security:[{CallerIdHeader:[],CallerSecretHeader:[]}],tags:['Source Authoring'],
   'x-oos-owner':'operator-orchestration-service','x-oos-primary-caller':'governance-operations-console',
@@ -34,7 +34,7 @@ const exampleCommand={schema_version:1,command_id:'save:sample',execution_id:'ex
 function example(name){
   if(name==='SourceEditorFiles')return{schema_version:1,session_id:'source-session:sample',owner_repo:'example-owner',landing_unit_id:'source-sample',head_commit:BASE,clean:true,
     tree:{paths:['app/example.js'],total_path_count:1,truncated:false},files:[],admitted_bytes:0,context_digest:SHA};
-  if(name==='DeliveryArtSourceDraft')return{schema_version:1,workflow_id:'delivery-art-source-draft',session_id:'source-session:sample',revision:AT,digest:SHA,change_set:exampleChange,accepted:false,operator_draft:null};
+  if(name==='DeliveryArtSourceDraft')return{schema_version:1,workflow_id:'delivery-art-source-draft',session_id:'source-session:sample',revision:AT,digest:SHA,objective:exampleCommand.objective,change_set:exampleChange,accepted:false,operator_draft:null};
   const prototype=name==='PrototypeSourceRealization';
   return{schema_version:1,workflow_id:prototype?'prototype-source-realization':'delivery-art-source-realization',session_id:'source-session:sample',
     ...(prototype?{}:{work_item_id:'work-item-42'}),revision:AT,state:'draft-ready',replayed:false,next_action:{code:'source-acceptance-required',authority:'operator-orchestration-service',reason:'Review and accept the exact saved draft.'},

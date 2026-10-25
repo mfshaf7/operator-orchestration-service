@@ -343,7 +343,7 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
       const metadata = retainedSession(args); const record = readRecord(metadata.session); const attempt = record.attempts.at(-1);
       if (!attempt?.change_set) throw fail("draft_missing", "No retained source draft is available for this request.", { statusCode: 404 });
       return { schema_version: 1, workflow_id: "prototype-source-draft", request_id: metadata.request.request_id, session_id: metadata.session.session_id, revision: record.revision,
-        digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
+        digest: attempt.change_set_digest, objective: metadata.request.objective, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
         operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
     },
     cancelAttempt: ({ callerId, operatorId, requestId, input }) => actions.cancel({ callerId, operatorId, subjectRef: { callerId, operatorId, requestId }, request: input }) };

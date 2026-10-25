@@ -82,7 +82,7 @@ const schemas = {
   PrototypeSourceDeliveryControl: closed({ command: closed({ ...commandFields, expected_pull_request: pr }) }),
   PrototypeSourcePublication: closed({ command: closed({ ...commandFields, expected_pull_request: { type: "null" } }), source_intent_ref: sourceIntent }),
   PrototypeSourceDraft: closed({ schema_version: { const: 1 }, workflow_id: { const: "prototype-source-draft" }, request_id: id, session_id: id, revision: timestamp,
-    digest, change_set: ref("PrototypeSourceChangeSet"), accepted: { type: "boolean" }, operator_draft: nullable(ref("OperatorSourceDraftProvenance")) }, ["schema_version", "workflow_id", "request_id", "session_id", "revision", "digest", "change_set", "accepted"]),
+    digest, objective: { type: "string", minLength: 8, maxLength: 16384 }, change_set: ref("PrototypeSourceChangeSet"), accepted: { type: "boolean" }, operator_draft: nullable(ref("OperatorSourceDraftProvenance")) }, ["schema_version", "workflow_id", "request_id", "session_id", "revision", "digest", "objective", "change_set", "accepted"]),
 };
 const NOW = "2026-10-18T14:00:00Z"; const SHA = `sha256:${"a".repeat(64)}`; const BASE = "a".repeat(40);
 const requestExample = { schema_version: 1, request_id: "prototype-source-request:sample:1", prototype_id: "prototype:sample",
@@ -124,7 +124,7 @@ const paths = {
   },
   "/v1/prototype-source-requests/{request_id}": { get: { ...common, operationId: "prototypeSourceRead", summary: "Recover one actual Prototype source workflow", description: "Reads retained state, exact next action and secret-free evidence without starting a source or model action.", parameters: parameter, responses: response("PrototypeSourceProjection", projection) } },
   "/v1/prototype-source-requests/{request_id}/draft": { get: { ...common, operationId: "prototypeSourceDraft", summary: "Inspect exact private source draft before acceptance", description: "Caller-bound operator review of bounded model-authored text. Render as inert source, never executable HTML. This read does not accept or apply the draft.", parameters: parameter,
-    responses: response("PrototypeSourceDraft", { schema_version: 1, workflow_id: "prototype-source-draft", request_id: requestExample.request_id, session_id: realization.session_id, revision: NOW, digest: SHA, accepted: false,
+    responses: response("PrototypeSourceDraft", { schema_version: 1, workflow_id: "prototype-source-draft", request_id: requestExample.request_id, session_id: realization.session_id, revision: NOW, digest: SHA, objective: requestExample.objective, accepted: false,
       change_set: { schema_version: 1, change_set_id: "prototype-draft:sample:1", session_id: realization.session_id, base_commit: BASE, objective_digest: SHA,
         commit_message: "feat: draft synthetic prototype source", operations: [{ action: "create", path: "prototypes/sample/index.html", content: "Synthetic documentation example.", expected_digest: null }] } }) } },
   "/v1/prototype-source-requests/{request_id}/session": { post: operation("StartSession", "Start the actual source session under approved scope", "PrototypeSourceSessionStart", { schema_version: 1, command_id: command.command_id, source_intent_ref: intent, requested_at: NOW }, "PrototypeSourceProjection") },
