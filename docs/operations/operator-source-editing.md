@@ -18,6 +18,13 @@ for the real work item and accepted Landing Unit decision. Use the Console's
 including its bounded renewal and terminal revocation. An engineering token
 alone does not authorize this session.
 
+Prototype preparation refreshes the admitted Studio owner's fixed `origin/main`
+ref before proving that the canonical selected commit belongs to it. This is a
+bounded Git observation: it does not pull or reset the commissioned owner checkout,
+create a source session, obtain a credential or invoke a model. A freshly merged
+Landing therefore requires no operator Git refresh. An unmerged object or failed
+canonical fetch remains unavailable; no stale or arbitrary source is adopted.
+
 The caller/operator, owner, source root, branch and fetched base come from that
 owner session. Browser input cannot replace them. Trusted Preview/Delivery
 owner-preparation requests remain inspect-only; this editor cannot alter their

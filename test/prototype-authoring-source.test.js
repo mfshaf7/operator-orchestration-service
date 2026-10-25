@@ -45,6 +45,72 @@ function changeSet(f) { return { schema_version: 1, change_set_id: "prototype-ch
   base_commit: f.base, objective_digest: f.record.session.objective_digest, commit_message: "feat: add synthetic Prototype app source",
   operations: [{ action: "create", path: "prototypes/sample/index.html", content: "<!doctype html><title>Synthetic sample</title>\n", expected_digest: null }] }; }
 
+test("canonical Prototype inspection fetches new owner-main data without moving the commissioned checkout", t => {
+  const f = setup(t), remote = path.join(f.root, "remote.git"), publisher = path.join(f.root, "publisher");
+  git(f.root, "clone", "--branch", "main", remote, publisher);
+  git(publisher, "config", "user.name", "Native Landing Fixture");
+  git(publisher, "config", "user.email", "landing@example.invalid");
+  const newFile = "prototypes/sample/native-note.txt";
+  writeFileSync(path.join(publisher, newFile), "New canonical source — 你好\n");
+  git(publisher, "add", "."); git(publisher, "commit", "-m", "Native owner data advances main");
+  git(publisher, "push", "origin", "main");
+  const selected = git(publisher, "rev-parse", "HEAD"), ownerHead = git(f.repo, "rev-parse", "HEAD");
+  assert.throws(() => git(f.repo, "cat-file", "-t", selected));
+  assert.equal(git(f.repo, "rev-parse", "origin/main"), ownerHead);
+  let ownerInspections = 0, credentialPreparations = 0;
+  const fetched = [];
+  const execute = (command, args, options) => {
+    if (command !== "python3") {
+      if (command === "git" && args.includes("fetch")) {
+        fetched.push(args.slice(args.indexOf("fetch")));
+        assert.equal(options.env.GIT_CONFIG_GLOBAL, "/dev/null");
+        assert.equal(options.env.GIT_CONFIG_NOSYSTEM, "1");
+        assert.equal(options.env.GIT_TERMINAL_PROMPT, "0");
+        assert.equal(options.timeout, 30000);
+      }
+      return execFileSync(command, args, options);
+    }
+    ownerInspections++;
+    assert.equal(args[0], path.join(f.repo, "scripts/prototype_authoring.py"));
+    const snapshot = args[2], revision = args.at(-1);
+    assert.equal(git(snapshot, "rev-parse", "HEAD"), revision);
+    assert.equal(git(snapshot, "status", "--porcelain"), "");
+    assert.equal(readFileSync(path.join(snapshot, newFile), "utf8"), "New canonical source — 你好\n");
+    return JSON.stringify({ schema_version: 1, status: "source-inspected",
+      subject: { ...f.record.binding.subject, registry_revision: revision, source_revision: revision },
+      prototype: { id: "sample" }, model_source_scope: f.record.binding.model_source_scope,
+      source_manifest: [{ path: newFile }], design_profile_digest: textDigest("# Design\n"),
+      authority: { may_apply_source: false, may_invoke_model: false, may_approve_baseline: false, may_activate_runtime: false } });
+  };
+  const adapter = createPrototypeSourceAdapter({ workspaceRoot: f.root, execute,
+    agentSourceIdentity: { prepare() { credentialPreparations++; throw new Error("Inspection must not obtain a source credential"); } } });
+  const result = adapter.inspectCommittedSource({ prototype_id: "prototype:sample", source_revision: selected });
+  assert.equal(result.subject.source_revision, selected);
+  assert.equal(git(f.repo, "rev-parse", "HEAD"), ownerHead);
+  assert.equal(git(f.repo, "rev-parse", "origin/main"), selected);
+  assert.equal(git(f.repo, "status", "--porcelain"), "");
+  assert.equal(ownerInspections, 1); assert.equal(credentialPreparations, 0);
+  assert.deepEqual(fetched, [["fetch", "origin", "main"]]);
+
+  // A locally available object from another remote branch is still untrusted.
+  git(publisher, "switch", "-c", "feature/unmerged");
+  writeFileSync(path.join(publisher, "prototypes/sample/unmerged.txt"), "Unmerged source\n");
+  git(publisher, "add", "."); git(publisher, "commit", "-m", "Unmerged candidate");
+  git(publisher, "push", "origin", "feature/unmerged");
+  const unmerged = git(publisher, "rev-parse", "HEAD"); git(f.repo, "fetch", "origin", "feature/unmerged");
+  assert.throws(() => adapter.inspectCommittedSource({ prototype_id: "prototype:sample", source_revision: unmerged }),
+    { code: "prototype_source_inspection_unavailable" });
+  assert.equal(ownerInspections, 1);
+
+  // Failed canonical observation does not silently accept a cached object.
+  git(f.repo, "remote", "set-url", "origin", path.join(f.root, "missing.git"));
+  assert.throws(() => adapter.inspectCommittedSource({ prototype_id: "prototype:sample", source_revision: selected }),
+    { code: "prototype_source_inspection_unavailable" });
+  assert.equal(ownerInspections, 1); assert.equal(credentialPreparations, 0);
+  assert.equal(git(f.repo, "rev-parse", "HEAD"), ownerHead);
+  assert.equal(git(f.repo, "status", "--porcelain"), "");
+});
+
 test("Prototype draft and executor share actual UTF-8 byte bounds rather than accepting a later deterministic denial", t => {
   const f = setup(t); const value = changeSet(f);
   for (const content of ["界".repeat(30_000), "\ud800"]) {
