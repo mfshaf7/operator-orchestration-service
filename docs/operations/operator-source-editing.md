@@ -40,6 +40,14 @@ retain their different source scopes; there is no universal extension allowlist.
 
 ## Inspect, edit or import, and retain a draft
 
+A new ordinary Delivery session has no saved draft yet. Its native `GET <base>/draft`
+returns HTTP404 with `delivery_art_source_realization_draft_missing`; the editor then
+reads existing source files for the first manual edit or import. Typed source
+revision/digest conflicts retain HTTP409 and their owner reason. These are error
+responses, never canonical source projections or successful saves. Unknown failures
+remain a bounded HTTP500; do not manufacture a draft or invoke a model to bypass an
+unavailable first-use read.
+
 1. Read the current realization revision. Read `GET <base>/files` for the
    bounded source tree without content. Repeat `path=<relative-path>` to read
    up to48 distinct source text files within the existing256KiB capture budget.
