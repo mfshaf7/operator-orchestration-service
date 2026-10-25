@@ -58,17 +58,29 @@ export function createDeliveryHistoryReader({
     return { state: "not-recorded", detail: "This target has no retained Proposal or Prototype ingress binding.", data: null };
   }
 
-  async function readIntake({ callerId, correlationId, cursor = null, limit = PAGE_LIMIT }) {
+  async function readIntake({ callerId, correlationId, cursor = null, limit = PAGE_LIMIT, page: requestedPage = null, deliveryId = null, search = "" }) {
     const size = Number(limit);
     if (!Number.isSafeInteger(size) || size < 1 || size > PAGE_LIMIT ||
-        (cursor !== null && !/^after:[1-9][0-9]*$/.test(cursor))) {
+        (cursor !== null && !/^after:[1-9][0-9]*$/.test(cursor)) ||
+        (requestedPage !== null && (!Number.isSafeInteger(Number(requestedPage)) || Number(requestedPage) < 1 || Number(requestedPage) > 100000)) ||
+        (deliveryId !== null && !/^delivery-[1-9][0-9]*$/.test(deliveryId)) ||
+        (deliveryId !== null && (requestedPage !== null || search !== "")) ||
+        (search !== "" && requestedPage === null) ||
+        (cursor !== null && (requestedPage !== null || deliveryId !== null)) || typeof search !== "string" || search.length > 200) {
       throw new HttpError(400, "delivery_intake_page_invalid", "Intake requires limit1-20 and an optional after:<target-id> cursor.");
     }
     if (!prototype?.listTargets || !prototype.readTarget) {
       throw new HttpError(503, "delivery_history_owner_unavailable", "The native Delivery ingress reader is unavailable.");
     }
-    const targets = await prototype.listTargets();
+    const bounded = requestedPage !== null || deliveryId !== null;
+    if (bounded && !prototype.listTargetPage) throw new HttpError(503, "delivery_history_owner_unavailable", "The native paged target reader is unavailable.");
+    const collection = bounded ? await prototype.listTargetPage({ limit: deliveryId ? 1 : size,
+      page: deliveryId ? 1 : Number(requestedPage), scope: "history", search, recordId: deliveryId ? Number(deliveryId.slice(9)) : null }) : null;
+    const targets = collection ? collection.targets : await prototype.listTargets();
     if (!Array.isArray(targets) || targets.length > MAX_TARGETS) throw new HttpError(502, "delivery_intake_bound_exceeded", "Delivery target inventory exceeds its bounded reader.");
+    if (deliveryId && (targets.length !== 1 || targets[0].recordRef !== `openproject://work_packages/${deliveryId.slice(9)}`)) {
+      throw new HttpError(404, "delivery_not_found", "The exact package is not in Workspace Delivery ART.");
+    }
     const seen = new Set();
     const candidates = targets.filter((target) => {
       if (!Number.isSafeInteger(target.recordId) || target.recordId < 1 || seen.has(target.recordId)) {
@@ -103,7 +115,8 @@ export function createDeliveryHistoryReader({
       }
     }
     return { schema_version: 1, workflow_id: "delivery-intake-sources", sources, issues,
-      next_cursor: remaining.length > size ? `after:${page.at(-1).recordId}` : null,
+      next_cursor: !bounded && remaining.length > size ? `after:${page.at(-1).recordId}` : null,
+      ...(collection ? { page: collection.page, inspected_target_refs: targets.map(target => target.recordRef) } : {}),
       coverage: { state: issues.length ? "partial" : "current", detail: "Target-backed native ingress only. Unapplied ideas remain with Proposal or Prototype; absent proof is never a successful consumption." },
       projected_at: clock().toISOString() };
   }

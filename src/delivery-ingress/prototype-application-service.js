@@ -242,6 +242,7 @@ export function createPrototypeDeliveryApplicationService({
   }
 
   return { apply, get, readAcceptedReceipt, readTarget,
+    listTargetPage: options => adapter.listTargetPage(options),
     listTargets: () => adapter.listTargets() };
 
 }

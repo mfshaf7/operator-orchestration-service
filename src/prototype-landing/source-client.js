@@ -22,6 +22,7 @@ const gitEnv = { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GL
 export function createPrototypeLandingSourceClient({ authorityRoot, python = "python3", provider, resolveImportRoot = async () => null, clock = () => new Date(), minimumRevision = prototypeLandingManifest.source_authority.minimum_commit }) {
   const git = async (root, ...args) => (await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], { env: gitEnv, maxBuffer: 16 * 1024 * 1024, timeout: 60000 })).stdout.trim();
   const branch = (record) => `prototype-landing/${record.binding_digest.slice(7)}`;
+  const recordSnapshot = {};
 
   async function sandbox(revision, branchName, operation) {
     await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
@@ -163,7 +164,7 @@ export function createPrototypeLandingSourceClient({ authorityRoot, python = "py
     branch,
     async records() {
       await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
-      return readPrototypeRecords({ git, authorityRoot, revision: await provider.mainRevision(), minimumRevision });
+      return readPrototypeRecords({ git, authorityRoot, revision: await provider.mainRevision(), minimumRevision, snapshotCache: recordSnapshot });
     },
     state,
     prepare,

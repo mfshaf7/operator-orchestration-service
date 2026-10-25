@@ -1086,6 +1086,44 @@ export function createDeliveryService({
       }
     },
 
+    async listDeliveryConsoleOverview({ callerId, correlationId }) {
+      const targets = await openProjectClient.listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata: true });
+      if (!Array.isArray(targets) || targets.length > 8192) throw new HttpError(502, "delivery_overview_limit", "Delivery overview exceeds its bounded root limit.");
+      const seen = new Set();
+      const roots = targets.map(target => {
+        if (!Number.isSafeInteger(target.recordId) || target.recordId < 1 || seen.has(target.recordId) ||
+            target.recordRef !== `openproject://work_packages/${target.recordId}` ||
+            !["new", "ready", "in-progress", "blocked", "done", "parked", "retired"].includes(target.status)) {
+          throw new HttpError(502, "delivery_overview_identity", "Delivery overview target identity is invalid.");
+        }
+        seen.add(target.recordId);
+        return { id: target.recordId, record_ref: target.recordRef, subject: target.title,
+          status: target.status, owner_repo: target.ownerRepo ?? null, record_version: target.recordVersion,
+          target_pi: target.overview?.target_pi ?? null, architecture_anchor_ref: target.overview?.architecture_anchor_ref ?? null,
+          required_upstream_ref: target.overview?.required_upstream_ref ?? null };
+      });
+      const active = roots.filter(root => !["done", "retired"].includes(root.status));
+      const activeIds = new Set(active.map(root => root.id));
+      const activeById = new Map(active.map(root => [root.id, root]));
+      // Preserve the complete cross-project active and parked board. Terminal child
+      // graphs are unrelated to its counts or eligibility and stay with their
+      // exact package inspection/readiness workflows instead of every poll.
+      const initiatives = active.length ? await openProjectClient.listDeliveryScopedInitiatives({ recordIds: [...activeIds] }) : [];
+      if (!Array.isArray(initiatives) || initiatives.length !== active.length) throw new HttpError(502, "delivery_overview_scope", "Active Delivery scope is incomplete.");
+      for (const item of initiatives) {
+        const root = activeById.get(item.epic?.id);
+        if (!root || item.epic.record_ref !== root.record_ref || item.epic.status !== root.status) {
+          throw new HttpError(502, "delivery_overview_changed", "Delivery package changed during the overview read; refresh canonical truth.");
+        }
+        activeById.delete(root.id);
+      }
+      audit?.emit({ caller: { id: callerId }, correlation_id: correlationId, event_type: "delivery.initiatives.read",
+        backend: { result: "read", system: "openproject", target_ref: "openproject://projects/workspace-delivery-art" },
+        include_done: true, include_inactive: true, view: "console", outcome: "success", status: "ok" });
+      return { schema_version: 1, workflow_id: "delivery-console-overview", project: { identifier: "workspace-delivery-art" },
+        roots, operational_initiatives: initiatives, deferred_history_refs: roots.filter(root => !activeIds.has(root.id)).map(root => root.record_ref), mutation_authority: "none" };
+    },
+
     async listDeliveryInitiatives({
       callerId,
       correlationId,

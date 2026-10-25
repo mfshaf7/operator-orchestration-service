@@ -460,6 +460,7 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
   }
 
   return { apply, inspect, inspectReceipt, inspectTarget, recordEvent,
+    listTargetPage: options => openProjectClient.listDeliveryRegisterPage(options),
     listTargets: () => openProjectClient.listPrototypeDeliveryApplicationTargets() };
 
 }

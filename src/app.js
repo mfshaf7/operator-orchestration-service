@@ -1255,16 +1255,26 @@ async function handleProposalProjection({
   proposalWorkflowService,
   request,
   response,
+  url,
 }) {
   const caller = authenticateCaller(request, config);
   assertProposalWorkflowConfigured(config);
-  const projection = await proposalWorkflowService.getProjection({
+  const includeHistory = url.searchParams.get("include_history");
+  if (includeHistory !== null && !["true", "false"].includes(includeHistory)) {
+    throw new HttpError(400, "proposal_read_query_invalid", "include_history must be true or false.");
+  }
+  const projection = await proposalWorkflowService[includeHistory === "true" ? "getSnapshot" : "getProjection"]({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     proposalId,
   });
   sendSourceProjection(response, request, projection, () => ({
-    recordRef: projection.record_ref,
+    recordRef: includeHistory === "true" ? projection.projection.record_ref : projection.record_ref,
+    ...(includeHistory === "true" ? {
+      sourceRevision: sourceRevisionOf(projection.projection),
+      sourceTimestamp: sourceTimestampOf(projection.projection),
+      freshnessState: sourceFreshnessState(projection.projection),
+    } : {}),
     sourceOwner: "workspace-proposals",
   }));
 }
@@ -1627,7 +1637,11 @@ async function handleListDeliveryInitiatives({
     "include_inactive",
   ) ?? false;
 
-  const record = await deliveryService.listDeliveryInitiatives({
+  const view = url.searchParams.get("view");
+  if (view !== null && view !== "console") {
+    throw new HttpError(400, "delivery_view_invalid", "The optional view must be console.");
+  }
+  const record = await deliveryService[view === "console" ? "listDeliveryConsoleOverview" : "listDeliveryInitiatives"]({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     includeDone,
@@ -6959,6 +6973,7 @@ export function createApp({
           proposalWorkflowService,
           request,
           response,
+          url,
         });
         return;
       }
@@ -7173,7 +7188,7 @@ export function createApp({
         const caller = authenticateCaller(request, config);
         const result = await deliveryHistoryReader.readIntake({ callerId: caller.id,
           correlationId: createCorrelationId(request), cursor: url.searchParams.get("cursor"),
-          limit: url.searchParams.get("limit") ?? 20 });
+          limit: url.searchParams.get("limit") ?? 20, page: url.searchParams.get("page"), deliveryId: url.searchParams.get("delivery_id"), search: url.searchParams.get("search") ?? "" });
         sendSourceProjection(response, request, result, () => ({
           recordRef: "openproject://projects/workspace-delivery-art/intake", sourceOwner: "workspace-delivery-art",
           sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at,
