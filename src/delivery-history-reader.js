@@ -86,7 +86,15 @@ export function createDeliveryHistoryReader({
     // every workflow application for every initiative.
     for (let index = 0; index < page.length; index += 3) {
       const batch = page.slice(index, index + 3);
-      const results = await Promise.allSettled(batch.map((target) => intakeForTarget(target, callerId, correlationId)));
+      const results = await Promise.allSettled(batch.map((target) => {
+        // The owner collection already validated current project/type/parent
+        // scope and supplied this target snapshot. A Proposal needs its fresh
+        // reciprocal owner projection, not another target read and schema form.
+        // Prototype rows still reread their trusted application activity.
+        const observed = decodePrototypeDeliveryTargetMarker(target.description)
+          ? null : { target, source_kind: "proposal", application: null };
+        return intakeForTarget(target, callerId, correlationId, observed);
+      }));
       for (let i = 0; i < results.length; i++) {
         const result = results[i], target = batch[i];
         if (result.status === "fulfilled" && result.value.state === "current") sources.push(result.value.data);

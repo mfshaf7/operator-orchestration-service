@@ -3,6 +3,8 @@ security_evidence:
   review_areas: [runtime, delivery]
   reviewed_artifacts:
     - src/delivery-history-reader.js
+    - src/openproject-client.js
+    - test/delivery-history-reader.test.js
     - src/delivery-ingress/prototype-adapter.js
     - src/delivery-ingress/prototype-application-service.js
     - src/app.js
@@ -42,6 +44,20 @@ without reopening work or manufacturing history.
 - why it escaped earlier controls: live acceptance followed application commands and terminal outcomes, but did not cold-read the same actual product across all Delivery surfaces after it left the active queue.
 
 ## Source Changes
+
+Native commissioning measured221 owner calls/45 schema forms for Intake and
+46–103 seconds after inventory alone, reaching the existing90-second readiness
+read limit. Restrict the target collection to the configured Epic type while
+retaining explicit all-status semantics and local parent/type checks. Live
+query parity preserves all43 targets (38done,1parked,4retired). Proposal Intake
+reuses that fresh owner-list target snapshot and still rereads its reciprocal
+source proof every request. Prototype evidence continues its original trusted
+activity read. Exact package history and command authorization are unchanged.
+No cross-request cache, altered timeout or readiness bypass is introduced.
+An isolated read-only program evaluated the candidate against the same live
+owner backend through the production transport. Intake fell from79485ms to
+5045ms; requests221to93 and forms45to5. All four source records and37 explicit
+missing-proof results were identical, including original receipt custody.
 
 The final original-record comparison also distinguishes closeout
 `receipt.ref`/`receipt.digest` from `outcome_ref` and `command_digest`.

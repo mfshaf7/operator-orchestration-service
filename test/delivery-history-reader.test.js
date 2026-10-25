@@ -35,3 +35,17 @@ test('native intake is paginated, bounded, independently fails closed and does n
  const d=dependencies();const marker=encodePrototypeDeliveryTargetMarker({schema_version:1,application_id:'application:test',ingress_id:'ingress:test',source_record_ref:'record:test',source_record_version:'v1',packet_ref:'packet:test',packet_digest:'sha256:test',baseline_ref:'baseline:test',operator_decision:{decision:'apply',operator_id:'reader',decision_ref:'decision:test'},readiness_receipt_ref:{uri:'receipt:test',digest:'sha256:test'}});
  d.prototypeDeliveryApplicationService.listTargets=async()=>[{...target,description:marker},{...target,recordId:44,recordRef:'openproject://work_packages/44',description:marker},{...target,recordId:45,recordRef:'openproject://work_packages/45',description:''}];let reads=0;d.prototypeDeliveryApplicationService.readTarget=async({recordId})=>{reads++;if(recordId===44)throw Error('owner unavailable');return {target,source_kind:'prototype',application:entry()};};const reader=createDeliveryHistoryReader(d);const first=await reader.readIntake({limit:1});assert.equal(first.sources.length,1);assert.equal(first.next_cursor,'after:42');const second=await reader.readIntake({limit:1,cursor:first.next_cursor});assert.equal(second.sources.length,0);assert.equal(second.issues[0].target_ref,'openproject://work_packages/44');assert.equal(second.coverage.state,'partial');assert.equal(second.next_cursor,null);assert.equal(reads,2);await assert.rejects(reader.readIntake({limit:21}),e=>e.code==='delivery_intake_page_invalid');await assert.rejects(reader.readIntake({cursor:'after:not-id'}),e=>e.code==='delivery_intake_page_invalid');
 });
+
+
+test('Proposal Intake reuses the fresh scoped collection target while rereading original source proof on every request', async () => {
+ const d=dependencies();let sourceReads=0;let receipt='receipt:proposal-original';
+ d.prototypeDeliveryApplicationService.listTargets=async()=>[{...target,originIdeaRef:'idea-10'}];
+ d.prototypeDeliveryApplicationService.readTarget=async()=>{throw Error('Unnecessary target/schema roundtrip');};
+ d.proposalWorkflowService.getProjection=async()=>{sourceReads++;return {record_ref:'openproject://work_packages/10',record_version:'current-version-99',route:{target:'delivery',source_custody:custody},handoff:{state:'applied',packet_ref:'packet:original',target_record_ref:ref,target_receipt_ref:receipt}};};
+ const reader=createDeliveryHistoryReader(d);const first=await reader.readIntake({});
+ assert.equal(first.sources.length,1);assert.equal(first.sources[0].receipt_ref,receipt);assert.equal(first.sources[0].source_version,'not-projected');
+ receipt='receipt:proposal-current';const second=await reader.readIntake({});
+ assert.equal(second.sources[0].receipt_ref,receipt);assert.equal(sourceReads,2);assert.equal(second.coverage.state,'current');
+ d.prototypeDeliveryApplicationService.listTargets=async()=>[{...target,recordRef:'openproject://work_packages/999',originIdeaRef:'idea-10'}];
+ const foreign=await reader.readIntake({});assert.equal(foreign.sources.length,0);assert.equal(foreign.coverage.state,'partial');assert.equal(sourceReads,2);
+});

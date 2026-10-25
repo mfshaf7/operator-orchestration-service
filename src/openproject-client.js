@@ -6793,7 +6793,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     async listPrototypeDeliveryApplicationTargets() {
       const payloads = (await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
-        { includeAllStatuses: true },
+        {
+          includeAllStatuses: true,
+          // This reader needs current top-level Epic metadata, not every
+          // descendant in ART. Explicit filters retain closed/inactive work;
+          // local type and parent checks below remain authoritative.
+          filters: Number.isSafeInteger(config.deliveryTopLevelTypeId) && config.deliveryTopLevelTypeId > 0
+            ? [{ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } }]
+            : null,
+        },
       )).filter(
         (payload) =>
           !parseWorkPackageIdFromHref(payload?._links?.parent?.href) &&
