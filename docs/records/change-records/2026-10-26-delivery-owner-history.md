@@ -43,6 +43,12 @@ without reopening work or manufacturing history.
 
 ## Source Changes
 
+The final original-record comparison also distinguishes closeout
+`receipt.ref`/`receipt.digest` from `outcome_ref` and `command_digest`.
+The native receipt remains the receipt; the outcome stays linked evidence.
+Proposal's current record version cannot stand in for a historical handoff
+source version, so an unretained version is explicitly `not-projected`.
+
 - changed workflow, adapter, or contract: add paginated target-backed Intake and exact-package history GETs to the existing source-authority contract. Preserve original receipt custody independently from later current owner changes. Require exact Delivery scope before history disclosure and original trusted automation evidence for Prototype consumption. Proposal consumption requires its applied reciprocal target and resolved native custody; absent historical time stays unprojected.
 - tests or validator added: authenticated API absence/foreign-scope cases; original evidence chain, section outage and foreign owner, missing application, Proposal backlink, bounded pagination, duplicate trusted activity and historical ownership change. Console consumer tests separately cover Current/History, partial/unavailable evidence and source-revision refresh.
 - related change records: None

@@ -1847,3 +1847,7 @@ Use Refresh to retry unavailable owner evidence. Repair the actual owner failure
 rather than replacing it with fixture or browser-local success. Current-stage
 filters may hide completed work from active queues; completed history must stay
 discoverable and reviewable from the normal Console.
+
+Closeout history preserves the native `receipt.ref` and `receipt.digest`; the
+separate `outcome_ref` remains linked evidence. A Proposal handoff whose original
+source version is not retained reports `not-projected`, never its current version.
