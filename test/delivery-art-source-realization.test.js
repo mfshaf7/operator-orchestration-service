@@ -185,6 +185,7 @@ test("source realization stages CGG-bound output before exact acceptance and cre
   assert.equal(getApplyCount(), 0);
   assert.equal(started.attempt.change_set.operations[0].content, undefined);
   assert.equal(getProjectionInput().sourceRealization.objective, objective);
+  assert.equal((await service.draft({ callerId: "governance-operations-console", operatorId: "operator:workspace-owner", workItemId: "work-item-1285" })).objective, objective);
   assert.equal(getProjectionInput().sourceRealization.repository_context.clean, true);
 
   const replayed = await service.start({
@@ -495,6 +496,7 @@ test('ordinary Delivery manual/import drafts have the same retained amendment/re
   assert.deepEqual(await f.service.saveDraft({...args,request:command}),{...saved,replayed:true});
   const draft=await f.service.draft(args);assert.equal(draft.revision,amended.revision);assert.equal(draft.change_set.operations[0].content,changed.operations[0].content);
   assert.equal(draft.operator_draft.input_origin,'import');
+  assert.equal(draft.objective, command.objective);
   await assert.rejects(f.service.draft({...args,operatorId:'other'}),{code:'delivery_art_source_realization_identity_mismatch'});
   await assert.rejects(f.service.files({...args,callerId:'other'}),{code:'delivery_art_source_realization_identity_mismatch'});
   await assert.rejects(f.service.saveDraft({...args,request:{...changed,command_id:'save:delivery:stale'}}),{code:'delivery_art_source_realization_revision_stale'});

@@ -619,7 +619,8 @@ export function createDeliveryArtSourceRealizationService({
     const record = readRecord(session), attempt = record?.attempts.at(-1);
     if (!attempt?.change_set) throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_missing", "No retained source draft is available.", { statusCode: 404 });
     return { schema_version: 1, workflow_id: "delivery-art-source-draft", session_id: session.session_id,
-      revision: record.revision, digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
+      revision: record.revision, digest: attempt.change_set_digest, objective: attempt.objective ?? attempt.request?.objective,
+      change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
       operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
   }
   return { configured, read, start, cancel: bind("cancel"), continue: bind("continue"),

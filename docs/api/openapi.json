@@ -25094,6 +25094,7 @@
                   "session_id": "prototype-source-session:sample",
                   "revision": "2026-10-18T14:00:00Z",
                   "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "objective": "Draft a minimal synthetic browser-local prototype.",
                   "accepted": false,
                   "change_set": {
                     "schema_version": 1,
@@ -32130,6 +32131,7 @@
                   "session_id": "source-session:sample",
                   "revision": "2026-10-25T00:00:00Z",
                   "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "objective": "Author a small synthetic example application.",
                   "change_set": {
                     "schema_version": 1,
                     "change_set_id": "operator-change:sample",
@@ -79320,6 +79322,7 @@
           "session_id",
           "revision",
           "digest",
+          "objective",
           "change_set",
           "accepted"
         ],
@@ -79345,6 +79348,11 @@
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 16384
           },
           "change_set": {
             "$ref": "#/components/schemas/PrototypeSourceChangeSet"
@@ -83719,6 +83727,11 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
+          "objective": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 12000
+          },
           "change_set": {
             "$ref": "#/components/schemas/PrototypeSourceChangeSet"
           },
@@ -83742,6 +83755,7 @@
           "session_id",
           "revision",
           "digest",
+          "objective",
           "change_set",
           "accepted",
           "operator_draft"
