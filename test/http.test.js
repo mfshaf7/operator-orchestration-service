@@ -514,6 +514,106 @@ test("an unavailable canonical closeout does not acquire a fresh source envelope
   assert.notEqual(response.body.artifact_type, "console-source-projection");
 });
 
+test("Proposal snapshot, command preflight and history pages retain separate stable source views", async () => {
+  const projection = { proposal_id: "idea-851", record_ref: "openproject://work_packages/851",
+    record_version: "version-2", projection_state: "current", updated_at: "2026-10-27T00:00:00Z" };
+  const snapshot = { schema_version: 1, workflow_id: "proposal-snapshot", projection,
+    history: { record_version: "version-2", events: [] } };
+  const app = createApp({ config: createBaseConfig(), proposalWorkflowService: {
+    async getProjection() { return projection; }, async getSnapshot() { return snapshot; },
+    async getHistory({ cursor }) { return { record_version: "version-2", events: [{ cursor: cursor || "activity-page:1" }] }; },
+  } });
+  const get = (query, accept = "application/vnd.mfshaf7.console-source-projection+json; version=1", route = "projection") => executeRequest(app, {
+    method: "GET", url: `/v1/proposals/idea-851/${route}${query}`,
+    headers: { "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret", accept },
+  });
+  const combined = await get("?include_history=true");
+  const plain = await get("");
+  const repeated = await get("?include_history=true");
+  const explicitFalse = await get("?include_history=false");
+  const ignored = await get("?unrelated=not-authority&include_history=true");
+  for (const response of [combined, plain, repeated, explicitFalse, ignored]) assert.equal(response.statusCode, 200);
+  assert.equal(combined.body.revision.event_sequence, 2);
+  assert.equal(plain.body.revision.event_sequence, 2);
+  assert.equal(combined.body.revision.source_revision, plain.body.revision.source_revision);
+  assert.notDeepEqual(combined.body.binding, plain.body.binding);
+  assert.deepEqual(combined.body.binding, repeated.body.binding);
+  assert.deepEqual(combined.body.revision, repeated.body.revision);
+  assert.deepEqual(combined.body.projection, repeated.body.projection);
+  assert.deepEqual(combined.body.binding, ignored.body.binding);
+  assert.deepEqual(plain.body.binding, explicitFalse.body.binding);
+  assert.deepEqual(combined.body.projection, snapshot);
+  assert.deepEqual(plain.body.projection, projection);
+  assert.deepEqual((await get("?include_history=true", "application/json")).body, snapshot);
+  assert.deepEqual((await get("", "application/json")).body, projection);
+  const page1 = await get("", undefined, "history");
+  const explicitPage1 = await get("?cursor=activity-page%3A1", undefined, "history");
+  const page2 = await get("?cursor=activity-page%3A2", undefined, "history");
+  for (const response of [page1, explicitPage1, page2]) assert.equal(response.statusCode, 200);
+  assert.deepEqual(page1.body.binding, explicitPage1.body.binding);
+  assert.notDeepEqual(page1.body.binding, page2.body.binding);
+  assert.equal(page1.body.revision.event_sequence, page2.body.revision.event_sequence);
+  assert.equal((await get("?include_history=invalid")).statusCode, 400);
+});
+
+test("query-shaped source reads bind normalized list windows and ordered file selections", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.callerSecrets = { "openclaw-telegram-enhanced": "test-secret" };
+  config.deliveryArt.workSession.callerOperatorBindings = { "openclaw-telegram-enhanced": "operator:test" };
+  const time = "2026-10-27T00:00:00Z";
+  const app = createApp({ config,
+    prototypeDeliveryApplicationService: {
+      async listTargets() { return []; },
+      async readTarget() { throw new Error("No empty-list target read"); },
+      async listTargetPage({ page }) { return { targets: [], page: { number: page } }; },
+    },
+    deliveryService: {
+      async listDeliveryInitiatives(args) { return { view: "full", include_done: args.includeDone, include_inactive: args.includeInactive }; },
+      async listDeliveryConsoleOverview(args) { return { view: "console", include_done: args.includeDone, include_inactive: args.includeInactive }; },
+    },
+    repositoryOwnerBootstrapService: { async list(args) { return { records: [{ updated_at: time }], limit: args.limit }; } },
+    prototypeAuthoringService: {
+      async list(args) { return { requests: [{ updated_at: time }], limit: args.limit }; },
+      async files(args) { return { revision: time, files: args.requestedPaths }; },
+    },
+    repositoryCustodyService: { async list(args) { return { records: [{ request: { requested_at: time } }], cursor: args.cursor, limit: args.limit }; } },
+    deliveryArtWorkSessionService: { async readRealizationSource(args) { return { revision: time, files: args.requestedPaths }; } },
+  });
+  const get = url => executeRequest(app, { method: "GET", url, headers: {
+    "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret", "x-oos-operator-id": "operator:test",
+    accept: "application/vnd.mfshaf7.console-source-projection+json; version=1",
+  } });
+  const cases = [
+    ["/v1/delivery-initiatives", "", "?include_done=true&include_inactive=false", "?view=console"],
+    ["/v1/repository-owner-bootstrap/requests", "?owner_repo=example", "?limit=25&owner_repo=example", "?owner_repo=example&limit=1"],
+    ["/v1/prototype-source-requests", "", "?limit=100", "?limit=1"],
+    ["/v1/repository-custody/requests", "", "?limit=25", "?limit=1"],
+    ["/v1/repository-custody/requests", "?limit=1", "?limit=01", `?limit=1&cursor=${"a".repeat(64)}`],
+    ["/v1/prototype-source-requests/request%3Atest/files", "?path=a&path=b", "?path=a&path=b", "?path=b&path=a"],
+    ["/v1/delivery-work-items/work-item-123/work-session/realization/files", "?path=a&path=b", "?path=a&path=b", "?path=b&path=a"],
+  ];
+  for (const [route, initial, equivalent, different] of cases) {
+    const first = await get(route + initial);
+    const same = await get(route + equivalent);
+    const other = await get(route + different);
+    for (const response of [first, same, other]) assert.equal(response.statusCode, 200, JSON.stringify({ route, body: response.body }));
+    assert.deepEqual(first.body.binding, same.body.binding, route);
+    assert.deepEqual(first.body.projection, same.body.projection, route);
+    assert.deepEqual(first.body.revision.source_revision, same.body.revision.source_revision, route);
+    assert.notDeepEqual(first.body.binding, other.body.binding, route);
+  }
+  const intake = await get("/v1/delivery-intake/sources");
+  const intakeDefault = await get("/v1/delivery-intake/sources?limit=020");
+  const intakePage = await get("/v1/delivery-intake/sources?page=1");
+  const intakePageAgain = await get("/v1/delivery-intake/sources?limit=20&page=01");
+  const intakeSearch = await get("/v1/delivery-intake/sources?page=1&search=example");
+  for (const response of [intake, intakeDefault, intakePage, intakePageAgain, intakeSearch]) assert.equal(response.statusCode, 200);
+  assert.deepEqual(intake.body.binding, intakeDefault.body.binding);
+  assert.deepEqual(intakePage.body.binding, intakePageAgain.body.binding);
+  assert.notDeepEqual(intake.body.binding, intakePage.body.binding);
+  assert.notDeepEqual(intakePage.body.binding, intakeSearch.body.binding);
+});
+
 test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {
   const config = createBaseConfig();
   config.openProject.customFieldProposalWorkflowStateId = null;

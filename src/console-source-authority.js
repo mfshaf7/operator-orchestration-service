@@ -184,6 +184,23 @@ export function sourceRevisionDigest(projection) {
     .digest("hex")}`;
 }
 
+// Callers supply validated, normalized representation selectors, never the
+// unfiltered query string. Array order is part of a selected-files view.
+export function sourceReadViewRef(url, selectors = {}) {
+  const query = new URLSearchParams();
+  for (const key of Object.keys(selectors).sort()) {
+    const value = selectors[key];
+    if (value === null || value === undefined) continue;
+    for (const entry of Array.isArray(value) ? value : [value]) {
+      query.append(key, String(entry));
+    }
+  }
+  const suffix = query.toString();
+  // A permitted file selection can exceed the binding's 1024-character bound.
+  const view = suffix ? createHash("sha256").update(suffix).digest("hex") : null;
+  return `oos://${url.pathname.replace(/^\//, "")}${view ? `?view=${view}` : ""}`;
+}
+
 function resolveEventSequence({ eventSequence, sourceRevision, sourceTimestamp }) {
   if (eventSequence !== undefined) {
     if (!Number.isSafeInteger(eventSequence) || eventSequence < 0) {
