@@ -9,6 +9,7 @@ import {
   createConsoleSourceReceiptBinding,
   sourceFreshnessState,
   sourceRevisionDigest,
+  sourceReadViewRef,
 } from "../src/console-source-authority.js";
 
 const observedAt = "2026-09-27T00:00:00.000Z";
@@ -180,3 +181,16 @@ test("machine schemas and documented projection routes publish the negotiated co
 function json(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
 }
+
+
+test("read-view identity uses only normalized owner selectors and preserves selected-file order", () => {
+  const url = new URL("http://localhost/v1/source?ignored=secret-like-value");
+  assert.equal(sourceReadViewRef(url), "oos://v1/source");
+  const first = sourceReadViewRef(url, { limit: 25, cursor: null, view: "console" });
+  assert.equal(first, sourceReadViewRef(new URL("http://localhost/v1/source"), { view: "console", limit: 25 }));
+  assert.equal(first.includes("secret-like-value"), false);
+  assert.notEqual(first, sourceReadViewRef(url, { limit: 26, view: "console" }));
+  assert.notEqual(sourceReadViewRef(url, { path: ["a", "b"] }), sourceReadViewRef(url, { path: ["b", "a"] }));
+  const maximumSelection = Array.from({ length: 48 }, (_, i) => `${i}-${"x".repeat(235)}`);
+  assert.ok(sourceReadViewRef(url, { path: maximumSelection }).length <= 1024);
+});

@@ -18,6 +18,25 @@ services continue to own their workflow records, revisions, events, and
 receipts. Route handlers only provide the domain owner and canonical record
 coordinates that cannot be inferred safely.
 
+Representation selectors are part of source identity, not record version.
+Proposal projection and its `include_history=true` snapshot have different
+payloads at the same canonical version; they therefore have distinct
+`binding.source_ref` values. The omitted/false history flag denotes one plain
+view. Proposal history pages normalize the omitted/empty cursor to page1.
+Delivery Intake pages/search and initiative-list filters and its optional Console view, bounded owner-bootstrap,
+Prototype-source and Repository Custody list windows, and ordered Prototype
+or Delivery source-file selections likewise identify distinct read views.
+
+Handlers pass only validated, normalized owner selectors to the shared identity
+helper. It sorts selector keys, preserves repeated file-selector order, and
+hashes the encoded selectors into the source reference so the maximum valid
+file selection stays within the existing binding length bound. Unknown query
+fields never create another authority binding. Workspace Intake and Inventory
+list queries already scope their record references. Unnegotiated JSON lists
+are unaffected. No new protocol version, event counter, business mutation or
+consumer integrity exception is introduced. Same-view conflicting state must
+still fail closed.
+
 Work Design and Refinement packet reads are aggregate observations: they carry
 history and a per-read `projected_at`, not only the input ART record. Their
 envelope uses the existing full-projection digest and projection-time ordering.

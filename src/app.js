@@ -67,6 +67,7 @@ import {
   createConsoleSourceProjection,
   sourceFreshnessState,
   sourceRevisionOf,
+  sourceReadViewRef,
   sourceRevisionDigest,
   sourceTimestampOf,
 } from "./console-source-authority.js";
@@ -1276,6 +1277,7 @@ async function handleProposalProjection({
       freshnessState: sourceFreshnessState(projection.projection),
     } : {}),
     sourceOwner: "workspace-proposals",
+    sourceRef: sourceReadViewRef(url, { include_history: includeHistory === "true" }),
   }));
 }
 
@@ -1522,6 +1524,7 @@ async function handleProposalHistory({
   sendSourceProjection(response, request, history, () => ({
     recordRef: proposalRecordRef(proposalId),
     sourceOwner: "workspace-proposals",
+    sourceRef: sourceReadViewRef(url, { cursor: url.searchParams.get("cursor") || "activity-page:1" }),
     sourceRevision: history.record_version,
     sourceTimestamp: history.events.at(-1)?.occurred_at,
   }));
@@ -1651,6 +1654,7 @@ async function handleListDeliveryInitiatives({
   sendSourceProjection(response, request, record, () => ({
     recordRef: "openproject://projects/workspace-delivery-art/initiatives",
     sourceOwner: "workspace-delivery-art",
+    sourceRef: sourceReadViewRef(url, { include_done: includeDone, include_inactive: includeInactive, view }),
     sourceRevision: sourceRevisionDigest(record),
     sourceTimestamp: new Date().toISOString(),
   }));
@@ -2069,6 +2073,7 @@ async function handleDeliveryArtSourceRealization({
     sendSourceProjection(response, request, result, () => ({
       recordRef: `openproject://work_packages/${String(workItemId).replace(/^work-item-/, "")}/source-realization${action === "read" ? "" : `/${action}`}`,
       sourceOwner: "workspace-delivery-art",
+      sourceRef: sourceReadViewRef(url, action === "files" ? { path: requestedPaths } : {}),
       sourceRevision: sourceRevisionDigest(result),
       sourceTimestamp: result.revision ?? new Date().toISOString(),
     }));
@@ -3827,6 +3832,7 @@ async function handleRepositoryOwnerBootstrap({ action, config, repositoryOwnerB
     const result = await repositoryOwnerBootstrapService[action](args);
     const times = action === "list" ? result.records.map(record => record.updated_at).sort() : [];
     sendSourceProjection(response, request, result, () => ({ sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+      sourceRef: sourceReadViewRef(url, action === "list" ? { owner_repo: args.ownerRepo, limit: args.limit } : {}),
       sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
       recordRef: action === "list" ? `oos://repository-owner-bootstrap/${args.ownerRepo}` : `oos://repository-owner-bootstrap/requests/${requestId}${action === "draft" ? "/draft" : ""}` }));
     return;
@@ -3854,6 +3860,7 @@ async function handlePrototypeSource({ action, config, prototypeAuthoringService
       sendSourceProjection(response, request, result, () => ({
         recordRef: action === "list" ? "oos://prototype-source-requests" : `oos://prototype-source-requests/${requestId}${["draft", "files"].includes(action) ? `/${action}` : ""}`,
         sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+        sourceRef: sourceReadViewRef(url, action === "list" ? { limit: args.limit } : action === "files" ? { path: args.requestedPaths } : {}),
         sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at ?? new Date().toISOString(),
       }));
       return;
@@ -4278,6 +4285,7 @@ async function handleRepositoryCustodyList({ config, repositoryCustodyService, r
   sendSourceProjection(response, request, result, () => ({
     recordRef: "oos://repository-custody/requests",
     sourceOwner: "operator-orchestration-service",
+    sourceRef: sourceReadViewRef(url, { cursor: url.searchParams.get("cursor"), limit: Number(url.searchParams.get("limit") ?? 25) }),
     sourceRevision: sourceRevisionDigest(result),
     sourceTimestamp: result.records.reduce(
       (latest, record) => {
@@ -7191,6 +7199,10 @@ export function createApp({
           limit: url.searchParams.get("limit") ?? 20, page: url.searchParams.get("page"), deliveryId: url.searchParams.get("delivery_id"), search: url.searchParams.get("search") ?? "" });
         sendSourceProjection(response, request, result, () => ({
           recordRef: "openproject://projects/workspace-delivery-art/intake", sourceOwner: "workspace-delivery-art",
+          sourceRef: sourceReadViewRef(url, { cursor: url.searchParams.get("cursor"),
+            limit: Number(url.searchParams.get("limit") ?? 20),
+            page: url.searchParams.has("page") ? Number(url.searchParams.get("page")) : null,
+            delivery_id: url.searchParams.get("delivery_id"), search: url.searchParams.get("search") ?? "" }),
           sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at,
         }));
         return;
