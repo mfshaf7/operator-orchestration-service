@@ -745,7 +745,8 @@ export function createDeliveryArtLifecycleController({
         projectedWorkStartState === "implementation-ready" &&
         (
           ["missing", "local-draft", "legacy-local-draft"].includes(reviewState) ||
-          (reviewState === "merge-ready" && pullRequestState === "stale-head")
+          (reviewState === "merge-ready" &&
+            ["open", "draft", "stale-head"].includes(pullRequestState))
         )
       )
     );

@@ -1355,6 +1355,13 @@ Treat these outcomes distinctly:
 
 - registry rejection: no OpenProject projection occurred; fix authority,
   schema, dependency, or registry availability before retrying
+- corrected local source while the pull request remains open: the ordinary
+  session read checks the current checkout even when the prior packet is
+  merge-ready. Dirty, wrong-branch, unpublished or diverged source returns to
+  source work. Continue the same approved Gary scope to publish the corrected
+  clean head; expired access uses the existing approved renewal. No earlier
+  packet or registry history is removed. Checks and human approval must bind
+  the new head before merge; the previous review never approves a correction.
 - corrected pre-merge source head: regenerate the local Review Packet through
   lifecycle reconciliation while the same pull request remains open. The
   lifecycle revalidates the clean pushed head and current evidence, then its

@@ -325,6 +325,16 @@ export function deriveDeliveryArtLifecycleState(facts) {
   }
 
   if (facts?.review_packet === "merge-ready") {
+    if (
+      ["open", "draft", "stale-head"].includes(facts?.pull_request) &&
+      ["wrong-branch", "dirty", "uncommitted", "unpushed", "base-diverged"].includes(facts?.source)
+    ) {
+      return gate(
+        "source-work-required",
+        DELIVERY_ART_LIFECYCLE_GATES.SOURCE_WORK,
+        "Current source must match the clean, pushed pull-request head before review or merge can continue.",
+      );
+    }
     if (facts?.pull_request === "stale-head") {
       if (facts?.exceptions === "unapproved") {
         return gate(

@@ -18,6 +18,38 @@ security_evidence:
 
 # 2026-08-26 Authoritative Review Evidence Projection
 
+## 2026-10-28 Maintenance: Local Corrections Before Merge
+
+During1332, PR347 retained its earlier head after the same session's corrected
+Gary worktree passed validation. The merge-ready inspector checked local source
+only after the remote PR changed, hiding publication and approved renewal.
+Earlier tests started with an already-pushed correction and missed that first
+step. This is owner-repo maintenance of the existing lifecycle, with no new ART
+scope, workflow, permission or Architecture Packet.
+
+The inspector now observes the current checkout while the same merge-ready PR
+remains open/draft. The evaluator routes dirty, wrong-branch, unpublished or
+diverged source back to its existing source gate before review or merge.
+The normal Gary publisher and approved renewal retain their original scope;
+published corrections require exact-head evidence, CI and human review.
+Earlier durable packets remain immutable. Merged/finalized history still does
+not require a cleaned local worktree.
+
+Four faithful regression cases fail against the accepted base, then pass with
+the correction. They include actual work-session publication/renewal action
+mapping and preservation of the earlier packet. Existing remote-head revision,
+same-head evidence, and terminal source cleanup cases remain required. The
+primary operator surface now describes this pre-merge continuation.
+
+The observed session was recovered by moving only its reconstructable local
+packet cache after resolving original WGCF custody; normal Gary publication
+then sent the corrected head. That recovery does not prove repaired runtime.
+Exact Security reacceptance, local commissioning and source-resource retirement
+remain required before subsequent1332 native operating work. This maintenance
+rolls back by reverting the lifecycle change and paired source acceptance while
+preserving packets, intents, Git history and owner evidence. Existing security
+metadata above continues to identify this control's implementation files.
+
 ## Summary
 
 Added one authenticated, adapter-independent OOS projection that compiles
