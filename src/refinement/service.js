@@ -423,7 +423,7 @@ export function createRefinementService({
           provider_output_schema_ref: OUTPUT_SCHEMA_REF,
           input: {
             task_instruction:
-              "Suggest one bounded value for the selected Refinement metadata field. Do not approve or apply it.",
+              "Answer the operator about the selected Refinement metadata field. Only when explicitly asked to draft, fill or revise it, suggest one bounded value with required_operator_action=review. For questions, evaluation or ambiguous requests, return value=null and required_operator_action=none; explain or clarify in summary and rationale. Do not approve or apply anything.",
             operator_prompt: request.operator_prompt,
             model_safe_packet: {
               packet_ref: projection.packet_ref,
@@ -451,7 +451,8 @@ export function createRefinementService({
         gateway?.task?.contract_ref !== CONTRACT_REF ||
         gateway?.task?.version !== CONTRACT_VERSION ||
         output?.field_key !== field.field_key ||
-        output?.required_operator_action !== "review" ||
+        !["review", "none"].includes(output?.required_operator_action) ||
+        (output?.required_operator_action === "none" && output?.value !== null) ||
         typeof gateway?.audit_ref !== "string" ||
         (
           output?.value !== null &&

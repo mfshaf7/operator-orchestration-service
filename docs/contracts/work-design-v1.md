@@ -66,6 +66,16 @@ The assist result preserves the existing Console concepts: confidence,
 required operator action, prose guidance, affected node, and bounded patch
 summary. `mocked` is not a valid live response status.
 
+An optional `draft_scope` carries the actual local note/diagram/tree fields,
+bounded conversation and advice-text format. Its role, package, source and
+revision must match the ordinary request. It enters the canonical context
+digest and CGG content before model invocation; it never bypasses admission by
+being concatenated to the operator prompt. The existing Work Design profile
+and task remain authoritative. The Console may validate the returned advice
+text as an inert local draft proposal and edit only explicitly requested local
+fields. Questions and ambiguous requests do not edit. This does not start apply,
+approve a context brief, commit a PI, create ART records or grant tool authority.
+
 ## Apply Sequence
 
 1. The Console sends the exact accepted draft id, digest, tree, source revision,

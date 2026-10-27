@@ -384,6 +384,26 @@ test("Work Design assist fails closed when the governed profile is inactive", as
   );
 });
 
+test("Work Design local draft scope enters digest-bound CGG content and keeps the configured profile", async () => {
+  const request = assistRequest();
+  request.draft_scope = { response_format: "Return inert JSON advice text", conversation: [{ role: "operator", text: "Keep my manual Feature" }],
+    scope: { role: "work-design-tree", ref: "tree:feature-1", packageRef: request.package_ref,
+      sourceRef: request.source_ref, sourceRevision: request.source_revision, context: "Local tree draft",
+      fields: [{ key: "tree", label: "Tree", kind: "tree", value: request.tree_draft.tree }] } };
+  let admitted;
+  const runtime = service({ contextClient: { async project(input) { admitted = input; return readyProjection(input); } } });
+  const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
+  assert.deepEqual(JSON.parse(admitted.context).draft_scope, request.draft_scope);
+  assert.equal(admitted.context_digest, `sha256:${createHash("sha256").update(admitted.context).digest("hex")}`);
+  assert.equal(result.evidence.model_profile_id, "delivery-work-design-advisor-v1");
+  for (const changed of [{ sourceRevision: "version-18" }, { sourceRef: "openproject://work_packages/999" }, { packageRef: "delivery-package:999" }, { role: "work-design-context" }]) {
+    admitted = null;
+    const invalid = structuredClone(request); Object.assign(invalid.draft_scope.scope, changed);
+    await assert.rejects(runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request: invalid }), (error) => error.code === "request_invalid");
+    assert.equal(admitted, null);
+  }
+});
+
 test("Work Design assist rejects stale source and malformed model output", async () => {
   const digestMismatch = assistRequest();
   digestMismatch.tree_draft.tree_digest = `sha256:${"d".repeat(64)}`;
