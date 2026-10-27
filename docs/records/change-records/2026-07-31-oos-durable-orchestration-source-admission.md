@@ -6,6 +6,10 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
+    - dev-integration/profiles/accepted-idea-delivery/scripts/common.sh
+    - dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
+    - dev-integration/profiles/accepted-idea-delivery/scripts/orchestration_settings.mjs
+    - test/devint-conditional-orchestration.test.js
     - src/app.js
     - src/config.js
     - src/orchestration/activation-evidence.js
@@ -308,3 +312,33 @@ runtime activation.
   their existing boundaries.
 - due date or closure condition: accepted operating evidence activates the
   profile and covers `#726`.
+
+## 2026-10-28: Conditional native source launcher
+
+Epic1332 story1343 extends the same admitted owner boundary. The initial
+[Security source-design review](https://github.com/mfshaf7/security-architecture/blob/d18772040144f5ca48d479eb6008a2f6acdcf782/docs/reviews/components/2026-10-28-console-capabilities-source-design.md)
+precedes this source change and grants no runtime authority. Historical source
+admission and commissioning records above are preserved; they are not reused as
+permission for the current runtime.
+
+The native launcher replaces unconditional disablement with conditional use of
+the existing exact activation validator for both process roles before any
+runtime mutation. Disabled defaults still require no bundle and create zero
+workers. API and worker share a fixed read-only evidence mount and the same
+validated target/settings; the worker receives no API caller credentials.
+Existing profile-request configuration is forwarded with separate durable API
+storage. The profile service retains its existing caller/operator validation,
+explicit same-operator review permission, and distinct Platform fulfillment.
+
+Validation covers the actual native pre-mutation denial path, both process
+identities, exact bundle acceptance/rejection, unchanged-manifest restart,
+and rendered native mount/credential separation. Existing owner protocol tests
+continue to cover idempotency, replay, cancellation and receipts. Source checks
+do not prove Temporal polling, live profile fulfillment or interruption recovery.
+
+Platform stories1338/1340/1344 supply the exact composed bindings. Final
+Security1345 accepts the validated candidate before Platform merge; operating
+stories1339/1341/1346 retain actual native owner evidence. New source remains
+staged until that commissioning. Preserve the previous exact accepted OOS source
+for the running runtime's refresh while the newer main is staged, and retire
+that temporary source binding after normal commissioning.

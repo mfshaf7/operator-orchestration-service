@@ -12,6 +12,14 @@
 Do not use it for ordinary CRUD, direct Temporal diagnostics, or direct WGCF
 mutation.
 
+The accepted-idea-delivery source profile now supports conditional launch using
+the existing exact activation validator. It retains an execution-disabled
+default and does not create admission evidence. Its
+[conditional binding procedure](../../dev-integration/profiles/accepted-idea-delivery/README.md#conditional-model-profile-and-durable-bindings)
+defines the fixed private bundle mount and process-role separation. Final
+composed Security acceptance and Platform commissioning remain required; source
+tests are not operating proof.
+
 The definition catalog is available to authenticated OOS callers. Durable run
 list, read, start, and control routes admit only the authenticated
 `governance-operations-console` caller. The generic development auth bypass is

@@ -253,6 +253,40 @@ empty value, or another operator's namespace fails closed before the
 Refinement worker starts. This keeps one durable history boundary per local
 operator and does not create a second generic namespace.
 
+## Conditional model-profile and durable bindings
+
+Epic1332 extends this source profile; source landing alone does not commission
+these capabilities. The exact Platform composition and final Security acceptance
+remain prerequisites for operating qualification.
+
+The existing model-profile request settings are forwarded through the API
+configuration: `OOS_MODEL_PROFILE_REQUEST_ENABLED`,
+`OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON`, and
+`OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS`. Request state has its own private
+session directory, mounted only into the API at
+`/var/lib/oos/model-profile-requests`. Platform must supply the existing
+authenticated operator and distinct fulfillment callers before enabling the
+service; this profile does not change review permissions or grant fulfillment
+authority.
+
+Durable execution still defaults to all three existing switches off and zero
+workers. Before any runtime mutation, `up` reuses the existing OOS activation
+validator for both API and workflow-worker roles. An enabled launch requires all
+three switches, exact accepted evidence, and the configured Temporal target.
+Partial switches, missing/altered/expired evidence or mismatched identities deny
+launch. The fixed in-container manifest path is
+`/var/run/oos/orchestration-activation/manifest.json`; Platform publishes the
+bundle and relative evidence records into the session's private
+`orchestration-activation` directory. Both processes mount it read-only and
+revalidate it at use. The worker receives only the required runtime settings,
+not the API caller credentials or request-state volume.
+
+Normal restart uses the same valid manifest and generated queue. Changed
+activation, revocation and generation retirement retain their existing owner
+procedure. Do not set switches as an alternative to admission. See the
+[durable operator surface](../../../docs/operations/durable-orchestration-operator-surface.md)
+and [model-profile request procedure](../../../docs/operations/model-profile-request-operator-surface.md).
+
 ## Operator Actions
 
 Run through the shared `platform-engineering` entrypoints:

@@ -8,9 +8,18 @@ need_cmd k3s
 need_cmd python3
 need_cmd sha256sum
 need_cmd timeout
+need_cmd node
 validate_work_design_composition_context
 validate_refinement_catalog_composition_context
 validate_agent_console_composition_context
+
+# Validate before any Helm/Kubernetes mutation. The mounted path is fixed; the
+# host-side bundle is checked with the same role-aware runtime validator.
+orchestration_worker_replicas="$(
+  OOS_TEMPORAL_ADDRESS="${OOS_TEMPORAL_ADDRESS:-${TEMPORAL_ADDRESS}}" \
+  OOS_TEMPORAL_NAMESPACE="${OOS_TEMPORAL_NAMESPACE:-${TEMPORAL_WORKFLOW_NAMESPACE}}" \
+  node "${PROFILE_ROOT}/scripts/orchestration_settings.mjs" "${ORCHESTRATION_ACTIVATION_ROOT}"
+)"
 
 ensure_state_dirs
 ensure_local_secrets
@@ -398,11 +407,15 @@ target.write_text(
                     "prototype-ingress-adapter",
                 ],
             }, separators=(",", ":")),
-            "OOS_ORCHESTRATION_RUNTIME_ENABLED=false",
-            "OOS_ORCHESTRATION_WORKER_ENABLED=false",
-            "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
-            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH=",
-            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST=",
+            f"OOS_MODEL_PROFILE_REQUEST_ENABLED={os.environ.get('OOS_MODEL_PROFILE_REQUEST_ENABLED', 'false')}",
+            "OOS_MODEL_PROFILE_REQUEST_STATE_ROOT=/var/lib/oos/model-profile-requests",
+            "OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON=" + json.dumps(json.loads(os.environ.get('OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON', '{}')), separators=(',', ':')),
+            f"OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS={os.environ.get('OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS', '')}",
+            f"OOS_ORCHESTRATION_RUNTIME_ENABLED={os.environ.get('OOS_ORCHESTRATION_RUNTIME_ENABLED', 'false')}",
+            f"OOS_ORCHESTRATION_WORKER_ENABLED={os.environ.get('OOS_ORCHESTRATION_WORKER_ENABLED', 'false')}",
+            f"OOS_ORCHESTRATION_EXECUTION_AUTHORIZED={os.environ.get('OOS_ORCHESTRATION_EXECUTION_AUTHORIZED', 'false')}",
+            f"OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH={os.environ.get('OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH', '')}",
+            f"OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST={os.environ.get('OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST', '')}",
             f"OOS_TEMPORAL_ADDRESS={os.environ.get('OOS_TEMPORAL_ADDRESS', temporal_address)}",
             f"OOS_TEMPORAL_NAMESPACE={os.environ.get('OOS_TEMPORAL_NAMESPACE', temporal_namespace)}",
             "OOS_TEMPORAL_IDENTITY=operator-orchestration-service-api",
@@ -488,6 +501,7 @@ spec:
               chown -R 1000:1000 /workspace-intake-state
               chown -R 1000:1000 /workspace-inventory-state
               chown -R 1000:1000 /agent-console-state
+              chown -R 1000:1000 /model-profile-request-state
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -506,6 +520,8 @@ spec:
               mountPath: /workspace-inventory-state
             - name: agent-console-state
               mountPath: /agent-console-state
+            - name: model-profile-request-state
+              mountPath: /model-profile-request-state
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: ${BROKER_RUNTIME_IMAGE}
@@ -599,6 +615,11 @@ spec:
             - name: workspace-intake-identity
               mountPath: ${WORKSPACE_INTAKE_IDENTITY_MOUNT_PATH}
               readOnly: true
+            - name: model-profile-request-state
+              mountPath: /var/lib/oos/model-profile-requests
+            - name: orchestration-activation
+              mountPath: /var/run/oos/orchestration-activation
+              readOnly: true
       volumes:
         - name: operator-source
           hostPath:
@@ -629,6 +650,14 @@ spec:
         - name: agent-console-state
           hostPath:
             path: ${AGENT_CONSOLE_STATE}
+            type: Directory
+        - name: model-profile-request-state
+          hostPath:
+            path: ${MODEL_PROFILE_REQUEST_STATE}
+            type: Directory
+        - name: orchestration-activation
+          hostPath:
+            path: ${ORCHESTRATION_ACTIVATION_ROOT}
             type: Directory
         - name: workspace-governance-source
           hostPath:
@@ -665,7 +694,7 @@ metadata:
   name: ${ORCHESTRATION_WORKER_DEPLOYMENT}
   namespace: ${NAMESPACE}
 spec:
-  replicas: 0
+  replicas: ${orchestration_worker_replicas}
   selector:
     matchLabels:
       app.kubernetes.io/name: ${ORCHESTRATION_WORKER_DEPLOYMENT}
@@ -705,25 +734,49 @@ spec:
             - run
           env:
             - name: OOS_ORCHESTRATION_RUNTIME_ENABLED
-              value: "false"
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_ORCHESTRATION_RUNTIME_ENABLED
             - name: OOS_ORCHESTRATION_WORKER_ENABLED
-              value: "false"
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_ORCHESTRATION_WORKER_ENABLED
             - name: OOS_ORCHESTRATION_EXECUTION_AUTHORIZED
-              value: "false"
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_ORCHESTRATION_EXECUTION_AUTHORIZED
             - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
             - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
             - name: OOS_TEMPORAL_ADDRESS
-              value: ${TEMPORAL_ADDRESS}
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_TEMPORAL_ADDRESS
             - name: OOS_TEMPORAL_NAMESPACE
-              value: ${TEMPORAL_WORKFLOW_NAMESPACE}
+              valueFrom:
+                secretKeyRef:
+                  name: ${BROKER_ENV_SECRET}
+                  key: OOS_TEMPORAL_NAMESPACE
             - name: OOS_TEMPORAL_IDENTITY
               value: oos-workflow-worker
           workingDir: /runtime
           volumeMounts:
             - name: worker-runtime
               mountPath: /runtime
+            - name: orchestration-activation
+              mountPath: /var/run/oos/orchestration-activation
+              readOnly: true
       volumes:
         - name: operator-source
           hostPath:
@@ -731,6 +784,10 @@ spec:
             type: Directory
         - name: worker-runtime
           emptyDir: {}
+        - name: orchestration-activation
+          hostPath:
+            path: ${ORCHESTRATION_ACTIVATION_ROOT}
+            type: Directory
 EOF
 
 if is_refinement_catalog_composition; then
