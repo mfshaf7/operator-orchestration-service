@@ -72,6 +72,8 @@ readonly LIFECYCLE_TRANSITION_STATE="${STATE_ROOT}/lifecycle-transition-state"
 readonly WORKSPACE_INTAKE_STATE="${STATE_ROOT}/workspace-intake-state"
 readonly WORKSPACE_INVENTORY_STATE="${STATE_ROOT}/workspace-inventory-state"
 readonly AGENT_CONSOLE_STATE="${STATE_ROOT}/agent-console-state"
+readonly MODEL_PROFILE_REQUEST_STATE="${STATE_ROOT}/model-profile-request-state"
+readonly ORCHESTRATION_ACTIVATION_ROOT="${STATE_ROOT}/orchestration-activation"
 readonly OPENPROJECT_ADMIN_SECRET="${OPENPROJECT_RELEASE}-admin-secret"
 readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
@@ -121,7 +123,9 @@ ensure_state_dirs() {
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \
     "${WORKSPACE_INVENTORY_STATE}" \
-    "${AGENT_CONSOLE_STATE}"
+    "${AGENT_CONSOLE_STATE}" \
+    "${MODEL_PROFILE_REQUEST_STATE}" \
+    "${ORCHESTRATION_ACTIVATION_ROOT}"
   chmod 700 \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
     "${DELIVERY_SOURCE_EXECUTOR_RESULT_STORE}" \
@@ -129,7 +133,9 @@ ensure_state_dirs() {
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \
     "${WORKSPACE_INVENTORY_STATE}" \
-    "${AGENT_CONSOLE_STATE}"
+    "${AGENT_CONSOLE_STATE}" \
+    "${MODEL_PROFILE_REQUEST_STATE}" \
+    "${ORCHESTRATION_ACTIVATION_ROOT}"
 }
 
 export HELM_REPOSITORY_CONFIG="${HELM_STATE_DIR}/repositories.yaml"
