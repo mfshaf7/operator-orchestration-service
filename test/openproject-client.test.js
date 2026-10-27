@@ -15964,6 +15964,12 @@ test("Refinement uses native coordinated plan writer for existing Feature PI com
       },
     ],
   ]);
+  payloads.set(68, {
+    id: 68, lockVersion: 4, subject: "Enabler: Retired scope", description: {raw: "Preserved historical retirement"},
+    _links: {parent: {href: "/api/v3/work_packages/38"}, status: {title: "retired"}, type: {title: "Feature"}},
+    customField36: "Enabler",
+  });
+  const retiredBefore = structuredClone(payloads.get(68));
   const client = createOpenProjectClient({
     config,
     fetchImpl: async (url, options) => {
@@ -16108,6 +16114,9 @@ test("Refinement uses native coordinated plan writer for existing Feature PI com
   }
   const nativePatches = calls.filter(call=>call.options.method==="PATCH");
   assert.equal(nativePatches.length,3);
+  assert.deepEqual(payloads.get(68), retiredBefore, "native planning must preserve retired work without assigning current PI or metadata");
+  assert.ok(!nativePatches.some(call => new URL(call.url).pathname.endsWith("/68")));
+
   assert.ok(nativePatches.every(call=>!JSON.parse(call.options.body)._links?.status));
   assert.equal(nativeResult.plan_result.summary.created_count, 0);
   assert.equal(nativeResult.plan_result.summary.updated_count, 3);

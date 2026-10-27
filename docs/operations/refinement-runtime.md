@@ -31,7 +31,11 @@ Never generate a second key merely because the API or worker was interrupted.
 
 ## Canonical Metadata
 
-The packet reads each target's current OpenProject form and canonical values.
+The packet reads each current target's OpenProject form and canonical values.
+Done and retired descendants remain visible as history in the complete tree,
+but are excluded from mutable metadata targets and form requests. An open child
+under a closed ancestor still requires its current metadata. Historical work is
+not reopened or assigned new PI/roles merely to refine current work.
 Target PI and Iteration remain text fields when the current form declares
 `String`; actual `CustomOption` fields expose only the current allowed choices.
 Acceptance Criteria, Definition of Ready, Definition of Done, roles,

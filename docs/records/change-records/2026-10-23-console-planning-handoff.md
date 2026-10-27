@@ -145,3 +145,43 @@ item, permission, API, profile, ledger or execution-authority grant is added.
 - required follow-up: land coherent WG/OOS/CGG/Console source, exact Security acceptance, then normal whole-runtime activation and actual Console Work Design/Refinement readback before app delivery
 - owner: existing #1298 operator journey maintenance
 - due date or closure condition: actual same-record Console proof and existing #1275 acceptance closeout
+
+
+## 2026-10-27 Terminal descendant metadata eligibility
+
+Maintenance Landing Unit `maintenance-refinement-terminal-scope-oos` extends
+this existing native planning handoff boundary outside Epic1332. Normal Console
+application updated1333-1335 and created1337-1346, receipt
+`openproject://work_packages/1332/activities/8220`. Fresh Refinement nevertheless
+required Target PI, roles and contract text on retired1336. Authoritative
+continuation confirms its retired state; current planning rules exempt retired
+work from PI requirements. The omission was status eligibility in the packet
+reader, not missing canonical work or a reason to reopen historical scope.
+
+Exclude canonical done/retired descendants from work-item metadata targets and
+mutable-form requests, preserving the complete hierarchy, historical narratives,
+source digest and active descendants underneath closed ancestors. Root initiative
+governance and required current-item checks are unchanged. Existing immutable
+acceptance, explicit-id writers, stale/replay checks, current status preservation
+and final canonical readback retain authority; no schema or permission changes.
+
+Live contract evidence: the retained native1332 projection is current and shows
+all existing writable field kinds and allowed values;1336 continuation is
+retired. This correction adds no writable field and changes no allowedValues.
+The existing native form fixture retains writable String PI/Iteration,
+Formattable acceptance/readiness/completion, CustomOption classification and
+objective type, and User roles. The fixture now refuses form requests for
+terminal records while preserving their raw history, proving read-only history
+rather than fabricated metadata. An open story beneath a retired parent remains
+required. A terminal-only tree does not fall back to new work-item duties on the
+root. The real coordinated writer test retains a retired Feature byte-for-byte
+while applying and replaying current PI/Iteration with zero new records.
+
+Focused native reader/source/activity/writer proof passes131tests. The full owner
+suite passes1662tests with2documented skips and no failures; deterministic bundles,
+API projections, governance records and mutation-validator self-test pass. Committed
+base-aware checks, image smoke, exact-head Gary publication and delegated review,
+OOS-only composed Security reacceptance, normal Platform commissioning, and the
+same1332 native Refinement readback remain required. Source proof alone is not
+operating success. Rollback reverts this owner source and refreshes the composed
+acceptance; it never deletes, reopens or overwrites historical ART records.

@@ -73,7 +73,14 @@ function routeBinding(definition, target) {
   };
 }
 
+// Retain the whole hierarchy as source evidence. Closed work does not acquire
+// new mutable metadata obligations when another branch enters Refinement.
+export function isRefinementMetadataTarget(node) {
+  return !["done", "retired"].includes(stringValue(node.status).trim().toLowerCase());
+}
+
 function fieldProjection(definition, nodes, target, metadata) {
+  if (target === "work_item") nodes = nodes.filter(isRefinementMetadataTarget);
   nodes = nodes.filter((node) => !definition.targetTypes || definition.targetTypes.includes(node.type));
   nodes = nodes.filter((node) => {
     const detail = metadata?.[String(node.id)]?.[definition.backendField];
