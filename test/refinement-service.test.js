@@ -214,7 +214,7 @@ function readyProjection(request) {
   return projection;
 }
 
-function service(overrides = {}) {
+function service(overrides = {}, outputOverrides = {}) {
   return createRefinementService({
     clock: () => new Date(timestamp),
     contextClient: {
@@ -241,6 +241,7 @@ function service(overrides = {}) {
             value: "PI-2026-04",
             summary: "Use the next admitted increment.",
             rationale: "The operator requested a bounded alternative.",
+            ...outputOverrides,
           },
           audit_ref: "local-ledger:refinement-1",
           generated_at: timestamp,
@@ -350,6 +351,14 @@ test("Refinement assist rejects a stale packet before context or model invocatio
     (error) => error instanceof RefinementServiceError && error.code === "packet_stale",
   );
   assert.equal(invoked, false);
+});
+
+test("Refinement explanation returns no field value and rejects an answer carrying edits", async () => {
+  const request = assistRequest(); request.operator_prompt = "Explain this field without changing it.";
+  const result = await service({}, { required_operator_action: "none", value: null }).assist({ callerId: "governance-operations-console", packageId: packageRef, request });
+  assert.equal(result.required_operator_action, "none");
+  assert.equal(result.suggestion.value, null);
+  await assert.rejects(service({}, { required_operator_action: "none", value: "PI-2026-04" }).assist({ callerId: "governance-operations-console", packageId: packageRef, request }), (error) => error.code === "ai_output_invalid");
 });
 
 test("Refinement assist rejects output outside the admitted option set", async () => {

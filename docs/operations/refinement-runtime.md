@@ -15,7 +15,9 @@ governed AI gateway, Temporal, or OpenProject directly from the Console.
    `GET /v1/delivery-refinement/{package_id}/projection?source_ref=...`.
 2. Optionally request advice for one exact packet field with
    `POST /v1/delivery-refinement/{package_id}/assist`.
-3. Keep the returned value suggestion-only. The operator accepts, edits, or
+3. Questions and ambiguous requests return `required_operator_action=none` and
+   `value=null`; they do not fill fields. Only explicit drafting returns a value
+   for local editing. Keep that value suggestion-only. The operator accepts, edits, or
    ignores it in the Console draft.
 4. Submit the complete accepted packet with
    `POST /v1/delivery-refinement/{package_id}/apply`.

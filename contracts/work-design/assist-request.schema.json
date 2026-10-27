@@ -36,6 +36,41 @@
       }
     },
     "operator_prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "draft_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "response_format", "conversation"],
+      "properties": {
+        "response_format": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "conversation": { "type": "array", "maxItems": 8, "items": {
+          "type": "object", "additionalProperties": false, "required": ["role", "text"],
+          "properties": { "role": { "enum": ["operator", "advisor"] }, "text": { "type": "string", "maxLength": 2000 } }
+        } },
+        "scope": {
+          "type": "object", "additionalProperties": false,
+          "required": ["role", "ref", "sourceRef", "sourceRevision", "context", "fields"],
+          "properties": {
+            "role": { "enum": ["work-design-context", "work-design-tree"] },
+            "ref": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "sourceRef": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "sourceRevision": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "packageRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "readOnly": { "type": "boolean" },
+            "context": { "type": "string", "maxLength": 16000 },
+            "fields": { "type": "array", "maxItems": 80, "items": {
+              "type": "object", "additionalProperties": false, "required": ["key", "label", "value"],
+              "properties": {
+                "key": { "type": "string", "minLength": 1, "maxLength": 300 },
+                "label": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "value": {}, "kind": { "enum": ["text", "board", "tree"] },
+                "maxLength": { "type": "integer", "minimum": 1, "maximum": 24000 },
+                "allowedValues": { "type": "array", "maxItems": 150, "items": { "type": "string", "maxLength": 1000 } }
+              }
+            } }
+          }
+        }
+      }
+    },
     "context_draft": {
       "type": "object",
       "additionalProperties": false,

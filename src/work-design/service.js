@@ -434,9 +434,20 @@ export function createWorkDesignService({
         );
       }
       await readCurrentSource(request);
+      if (request.draft_scope) {
+        const scope = request.draft_scope.scope;
+        const expectedRole = request.task.kind === "context_advice" ? "work-design-context" : "work-design-tree";
+        if (scope.role !== expectedRole || scope.sourceRef !== request.source_ref ||
+          scope.sourceRevision !== request.source_revision || scope.packageRef !== request.package_ref ||
+          JSON.stringify(request.draft_scope).length > 48000) {
+          throw new WorkDesignServiceError("request_invalid", "Draft advice scope does not match the selected Work Design source.",
+            { correlationId: request.correlation_id, statusCode: 400 });
+        }
+      }
       const context = canonicalStringify({
         context_draft: request.context_draft ?? null,
         tree_draft: request.tree_draft ?? null,
+        ...(request.draft_scope ? { draft_scope: request.draft_scope } : {}),
       });
       const requestedAt = clock().toISOString();
       const projectionRequest = {
@@ -501,7 +512,9 @@ export function createWorkDesignService({
           task: request.task,
           provider_output_schema_ref: OUTPUT_SCHEMA_REF,
           input: {
-            task_instruction: taskInstruction(request.task.kind),
+            task_instruction: taskInstruction(request.task.kind) + (request.draft_scope
+              ? " The admitted draft_scope contains the requested advice-text format and local draft. Follow the operator's actual intent: answer or clarify without edits unless explicitly asked to draft. Return inert proposed local edits only; never approve, finalize or apply canonical changes."
+              : ""),
             operator_prompt: request.operator_prompt,
             model_safe_packet: {
               packet_ref: projection.packet_ref,
