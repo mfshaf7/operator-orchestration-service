@@ -20,6 +20,7 @@ import {
 import { projectDeliveryArtReviewEvidence } from "../src/delivery-art/review-evidence.js";
 import { projectDeliveryArtOwnerEvidence } from "../src/delivery-art/review-evidence-acquisition.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { deliveryArtWorkNextAction } from "../src/delivery-art/work-session.js";
 
 const plan = {
   schema_version: 1,
@@ -915,6 +916,59 @@ test("passing pre-merge acquisition identity remains immutable during projection
   );
   assert.equal(setup.requests.length, 0);
 });
+
+for (const scenario of [
+  { name: "unpublished corrected head", state: "unpushed", changedHead: true },
+  { name: "dirty same head", state: "dirty", changedHead: false },
+  { name: "wrong branch", state: "wrong-branch", changedHead: false },
+  { name: "diverged base", state: "base-diverged", changedHead: false },
+]) {
+  test(`merge-ready open PR returns ${scenario.name} to source work`, async () => {
+    const repoRoot = finalizationPlan.landing_unit.repo_root;
+    const prior = fixture("review-packet-merge-ready.valid.json");
+    const original = JSON.stringify(prior);
+    const setup = adapters({
+      [`${repoRoot}/.art/review-packets/architecture.json`]: fixture("architecture-packet.valid.json"),
+      [`${repoRoot}/.art/review-packets/work-start.json`]: fixture("work-start-record.valid.json"),
+      [`${repoRoot}/.art/review-packets/review.json`]: prior,
+      [`${repoRoot}/.art/review-packets/evidence.json`]: { evidence: prior.evidence, exceptions: prior.exceptions },
+    });
+    const bound = prior.landing_unit.repos[0];
+    Object.assign(setup.source, {
+      base_commit: bound.base_commit,
+      branch: scenario.state === "wrong-branch" ? "another-branch" : finalizationPlan.landing_unit.branch,
+      changed_files: bound.changed_files,
+      head_commit: scenario.changedHead ? "8".repeat(40) : bound.head_commit,
+      state: scenario.state,
+    });
+    Object.assign(setup.pullRequest, { head_commit: bound.head_commit, state: "open", url: bound.pr_url });
+    const controller = createDeliveryArtLifecycleController(setup);
+
+    const inspected = await controller.inspect(finalizationPlan);
+    assert.equal(inspected.source.head_commit, setup.source.head_commit);
+    assert.equal(inspected.facts.source, scenario.state);
+    assert.equal(inspected.projection.gate, "source-work");
+    const context = {
+      ...inspected,
+      agent_source: { state: "ready" },
+      session: { owner_repo: finalizationPlan.landing_unit.owner_repo },
+      repo_root: repoRoot,
+    };
+    assert.equal(deliveryArtWorkNextAction({ context, workItemId: "work-item-801" }).code,
+      scenario.state === "unpushed" ? "agent-source-publish-required" : "source-work-required");
+    if (scenario.state === "unpushed") {
+      context.agent_source.state = "credential-required";
+      assert.equal(deliveryArtWorkNextAction({ context, workItemId: "work-item-801" }).code,
+        "agent-source-credential-required");
+    }
+    const continued = await controller.reconcile(finalizationPlan);
+    assert.equal(continued.projection.gate, "source-work");
+    assert.deepEqual(continued.executed_actions, []);
+    assert.equal(setup.requests.length, 0);
+    assert.equal(JSON.stringify(prior), original);
+    assert.equal(setup.files.get(`${repoRoot}/.art/review-packets/review.json`).custody.uri, prior.custody.uri);
+  });
+}
 
 test("merge-ready reconciliation replaces a stale open PR head with a new immutable packet", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
