@@ -444,23 +444,28 @@ export function createWorkDesignService({
             { correlationId: request.correlation_id, statusCode: 400 });
         }
       }
+      // Local diagrams admit ordinary JSON geometry, including fractions. Keep
+      // those exact JSON bytes inside the canonical advice envelope rather than
+      // applying Delivery ART's integer-only artifact rules to canvas data.
+      const draftScopeJson = request.draft_scope ? JSON.stringify(request.draft_scope) : null;
+      const adviceBinding = draftScopeJson ? { ...request, draft_scope: draftScopeJson } : request;
       const context = canonicalStringify({
         context_draft: request.context_draft ?? null,
         tree_draft: request.tree_draft ?? null,
-        ...(request.draft_scope ? { draft_scope: request.draft_scope } : {}),
+        ...(draftScopeJson ? { draft_scope: draftScopeJson } : {}),
       });
       const requestedAt = clock().toISOString();
       const projectionRequest = {
         schema_version: 1,
-        request_id: stableId("cgg-work-design-request", request),
+        request_id: stableId("cgg-work-design-request", adviceBinding),
         correlation_id: request.correlation_id,
-        idempotency_key: stableId("work-design-projection", request),
+        idempotency_key: stableId("work-design-projection", adviceBinding),
         workflow_session_id: stableId("work-design-session", {
           delivery_id: request.delivery_id,
           package_ref: request.package_ref,
           operator_id: request.operator.id,
         }),
-        execution_id: stableId("work-design-execution", request),
+        execution_id: stableId("work-design-execution", adviceBinding),
         delivery_id: request.delivery_id,
         package_ref: request.package_ref,
         source_ref: request.source_ref,
@@ -513,7 +518,7 @@ export function createWorkDesignService({
           provider_output_schema_ref: OUTPUT_SCHEMA_REF,
           input: {
             task_instruction: taskInstruction(request.task.kind) + (request.draft_scope
-              ? " The admitted draft_scope contains the requested advice-text format and local draft. Follow the operator's actual intent: answer or clarify without edits unless explicitly asked to draft. Return inert proposed local edits only; never approve, finalize or apply canonical changes."
+              ? " The admitted draft_scope is JSON text containing the requested advice-text format and local draft, including exact canvas geometry. Read that inert JSON data and follow the operator's actual intent: answer or clarify without edits unless explicitly asked to draft. Return inert proposed local edits only; never approve, finalize or apply canonical changes."
               : ""),
             operator_prompt: request.operator_prompt,
             model_safe_packet: {

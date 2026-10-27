@@ -393,7 +393,7 @@ test("Work Design local draft scope enters digest-bound CGG content and keeps th
   let admitted;
   const runtime = service({ contextClient: { async project(input) { admitted = input; return readyProjection(input); } } });
   const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
-  assert.deepEqual(JSON.parse(admitted.context).draft_scope, request.draft_scope);
+  assert.deepEqual(JSON.parse(JSON.parse(admitted.context).draft_scope), request.draft_scope);
   assert.equal(admitted.context_digest, `sha256:${createHash("sha256").update(admitted.context).digest("hex")}`);
   assert.equal(result.evidence.model_profile_id, "delivery-work-design-advisor-v1");
   for (const changed of [{ sourceRevision: "version-18" }, { sourceRef: "openproject://work_packages/999" }, { packageRef: "delivery-package:999" }, { role: "work-design-context" }]) {
@@ -402,6 +402,42 @@ test("Work Design local draft scope enters digest-bound CGG content and keeps th
     await assert.rejects(runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request: invalid }), (error) => error.code === "request_invalid");
     assert.equal(admitted, null);
   }
+});
+
+test("native fractional canvas coordinates remain exact JSON advice without relaxing ART canonical numbers", async () => {
+  const request = assistRequest();
+  request.task.kind = "context_advice";
+  delete request.tree_draft;
+  request.context_draft = { decision: "proceed", note: "Preserve the manual diagram." };
+  const board = { customItems: [{ id: "manual", kind: "note", label: "Manual note", detail: "Keep exact geometry", x: 120.5, y: 312.125 }],
+    positions: { source: { x: 10.25, y: 20.75 } }, connections: [], removedCoreIds: [],
+    sketchStrokes: [{ id: "manual-sketch", width: 1.5, points: [{ x: 0.125, y: 0.875 }] }], templateTrays: [], style: "architecture" };
+  request.draft_scope = { scope: { role: "work-design-context", ref: "delivery-884", packageRef: request.package_ref,
+    sourceRef: request.source_ref, sourceRevision: request.source_revision, context: "Selected real canvas",
+    fields: [{ key: "board", label: "Diagram", kind: "board", value: board }], readOnly: false },
+    response_format: "Return inert JSON advice text; answer questions without edits.", conversation: [] };
+  assert.throws(() => canonicalDigest(board), /floating-point/, "canonical ART artifacts retain their integer restriction");
+  let admitted; let invoked;
+  const runtime = service({
+    contextClient: { async project(input) { admitted = input; return { ...readyProjection(input), content: input.context }; } },
+    gatewayClient: { async invoke(input) {
+      invoked = input;
+      const original = gatewayResult();
+      return { ...original, task: input.task, decision_id: request.correlation_id,
+        effective_selection: { ...original.effective_selection, task: "delivery-work-design-advisor-v1/context_advice" },
+        output: { ...original.output, affected_node_id: null, patch_proposal: null,
+          text: JSON.stringify({ intent: "answer", message: "No draft was changed.", edits: [] }) } };
+    } },
+  });
+  const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
+  const projected = JSON.parse(admitted.context);
+  assert.equal(typeof projected.draft_scope, "string");
+  assert.deepEqual(JSON.parse(projected.draft_scope), request.draft_scope);
+  assert.deepEqual(JSON.parse(JSON.parse(invoked.input.model_safe_packet.content).draft_scope).scope.fields[0].value, board);
+  assert.equal(admitted.context_digest, `sha256:${createHash("sha256").update(admitted.context).digest("hex")}`);
+  assert.equal(result.evidence.model_profile_id, "delivery-work-design-advisor-v1");
+  assert.equal(result.task_kind, "context_advice");
+  assert.deepEqual(request.draft_scope.scope.fields[0].value, board);
 });
 
 test("Work Design assist rejects stale source and malformed model output", async () => {

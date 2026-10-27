@@ -63,6 +63,33 @@ acceptance/activation; the model never performs final decisions.
 
 ## Follow-Up
 
-Land the paired Console/Platform changes and Security review/index, commission
-normally, verify actual native workflows, and revoke credentials/retire source
-branches and worktrees. Owner: OOS with Console, Platform and Security.
+### Native canvas geometry correction
+
+The commissioned transport reached OOS with a real fractional custom-item y
+coordinate. The new advice scope was passed through the integer-only ART
+canonical serializer, returning500 before CGG/model dispatch. Integer-only
+fixtures had missed this ordinary canvas data. Preserve the retained failed
+invocation and all geometry; do not round the draft or relax ART artifacts.
+
+Landing Unit Decision: feature_single_landing_unit,
+maintenance-advisor-context-json-oos. The optional local scope now enters the
+canonical advice context and request binding as exact JSON text, reusing the
+existing generic advisor pattern. Role/source/revision validation precedes that
+encoding; CGG still admits digest-bound content before the configured Work Design
+profile is invoked. Legacy unscoped advice, source authority and apply remain
+unchanged. No direct model route or canonical mutation is added.
+
+A faithful service regression reproduces the failure before the correction and
+passes afterward with fractional custom cards, positions and sketch geometry
+retained through context and gateway handoff. It separately proves ART canonical
+numbers remain restricted. Full owner validation and exact-source Security
+acceptance precede another normal commissioning/native diagram witness. Source
+tests do not assert operating completion.
+The corrected owner suite passed1663tests with1661passes and two intentional
+skips; focused Work Design service tests passed21/21. API/bundle/image and
+fetched-base checks remain part of the exact source landing evidence.
+
+The paired Console/Platform source has landed. Accept the exact corrected OOS
+source through the existing Security review/index check, commission normally,
+verify actual native workflows, then revoke credentials and retire source
+branches/worktrees. Owner: OOS with Console, Platform and Security.

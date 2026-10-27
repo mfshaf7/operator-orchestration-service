@@ -70,7 +70,11 @@ An optional `draft_scope` carries the actual local note/diagram/tree fields,
 bounded conversation and advice-text format. Its role, package, source and
 revision must match the ordinary request. It enters the canonical context
 digest and CGG content before model invocation; it never bypasses admission by
-being concatenated to the operator prompt. The existing Work Design profile
+being concatenated to the operator prompt. The optional scope is represented as
+exact JSON text inside that canonical advice context and request binding. This
+preserves ordinary canvas numbers, including fractional coordinates and sketch
+geometry, without applying or relaxing ART's integer-only artifact restriction.
+The existing Work Design profile
 and task remain authoritative. The Console may validate the returned advice
 text as an inert local draft proposal and edit only explicitly requested local
 fields. Questions and ambiguous requests do not edit. This does not start apply,
