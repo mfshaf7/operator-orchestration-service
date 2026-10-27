@@ -238,3 +238,30 @@ test("Refinement receipt persistence replays identical output without duplicate 
     1,
   );
 });
+
+
+test("Refinement retains terminal history without root fallback and still requires current metadata", async () => {
+  const current = client();
+  const tree = deliveryTree();
+  tree.children[0].status = "retired";
+  tree.children[1].status = "done";
+  for (const node of tree.children) {
+    node.target_pi = "";
+    node.acceptance_criteria = "";
+  }
+  current.getRefinementDeliveryTree = async () => ({tree, sourceRevision: "version-9", deliveryRef: "openproject://work_packages/884"});
+  const adapter = createRefinementSourceAdapter({openProjectClient: current});
+  const input = {packageRef: "delivery-package:909", sourceRef: "openproject://work_packages/909"};
+  const historical = await adapter.projectPacket(input);
+  assert.equal(historical.target_tree.children.length, 2);
+  assert.equal(historical.status, "ready_for_review");
+  assert.ok(historical.draft_groups.flatMap(group => group.fields).every(field => field.route_binding.target === "initiative"),
+    "terminal-only branches must not create new work-item duties on the initiative");
+  tree.children[0].children.push({...deliveryTree().children[0], id: 1005, status: "blocked", target_pi: ""});
+  const currentPacket = await adapter.projectPacket(input);
+  assert.notEqual(currentPacket.packet_revision, historical.packet_revision);
+  assert.equal(currentPacket.status, "drafting");
+  const pi = currentPacket.draft_groups.flatMap(group => group.fields).find(field => field.field_key === "work_item-target-pi");
+  assert.deepEqual(pi.target_node_ids, ["1005"]);
+  assert.equal(pi.target_statuses["1005"], "missing");
+});

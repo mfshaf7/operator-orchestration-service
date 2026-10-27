@@ -71,6 +71,13 @@ source authority.
 The result carries one typed `ai_drafted` suggestion and complete CGG, profile,
 schema, and gateway-audit evidence. The operator may accept, edit, or ignore it.
 
+Work-item metadata targets exclude canonical `done` and `retired` descendants.
+The complete hierarchy and historical narratives remain in the packet and source
+snapshot for identity checks and readback. Current descendants beneath a closed
+ancestor remain eligible. Root initiative governance is unchanged. Required
+fields on current work remain enforced; history does not receive fabricated PI,
+roles, acceptance criteria or completion metadata.
+
 ## Durable Apply
 
 1. The Console submits the exact packet revision, accepted-draft digest,

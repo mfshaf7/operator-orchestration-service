@@ -61,6 +61,9 @@ test("Refinement reads native current forms without business writes and preserve
     [1306, workPackage({ id: 1306, type: "Epic", subject: "Native planning", description: "Canonical initiative narrative" })],
     [1310, workPackage({ id: 1310, parentId: 1306, type: "Feature", subject: "Real product outcome", description: "Canonical feature narrative" })],
     [1311, workPackage({ id: 1311, parentId: 1306, type: "PI Objective", subject: "Actual product objective", description: "Canonical objective narrative" })],
+    [1312, workPackage({ id: 1312, parentId: 1306, type: "Feature", status: "retired", subject: "Historical retired feature", description: "Retirement history" })],
+    [1313, workPackage({ id: 1313, parentId: 1306, type: "Feature", status: "done", subject: "Historical completed feature", description: "Completion history" })],
+    [1314, workPackage({ id: 1314, parentId: 1312, type: "User story", status: "new", subject: "Current story under retired ancestor", description: "Current story narrative" })],
   ]);
   for (const record of records.values()) {
     Object.assign(record, {
@@ -71,6 +74,11 @@ test("Refinement reads native current forms without business writes and preserve
     });
     record._links.customField52 = { href: "/api/v3/custom_options/11", title: "Business" };
     record._links.customField42 = { href: "/api/v3/custom_options/21", title: "Committed" };
+  }
+  for (const id of [1312, 1313]) {
+    // Historical work has no new metadata duty or available mutable form.
+    const record = records.get(id);
+    for (const key of Object.keys(record).filter((key) => key.startsWith("customField"))) delete record[key];
   }
   const option = (id, title) => ({ href: `/api/v3/custom_options/${id}`, title });
   const schema = {
@@ -113,6 +121,7 @@ test("Refinement reads native current forms without business writes and preserve
     const record = records.get(Number(match[1]));
     assert.ok(record);
     if (!match[2]) return jsonResponse(record);
+    assert.ok(![1312, 1313].includes(record.id), "terminal work must not request a mutable form");
     assert.equal(JSON.parse(options.body).lockVersion, record.lockVersion);
     return jsonResponse({ _embedded: { schema } });
   } });
@@ -130,13 +139,20 @@ test("Refinement reads native current forms without business writes and preserve
   const fields = packet.draft_groups.flatMap((group) => group.fields);
   assert.equal(packet.status, "ready_for_review");
   assert.equal(packet.target_tree.children[0].description, "Canonical feature narrative");
+  const retired = packet.target_tree.children.find((node) => node.id === "1312");
+  assert.equal(retired.description, "Retirement history");
+  assert.equal(retired.children[0].id, "1314", "do not prune current descendants with their retired ancestor");
+  assert.equal(packet.target_tree.children.find((node) => node.id === "1313").description, "Completion history");
+  assert.equal(snapshot.fieldMetadata[1312], undefined);
+  assert.equal(snapshot.fieldMetadata[1313], undefined);
+  assert.ok(fields.every((field) => !field.target_node_ids.some((id) => ["1312", "1313"].includes(id))));
   const item = (key) => fields.find((field) => field.route_binding.target === "work_item" && field.backend_field === key);
   assert.equal(item("target_pi").field_kind, "short_text");
   assert.equal(item("iteration").field_kind, "short_text");
   assert.equal(item("target_pi").allowed_values, undefined);
-  assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1311: "Canonical acceptance" });
+  assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1311: "Canonical acceptance", 1314: "Canonical acceptance" });
   assert.equal(item("acceptance_criteria").field_kind, "long_text");
-  assert.deepEqual(item("execution_classification").target_node_ids, ["1310"]);
+  assert.deepEqual(item("execution_classification").target_node_ids, ["1310", "1314"]);
   assert.deepEqual(item("execution_classification").allowed_values, ["Business", "Enabler", "NFR"]);
   assert.deepEqual(item("pi_objective_type").target_node_ids, ["1311"]);
   assert.deepEqual(item("pi_objective_type").allowed_values, ["Committed", "Uncommitted"]);

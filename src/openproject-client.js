@@ -59,7 +59,7 @@ import {
   toIdeaId,
 } from "./idea-model.js";
 import { validatePlanApplyInput } from "./work-item-create-preflight.js";
-import { REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
+import { isRefinementMetadataTarget, REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
 
 function joinUrl(baseUrl, path) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -6204,16 +6204,22 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const nodes = [];
       const visit = (node) => { nodes.push(node); node.children.forEach(visit); };
       visit(tree);
+      // Historical narratives still belong to the complete source snapshot.
+      // Filter each node independently so active descendants of closed work
+      // remain eligible, and retain the root's governance form.
+      for (const node of nodes) {
+        node.description = state.workPackagesById.get(node.id).description?.raw ?? "";
+      }
+      const metadataNodes = nodes.filter((node) => node.id === recordId || isRefinementMetadataTarget(node));
       const fieldMetadata = {};
       // Reuse actual current forms and the existing allowed-value resolver.
       // Bounded batches avoid unbounded parallel form requests on large trees.
-      for (let offset = 0; offset < nodes.length; offset += 4) {
-        await Promise.all(nodes.slice(offset, offset + 4).map(async (node) => {
+      for (let offset = 0; offset < metadataNodes.length; offset += 4) {
+        await Promise.all(metadataNodes.slice(offset, offset + 4).map(async (node) => {
           const payload = state.workPackagesById.get(node.id);
           const form = await getWorkPackageFormPayload(node.id, payload.lockVersion);
           const fields = buildCustomFieldSchemaMap(form);
           const metadata = {};
-          node.description = payload.description?.raw ?? "";
           const definitions = REFINEMENT_METADATA_FIELDS.filter((definition) =>
             (definition.target === "initiative" ? node.id === recordId : node.id !== recordId || nodes.length === 1) &&
             (!definition.targetTypes || definition.targetTypes.includes(node.type)));
