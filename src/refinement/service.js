@@ -7,6 +7,7 @@ import {
   assertRefinementAssistResult,
   assertRefinementError,
   assertRefinementProjectionResult,
+  assertRefinementRunProjection,
 } from "./contracts.js";
 import { RefinementUpstreamError } from "./http-client.js";
 import { refinementAcceptedDraftDigest } from "./run-model.js";
@@ -321,6 +322,32 @@ export function createRefinementService({
   }
 
   return {
+    async readHistory({ packageId, sourceRef, correlationId }) {
+      if (!/^delivery-package:[1-9][0-9]*$/.test(packageId) ||
+          sourceRef !== `openproject://work_packages/${packageId.split(":")[1]}`) {
+        throw new RefinementServiceError("request_invalid", "Archive package and source must match.", {correlationId});
+      }
+      // This internal reader is invoked only after the Delivery archive owner
+      // has authenticated and validated the exact ART target. No current packet
+      // or completed Work Design handoff is needed to inspect retained runs.
+      try {
+        const [runs,receipts]=await Promise.allSettled([
+          runAdapter.listRuns({packageRef:packageId,limit:100}),
+          sourceAdapter.readReceiptEvents ? sourceAdapter.readReceiptEvents(Number(packageId.split(":")[1])) : Promise.resolve([]),
+        ]);
+        if(runs.status==="rejected"&&receipts.status==="rejected")throw runs.reason;
+        const history = (runs.status==="fulfilled"?runs.value:[]).map(assertRefinementRunProjection);
+        if (history.some(run => run.poll_ref !== `/v1/delivery-refinement/${encodeURIComponent(packageId)}/runs/${encodeURIComponent(run.run_id)}` || (run.receipt && run.receipt.target.delivery_ref !== sourceRef))) {
+          throw new Error("Retained Refinement run does not bind the selected package.");
+        }
+        const records=(receipts.status==="fulfilled"?receipts.value:[]).map(({activityId,event})=>{
+          if(event.target.delivery_ref!==sourceRef || !Number.isSafeInteger(activityId))throw new Error("Retained Refinement receipt does not bind the selected package.");
+          return {id:event.run_id,title:"Refinement apply evidence",state:"completed",at:event.applied_at,actor:event.applied_by,
+            receipt_ref:`${sourceRef}/activities/${activityId}`,digest:event.content_digest,evidence_refs:[sourceRef,event.source_work_design_receipt_id],tone:"ok"};
+        });
+        return {source_ref:sourceRef,history,records,partial:runs.status==="rejected"||receipts.status==="rejected",latest_run:history[0] ?? null};
+      } catch(error) { throw runtimeFailure(error,correlationId); }
+    },
     async project({ callerId, correlationId, packageId, sourceRef }) {
       const packet = await packetFor({ correlationId, packageRef: packageId, sourceRef });
       let history;

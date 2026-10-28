@@ -121,25 +121,35 @@ export function createDeliveryHistoryReader({
       projected_at: clock().toISOString() };
   }
 
-  async function readHistory({ deliveryId, callerId, correlationId }) {
+  async function readHistory({ deliveryId, callerId, correlationId, activityPage = 1, activityLimit = 25 }) {
+    if (!Number.isSafeInteger(activityPage) || activityPage < 1 || activityPage > 100000 || !Number.isSafeInteger(activityLimit) || activityLimit < 1 || activityLimit > 50) {
+      throw new HttpError(400,"delivery_activity_page_invalid","Activity requires page1 or later and limit1-50.");
+    }
     const match = /^delivery-([1-9][0-9]*)$/.exec(deliveryId);
     if (!match || !Number.isSafeInteger(Number(match[1]))) throw new HttpError(400, "delivery_history_id_invalid", "An exact Delivery initiative is required.");
     const recordId = Number(match[1]), sourceRef = `openproject://work_packages/${recordId}`;
     // The exact target reader also checks project/type/parent boundaries.
-    if (!prototype?.readTarget || !delivery?.getDeliveryExecutionSummary) throw new HttpError(503, "delivery_history_owner_unavailable", "Native Delivery target reader is unavailable.");
-    const scope = await delivery.getDeliveryExecutionSummary({ deliveryId, callerId, correlationId,
-      includeDone: true, includeParked: true });
-    if (scope?.delivery_record_ref !== sourceRef) throw new HttpError(404, "delivery_not_found", "The exact target is not in Workspace Delivery ART.");
-    const targetRead = await prototype.readTarget({ recordId, callerId, correlationId });
-    if (targetRead.target.recordRef !== sourceRef) throw new HttpError(502, "delivery_history_target_mismatch", "Owner returned a different target.");
-    const target = targetRead.target;
+    let target;
+    if (delivery?.readDeliveryHistoryTarget) target = await delivery.readDeliveryHistoryTarget({deliveryId,callerId,correlationId});
+    else {
+      if (!prototype?.readTarget || !delivery?.getDeliveryExecutionSummary) throw new HttpError(503,"delivery_history_owner_unavailable","Native Delivery target reader is unavailable.");
+      const scope = await delivery.getDeliveryExecutionSummary({deliveryId,callerId,correlationId,includeDone:true,includeParked:true});
+      if (scope?.delivery_record_ref !== sourceRef) throw new HttpError(404,"delivery_not_found","The exact target is not in Workspace Delivery ART.");
+      target = (await prototype.readTarget({recordId,callerId,correlationId})).target;
+    }
+    if (target.recordRef !== sourceRef) throw new HttpError(502,"delivery_history_target_mismatch","Owner returned a different target.");
     const requests = {
-      intake: () => intakeForTarget(target, callerId, correlationId, targetRead),
+      intake: () => intakeForTarget(target, callerId, correlationId),
       work_design: () => design.project({ callerId, correlationId, packageId: `delivery-package:${recordId}`, sourceRef }),
-      refinement: () => refinement.project({ callerId, correlationId, packageId: `delivery-package:${recordId}`, sourceRef }),
+      refinement: () => refinement.readHistory
+        ? refinement.readHistory({callerId,correlationId,packageId:`delivery-package:${recordId}`,sourceRef})
+        : refinement.project({ callerId, correlationId, packageId: `delivery-package:${recordId}`, sourceRef }),
       closeout: () => closeout.getProjection({ callerId, correlationId, deliveryId }),
     };
-    const results = await Promise.allSettled(Object.values(requests).map((read) => read()));
+    const [results, activityResult] = await Promise.all([
+      Promise.allSettled(Object.values(requests).map((read) => read())),
+      Promise.resolve().then(() => delivery.getDeliveryActivityPage({deliveryId,page:activityPage,limit:activityLimit})).then(value => ({value}), () => ({value:null})),
+    ]);
     const sections = {}, events = [];
     for (const [index, key] of Object.keys(requests).entries()) {
       const result = results[index];
@@ -151,26 +161,45 @@ export function createDeliveryHistoryReader({
         continue;
       }
       const value = result.value;
-      const ref = key === "closeout" ? value.record_ref : key === "work_design" ? value.source?.ref : value.packet?.source?.source_ref;
+      const ref = key === "closeout" ? value.record_ref : key === "work_design" ? value.source?.ref : value.source_ref ?? value.packet?.source?.source_ref;
       if (ref !== sourceRef) { sections[key] = unavailable(); continue; }
       const history = key === "closeout" ? value.outcome_history : value.history;
       if (!Array.isArray(history)) { sections[key] = unavailable(); continue; }
-      const records = history.slice(-MAX_HISTORY).map((item) => historyRecord(key, item, sourceRef));
+      let records = history.slice(0,MAX_HISTORY).map((item) => historyRecord(key, item, sourceRef));
       if (records.some((item) => item === null)) { sections[key] = unavailable(); continue; }
-      sections[key] = { state: "current", detail: history.length > MAX_HISTORY ? "Latest200 original owner records; older owner history is outside this bounded projection." : "Original retained owner history.", data: {
+      if(key==="refinement"&&Array.isArray(value.records))records=[...records,...value.records.filter(item=>!records.some(run=>run.id===item.id))];
+      const total=records.length+Math.max(0,history.length-MAX_HISTORY);
+      records=records.slice(0,MAX_HISTORY);
+      sections[key] = { state: value.partial ? "partial" : "current", detail: value.partial ? "Only part of the original owner evidence could be read. Verified retained records remain visible; retry to refresh coverage." : records.length === 0 ? "No retained native workflow records were returned. The item may have been created or changed through another route; inspect its OpenProject activity." : total > MAX_HISTORY ? "Latest200 original owner records; older owner history is outside this bounded projection." : "Original retained owner history. Trusted OpenProject receipt-event digests remain distinct from durable run receipt digests.", data: {
         state: key === "work_design" ? value.state : key === "refinement" ? value.latest_run?.state ?? "not-recorded" : value.package?.status,
-        source_ref: sourceRef, records, total_records: history.length, truncated: history.length > MAX_HISTORY,
+        source_ref: sourceRef, records, total_records: total, truncated: total > MAX_HISTORY,
       } };
       events.push(...records.filter((item) => iso(item.at)).map((item) => event(item.id, item.title, item.at, item.actor, item.receipt_ref, item.evidence_refs, item.tone)));
     }
     events.sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+    const activity = activityProjection(activityResult.value,sourceRef,activityPage,activityLimit);
     return { schema_version: 1, workflow_id: "delivery-package-history", delivery_id: deliveryId,
       record_ref: sourceRef, package: { title: target.title, status: target.status, owner_repo: target.ownerRepo },
-      sections, events: events.slice(0, MAX_HISTORY), event_count: events.length,
-      history_state: Object.values(sections).some((s) => s.state === "unavailable") ? "partial" : "current",
+      sections, events: events.slice(0, MAX_HISTORY), event_count: events.length, activity,
+      history_state: activity.state === "unavailable" || Object.values(sections).some((s) => ["unavailable","partial"].includes(s.state)) ? "partial" : "current",
       mutation_authority: "none", projected_at: clock().toISOString() };
   }
   return { readIntake, readHistory };
+}
+
+function activityProjection(page, ref, number, limit) {
+  const empty = {state:"unavailable",detail:"OpenProject item activity could not be read. Workflow receipts remain independently available.",items:[],page:number,limit,total:0,has_more:false};
+  if (!page || !Array.isArray(page.items) || page.items.length > limit || !Number.isSafeInteger(page.total) || page.total < page.items.length || (page.offset!==undefined && page.offset!==number) || (page.pageSize!==undefined && page.pageSize!==limit)) return empty;
+  const text = value => typeof value === "string" ? value.replace(/<[^>]*>/g," ").replace(/&(?:nbsp|amp|lt|gt|quot);/g," ").replace(/\s+/g," ").trim().slice(0,2000) : "";
+  const items = page.items.map(item => {
+    if (!Number.isSafeInteger(item.id) || item.id < 1 || !iso(item.createdAt)) return null;
+    const comment = /^OOS_[A-Z_]+_V[0-9]+ /.test(item.comment ?? "") ? "Structured owner evidence recorded; inspect the original workflow receipt." : text(item.comment);
+    return {event_id:`${ref}/activities/${item.id}`,title:item.type==="Activity::Comment" ? "Comment recorded" : item.version===1 ? "Item created" : "Item changed",
+      occurred_at:item.createdAt,actor:text(item.userName) || item.userRef || "Actor not projected",detail:[...(item.details ?? []).map(text),comment].filter(Boolean).join(" · ").slice(0,2000) || "Original OpenProject activity; no change description was returned.",
+      receipt_ref:null,evidence_refs:[`${ref}/activities/${item.id}`],tone:"info"};
+  });
+  if (items.some(item => item === null) || new Set(items.map(item=>item.event_id)).size !== items.length) return empty;
+  return {state:"current",detail:"Original OpenProject creation, edit and comment activity for this exact item. Native workflow receipts are shown separately. Page controls expose the remaining activity.",items,page:number,limit,total:page.total,has_more:number*limit<page.total};
 }
 
 function event(id, title, at, actor, receipt, refs, tone) {

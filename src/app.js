@@ -7210,7 +7210,9 @@ export function createApp({
       if (request.method === "GET" && /^\/v1\/delivery-initiatives\/[^/]+\/history$/.test(url.pathname)) {
         const caller = authenticateCaller(request, config), deliveryId = url.pathname.split("/")[3];
         const result = await deliveryHistoryReader.readHistory({ callerId: caller.id,
-          correlationId: createCorrelationId(request), deliveryId });
+          correlationId: createCorrelationId(request), deliveryId,
+          activityPage: Number(url.searchParams.get("activity_page") ?? 1),
+          activityLimit: Number(url.searchParams.get("activity_limit") ?? 25) });
         sendSourceProjection(response, request, result, () => ({ recordRef: result.record_ref,
           sourceOwner: "workspace-delivery-art", sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at }));
         return;

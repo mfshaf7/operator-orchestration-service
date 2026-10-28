@@ -738,6 +738,25 @@ export function createDeliveryService({
   }
 
   return {
+    async readDeliveryHistoryTarget({ deliveryId }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) throw new HttpError(400,"delivery_history_id_invalid","An exact Delivery initiative is required.");
+      const target = await openProjectClient.getDeliveryHistoryTarget({recordId});
+      if (!target || target.recordRef !== `openproject://work_packages/${recordId}`) throw new HttpError(404,"delivery_not_found","The exact target is not in Workspace Delivery ART.");
+      return target;
+    },
+    async getDeliveryActivityPage({ deliveryId, page = 1, limit = 25 }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId || !Number.isSafeInteger(page) || page < 1 || page > 100000 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+        throw new HttpError(400, "delivery_activity_page_invalid", "Activity requires one Delivery initiative, page1 or later and limit1-50.");
+      }
+      const target = await openProjectClient.getDeliveryHistoryTarget({ recordId });
+      if (!target || target.recordRef !== `openproject://work_packages/${recordId}`) {
+        throw new HttpError(404, "delivery_not_found", "The exact target is not in Workspace Delivery ART.");
+      }
+      return openProjectClient.listDeliveryItemActivities({ recordId, offset: page, pageSize: limit });
+    },
     async getDeliverySessionBootstrap({
       callerId,
       callerAuthMode,

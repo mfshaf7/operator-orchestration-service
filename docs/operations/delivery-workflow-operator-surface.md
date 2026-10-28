@@ -1875,6 +1875,24 @@ work-start, review, mutation or completion authority.
   an explicit total and truncation marker. No history read invokes a model,
   applies a workflow, obtains source credentials or changes ART state.
 
+  Optional `activity_page` (1-100000, default1) and `activity_limit` (1-50,
+  default25) return bounded OpenProject activity under `activity`. Follow
+  `has_more` with the next page. Creation/edit/comment events retain their actor,
+  time and item-scoped evidence reference, distinct from workflow receipts.
+  A version1 comment is not creation, and one page is not complete event coverage.
+
+  The provider's work-package activity endpoint returns an unpaginated collection.
+  OOS provides logical pages over that selected-item collection, rather than
+  pretending `pageSize` limits the upstream response. Trusted receipt readers
+  consume the collection once; they do not refetch it as invented backend pages.
+
+  Exact root/project/type validation does not require a current packet, ingress
+  receipt or full execution tree. Intake proof is independently verified inside
+  its section. Refinement combines retained runs and trusted receipt events
+  without preparing a packet. A `partial` section retains verified records from
+  a readable source. Missing native records, failed reads and bounded excerpts
+  stay distinct; old CLI-created work never acquires invented Console receipts.
+
 The original event time, actor, receipt and target backlinks stay historical.
 A current source update time must not substitute for an unknown historical
 consume time. Retained custody records describe the original admission; the

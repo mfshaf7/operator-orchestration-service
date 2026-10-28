@@ -13,6 +13,23 @@ function createAudit() {
   };
 }
 
+test("archive readers preserve read-only scope and never call mutation or tree preparation",async()=>{
+  const calls=[];let ref="openproject://work_packages/42";
+  const service=createDeliveryService({audit:createAudit(),openProjectClient:{
+    async getDeliveryHistoryTarget({recordId}){calls.push(["target",recordId]);return {recordRef:ref};},
+    async listDeliveryItemActivities(input){calls.push(["activity",input]);return {items:[],total:0};},
+    async getDeliveryExecutionSummary(){throw Error("Archive must not prepare a full tree");},
+    async updateWorkPackage(){throw Error("Read-only archive must not apply fields");},
+  }});
+  await service.readDeliveryHistoryTarget({deliveryId:"delivery-42"});
+  await service.getDeliveryActivityPage({deliveryId:"delivery-42",page:2,limit:25});
+  assert.deepEqual(calls,[["target",42],["target",42],["activity",{recordId:42,offset:2,pageSize:25}]]);
+  await assert.rejects(service.getDeliveryActivityPage({deliveryId:"delivery-42",limit:51}),error=>error.statusCode===400);
+  ref="openproject://work_packages/99";await assert.rejects(service.readDeliveryHistoryTarget({deliveryId:"delivery-42"}),error=>error.statusCode===404);
+  await assert.rejects(service.getDeliveryActivityPage({deliveryId:"delivery-42"}),error=>error.statusCode===404);
+  assert.equal(calls.filter(([kind])=>kind==="activity").length,1);
+});
+
 test("getDeliveryExecutionSummary returns a broker projection with delivery id", async () => {
   const audit = createAudit();
   const calls = [];
