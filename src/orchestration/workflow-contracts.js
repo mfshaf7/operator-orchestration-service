@@ -466,14 +466,18 @@ export function assertWgcfActivityResult(result, expectedRequest) {
       "WGCF ready result requires successful validation and reason-free readiness",
     );
   }
+  // Validation and repository readiness are independent owner evaluations.
+  // A failed check can block the aggregate while repository readiness passes.
+  const readinessBlocked = result.bounded_decision.readiness_outcome === "blocked";
+  if (readinessBlocked !== (result.bounded_decision.readiness_reason_count > 0)) {
+    reject("WGCF readiness outcome must match its reason count");
+  }
   if (
     result.status_code !== "ready" &&
-    (result.bounded_decision.readiness_outcome !== "blocked" ||
-      result.bounded_decision.readiness_reason_count === 0)
+    result.bounded_decision.validation_outcome === "success" &&
+    !readinessBlocked
   ) {
-    reject(
-      "WGCF non-ready result requires blocked readiness with at least one reason",
-    );
+    reject("WGCF non-ready result requires unsuccessful validation or blocked readiness");
   }
 
   requireObject(result.receipt_ref, "receipt_ref");

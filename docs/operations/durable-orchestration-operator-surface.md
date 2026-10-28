@@ -1,5 +1,12 @@
 # Durable Orchestration Operator Surface
 
+Validation and repository readiness are independent WGCF evaluations. A
+failed validation may coexist with ready repository readiness; the aggregate
+remains blocked and retains the actual validation receipt. A ready aggregate
+requires successful validation and ready, reason-free readiness. A blocked
+readiness decision must retain a nonzero reason count. An invalid result still
+fails closed without authorizing readiness or execution.
+
 ## Use This Surface For
 
 - inspecting immutable OOS workflow definitions
