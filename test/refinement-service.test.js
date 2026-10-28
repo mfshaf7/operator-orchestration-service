@@ -11,6 +11,21 @@ const timestamp = "2026-08-26T01:00:00.000Z";
 const packageRef = "delivery-package:909";
 const sourceRef = "openproject://work_packages/909";
 
+test("Refinement archive remains readable without a current packet or authoring handoff",async()=>{
+ let packetReads=0;
+ const archive=service({sourceAdapter:{async projectPacket(){packetReads++;throw Error("No current handoff");},async readReceiptEvents(){return [];}}});
+ const result=await archive.readHistory({packageId:packageRef,sourceRef,correlationId:"archive-read"});
+ assert.equal(packetReads,0);assert.deepEqual(result.history,[]);assert.deepEqual(result.records,[]);assert.equal(result.partial,false);assert.equal(result.source_ref,sourceRef);
+ await assert.rejects(archive.readHistory({packageId:packageRef,sourceRef:"openproject://work_packages/42"}),/must match/);
+});
+
+test("trusted original receipt evidence survives a durable-run outage with explicit partial coverage",async()=>{
+ const event={run_id:"original-run",target:{delivery_ref:sourceRef},applied_at:timestamp,applied_by:"original operator",content_digest:`sha256:${"a".repeat(64)}`,source_work_design_receipt_id:"original-design"};
+ const archive=service({runAdapter:{async listRuns(){throw Error("Temporal offline");}},sourceAdapter:{async readReceiptEvents(){return [{activityId:123,event}];}}});
+ const result=await archive.readHistory({packageId:packageRef,sourceRef});
+ assert.equal(result.partial,true);assert.equal(result.records[0].receipt_ref,sourceRef+"/activities/123");assert.equal(result.records[0].digest,event.content_digest);assert.equal(result.records[0].actor,event.applied_by);assert.deepEqual(result.history,[]);
+});
+
 function operation() {
   return {
     operation_id: "delivery-package:909-governance",

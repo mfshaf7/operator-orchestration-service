@@ -6007,18 +6007,28 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     const elements = Array.isArray(responsePayload?._embedded?.elements)
       ? responsePayload._embedded.elements
       : [];
+    // The work-package activities API returns an unpaginated Collection on
+    // current OpenProject. Do not invent a backend page size: receipt readers
+    // must consume that collection once rather than refetch it for every page.
+    const unpaged = responsePayload?.offset === undefined && responsePayload?.pageSize === undefined;
+    const total = responsePayload?.total ?? elements.length;
+    if (unpaged && total !== elements.length) throw new OpenProjectError("backend_contract_drift","Activity collection is incomplete without pagination metadata.",502,"activity_collection_incomplete");
     return {
       count: responsePayload?.count ?? elements.length,
       items: elements.map((entry) => ({
         comment: entry?.comment?.raw ?? "",
         createdAt: entry?.createdAt ?? null,
+        details: Array.isArray(entry?.details) ? entry.details.map(detail => detail?.raw ?? detail?.html ?? "").filter(value => typeof value === "string") : [],
         id: entry?.id ?? null,
+        type: entry?._type ?? null,
+        userName: entry?._links?.user?.title ?? null,
         userRef: entry?._links?.user?.href ?? null,
         version: entry?.version ?? null,
       })),
-      offset: responsePayload?.offset ?? offset,
-      pageSize: responsePayload?.pageSize ?? pageSize,
-      total: responsePayload?.total ?? elements.length,
+      offset: unpaged ? 1 : responsePayload?.offset ?? offset,
+      pageSize: unpaged ? Math.max(elements.length,1) : responsePayload?.pageSize ?? pageSize,
+      total,
+      collectionMode: unpaged ? "unpaged" : "paged",
     };
   }
 
@@ -6175,6 +6185,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     listWorkDesignApplicationActivities(input) {
       return listWorkPackageActivities(input);
+    },
+
+    async listDeliveryItemActivities(input) {
+      const collection=await listWorkPackageActivities(input);
+      const items=collection.collectionMode==="unpaged" ? collection.items.slice((input.offset-1)*input.pageSize,input.offset*input.pageSize) : collection.items;
+      return {...collection,count:items.length,items,offset:input.offset,pageSize:input.pageSize};
     },
 
     addRefinementReceiptEvent({ recordId, raw }) {
@@ -6877,6 +6893,17 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           lineage_role: metadata.lineageRole,
         } };
       });
+    },
+
+    async getDeliveryHistoryTarget({recordId}) {
+      const [projectId,payload]=await Promise.all([deliveryProjectId(),getWorkPackagePayload(recordId)]);
+      if(payload?.id!==recordId || payload?._links?.project?.href!==`/api/v3/projects/${projectId}` ||
+          parseWorkPackageIdFromHref(payload?._links?.parent?.href) || workPackageTypeName(payload)!=="Epic")return null;
+      // Schema/form availability affects optional current owner metadata, not
+      // permission to inspect this already scope-validated historical item.
+      let fieldMap=null;
+      try { fieldMap=buildDeliveryInitiativeFieldEntryMap(await getWorkPackageFormPayload(payload.id,payload.lockVersion)); } catch { /* owner remains explicitly unprojected */ }
+      return mapWorkPackageToPrototypeDeliveryTarget(config,payload,fieldMap);
     },
 
     async getPrototypeDeliveryApplicationTarget({ recordId }) {

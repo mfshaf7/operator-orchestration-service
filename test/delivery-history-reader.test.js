@@ -5,9 +5,34 @@ import { encodePrototypeDeliveryTargetMarker } from '../src/delivery-ingress/pro
 const ref='openproject://work_packages/42';
 const target={recordId:42,recordRef:ref,title:'Synthetic completed product',ownerRepo:'sample-owner',status:'done',recordVersion:8,description:''};
 const custody={classification:'existing-repo',owner:'sample-owner',source_ref:'repo://sample-owner',repository_gate_state:'resolved',rationale:'Owner source admission'};
+
+test('archive scopes the exact item without loading a tree or requiring an ingress or authoring handoff',async()=>{
+ const d=dependencies();let activityReads=0;
+ d.deliveryService.readDeliveryHistoryTarget=async()=>target;
+ d.deliveryService.getDeliveryExecutionSummary=async()=>{throw Error('Unnecessary tree scan');};
+ d.prototypeDeliveryApplicationService.readTarget=async()=>{throw Error('private old ingress failure');};
+ d.refinementService.project=async()=>{throw Error('Authoring eligibility must not gate history');};
+ d.refinementService.readHistory=async()=>({source_ref:ref,history:[],records:[]});
+ d.deliveryService.getDeliveryActivityPage=async({deliveryId,page,limit})=>{
+  activityReads++;assert.equal(deliveryId,'delivery-42');assert.equal(page,1);assert.equal(limit,2);
+  return {total:3,offset:page,pageSize:limit,items:[{id:1,createdAt:'2026-10-23T01:00:00Z',version:1,type:'Activity',userName:'Original author',details:['<strong>Item created</strong>'],comment:''},
+   {id:2,createdAt:'2026-10-23T02:00:00Z',version:1,type:'Activity::Comment',userName:'Original author',details:[],comment:'OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {"private":"do not expose raw markers"}'}]};
+ };
+ const p=await createDeliveryHistoryReader(d).readHistory({deliveryId:'delivery-42',activityLimit:2});
+ assert.equal(activityReads,1);assert.equal(p.sections.intake.state,'unavailable');assert.equal(p.sections.work_design.state,'current');assert.equal(p.sections.refinement.state,'current');assert.equal(p.activity.state,'current');assert.equal(p.activity.has_more,true);
+ assert.deepEqual(p.activity.items.map(e=>e.title),['Item created','Comment recorded']);assert.equal(p.activity.items[0].event_id,ref+'/activities/1');assert.equal(p.activity.items[0].actor,'Original author');assert.doesNotMatch(JSON.stringify(p),/private old ingress|do not expose raw markers|<strong>/);
+});
+
+test('activity paging is bounded before owner reads and a failed activity read does not erase verified receipts',async()=>{
+ const d=dependencies();let calls=0;d.deliveryService.getDeliveryExecutionSummary=async()=>{calls++;return {delivery_record_ref:ref};};
+ const reader=createDeliveryHistoryReader(d);
+ for(const query of [{activityPage:0},{activityPage:1.5},{activityLimit:51}])await assert.rejects(reader.readHistory({deliveryId:'delivery-42',...query}),e=>e.code==='delivery_activity_page_invalid');
+ assert.equal(calls,0);d.deliveryService.getDeliveryActivityPage=async()=>{throw Error('private activity read failed');};
+ const p=await reader.readHistory({deliveryId:'delivery-42'});assert.equal(p.activity.state,'unavailable');assert.equal(p.history_state,'partial');assert.equal(p.sections.work_design.data.records[0].receipt_ref,'receipt:design-original');assert.doesNotMatch(JSON.stringify(p),/private activity/);
+});
 function entry(){return {ingress_id:'ingress:original',source:{record_ref:'record://prototypes/sample',record_version:'v1',packet_ref:'packet:original',baseline_ref:'baseline:original',custody},target:{record_ref:ref,owner_repo:'sample-owner'},receipt:{receipt_ref:'receipt:intake-original',content_digest:'sha256:original',recorded_at:'2026-10-24T01:00:00Z',custody:{uri:ref+'/activities/1'}},operator_decision:{operator_id:'operator:sample'}};}
 function dependencies(){return {
- deliveryService:{async getDeliveryExecutionSummary(){return {delivery_record_ref:ref};}},
+ deliveryService:{async getDeliveryExecutionSummary(){return {delivery_record_ref:ref};},async getDeliveryActivityPage(){return {items:[],total:0};}},
  prototypeDeliveryApplicationService:{async readTarget(){return {target,source_kind:'prototype',application:entry()};},async listTargets(){return [target];}},
  proposalWorkflowService:{async getProjection(){return {record_ref:'openproject://work_packages/10',record_version:'v3',route:{target:'delivery',source_custody:custody},handoff:{state:'applied',packet_ref:'proposal:packet',target_record_ref:ref,target_receipt_ref:'receipt:proposal'}};}},
  workDesignService:{async project(input){assert.equal(input.packageId,'delivery-package:42');return {source:{ref},state:'applied',history:[{application_id:'design:original',status:'applied',applied_at:'2026-10-24T02:00:00Z',applied_by:'operator:sample',receipt:{ref:'receipt:design-original',digest:'sha256:original'},target:{delivery_ref:ref,created_refs:['openproject://work_packages/43'],updated_refs:[],reused_refs:[]}}]};}},
