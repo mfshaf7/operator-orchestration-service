@@ -427,7 +427,7 @@ test("WGCF ready results require coherent success evidence", () => {
   );
 });
 
-test("WGCF non-ready results require coherent blocked readiness evidence", () => {
+test("WGCF readiness outcome and reason count must agree independently of validation", () => {
   const activityRequest = validWgcfActivityRequest();
   const result = validWgcfResult("blocked");
 
@@ -441,7 +441,28 @@ test("WGCF non-ready results require coherent blocked readiness evidence", () =>
           { ...result, bounded_decision: boundedDecision },
           activityRequest,
         ),
-      /non-ready result requires blocked readiness with at least one reason/,
+      /readiness outcome must match its reason count/,
     );
+  }
+});
+
+test("failed, timed-out and unavailable validation retain independently ready owner evidence", () => {
+  const request = validWgcfActivityRequest();
+  for (const status of ["blocked", "timed-out", "unavailable"]) {
+    const result = validWgcfResult(status);
+    result.bounded_decision.validation_outcome = "failure";
+    result.receipt_ref.outcome = "failure";
+    result.bounded_decision.readiness_outcome = "ready";
+    result.bounded_decision.readiness_reason_count = 0;
+    assert.equal(assertWgcfActivityResult(result, request), result);
+    assert.throws(() => assertWgcfActivityResult({
+      ...result, status_code: "ready",
+      bounded_decision: { ...result.bounded_decision, ready: true },
+    }, request), /ready result requires successful validation/);
+    assert.throws(() => assertWgcfActivityResult({
+      ...result,
+      receipt_ref: { ...result.receipt_ref, outcome: "success" },
+      bounded_decision: { ...result.bounded_decision, validation_outcome: "success" },
+    }, request), /non-ready result requires unsuccessful validation or blocked readiness/);
   }
 });
