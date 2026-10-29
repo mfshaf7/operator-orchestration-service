@@ -1,5 +1,10 @@
 import { OpenProjectError } from "../errors.js";
 import { REFINEMENT_METADATA_FIELDS } from "./packet-model.js";
+import {
+  acceptedRefinementValue,
+  effectiveRefinementPlanningValue,
+  isRefinementPlanningField,
+} from "./planning-fields.js";
 
 const FIELD_ARGUMENTS = Object.freeze({
   acceptance_criteria: "acceptanceCriteria",
@@ -55,14 +60,8 @@ function allFields(packet) {
 }
 
 function acceptedValue(request, field, targetNodeId) {
-  const specificKey = `${field.backend_field}:${targetNodeId}`;
-  if (Object.hasOwn(request.accepted_draft.metadata_values, specificKey)) {
-    return request.accepted_draft.metadata_values[specificKey];
-  }
-  if (Object.hasOwn(request.accepted_draft.metadata_values, field.backend_field)) {
-    return request.accepted_draft.metadata_values[field.backend_field];
-  }
-  return field.target_values?.[targetNodeId] ?? field.value;
+  const value = acceptedRefinementValue(field, request.accepted_draft, targetNodeId);
+  return isRefinementPlanningField(field) ? String(value ?? "").trim() : value;
 }
 
 function operationFields(packet, operation) {
@@ -133,7 +132,7 @@ function flattenTree(node) {
 function fieldHasAcceptedEffect(field, request, targetNodeId) {
   if (field.target_node_ids?.length && !field.target_node_ids.includes(String(targetNodeId))) return false;
   const value = acceptedValue(request, field, targetNodeId);
-  return field.required || value !== "";
+  return field.required || value !== "" || isRefinementPlanningField(field);
 }
 
 function targetMatchesAcceptedValues(node, fields, request, targetNodeId) {
@@ -141,7 +140,9 @@ function targetMatchesAcceptedValues(node, fields, request, targetNodeId) {
     .filter((field) => fieldHasAcceptedEffect(field, request, targetNodeId))
     .every((field) =>
       comparableValue(node[field.backend_field], field) ===
-        comparableValue(acceptedValue(request, field, targetNodeId), field),
+        comparableValue(isRefinementPlanningField(field)
+          ? effectiveRefinementPlanningValue(field, request.accepted_draft, targetNodeId)
+          : acceptedValue(request, field, targetNodeId), field),
     );
 }
 
@@ -265,6 +266,15 @@ export function createRefinementActivities({ deliveryService, sourceAdapter }) {
           throw new RefinementActivityError("request_invalid", "Coordinated planning has no reviewed field targets.");
         }
         const targetRefs = targetNodeIds.map((id) => `openproject://work_packages/${id}`);
+        for (const field of fields) {
+          for (const id of field.target_node_ids ?? []) {
+            if (!field.required && acceptedValue(request, field, id) === "" &&
+                comparableValue(nodesById.get(id)?.[field.backend_field], field) !==
+                comparableValue(effectiveRefinementPlanningValue(field, request.accepted_draft, id), field)) {
+              throw new RefinementActivityError("apply_conflict", `Retained planning for work item ${id} changed; reload Refinement before applying.`);
+            }
+          }
+        }
         if (targetNodeIds.every((id) => targetMatchesAcceptedValues(nodesById.get(id), fields, request, id))) {
           return { operation_id: operation.operation_id, skipped: false, created_refs: [], updated_refs: [], reused_refs: targetRefs, target_refs: targetRefs };
         }

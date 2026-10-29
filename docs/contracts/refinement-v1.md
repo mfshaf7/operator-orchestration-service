@@ -78,6 +78,21 @@ ancestor remain eligible. Root initiative governance is unchanged. Required
 fields on current work remain enforced; history does not receive fabricated PI,
 roles, acceptance criteria or completion metadata.
 
+Current work does not mean every branch is PI-committed. Target PI and Iteration
+use the canonical type/status planning rules. Valid new backlog Features and
+non-executable planned children may retain blank PI and blank/backlog Iteration.
+Existing commitment, active work and structurally PI-required types retain their
+planning requirements. Existing v1 fields represent these obligations as disjoint
+explicit target-id scopes with their own `required` markers. Other metadata
+requirements are unchanged.
+
+Accepted PI/Iteration pairs are checked with the native planning validator before
+a durable run starts when both fields are in the reviewed mutable scope. An
+omitted populated read-only counterpart is not fabricated as blank; the canonical
+writer still validates that effective state. Empty optional planning inputs retain
+their reviewed source values. Activities reject a concurrent change to those
+retained values and final readback verifies them before issuing a receipt.
+
 ## Durable Apply
 
 1. The Console submits the exact packet revision, accepted-draft digest,

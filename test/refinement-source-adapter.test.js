@@ -204,6 +204,50 @@ test("Refinement missing fields stay bound to target identity, not numeric objec
     "the existing Console metadata draft review must be able to resolve its native editable gate");
 });
 
+test("Refinement keeps valid backlog planning optional beside required committed and active work", async () => {
+  const native = client();
+  const tree = deliveryTree();
+  tree.children.push(
+    {id:1010,type:"Feature",subject:"Future feature",status:"new",target_pi:null,iteration:null,children:[
+      {id:1011,type:"User story",subject:"Future story",status:"parked",target_pi:null,iteration:"Not committed to a PI iteration yet.",children:[]},
+    ]},
+    {id:1012,type:"User story",subject:"Active needs planning",status:"ready",children:[]},
+    {id:1013,type:"Task",subject:"Structural planning",status:"new",children:[]},
+    {id:1014,type:"Milestone",subject:"Checkpoint",status:"new",children:[]},
+    {id:1015,type:"Feature",subject:"Old history",status:"done",children:[]},
+  );
+  native.getRefinementDeliveryTree = async () => ({tree,deliveryRef:"openproject://work_packages/884",sourceRevision:"version-9"});
+  const packet = await createRefinementSourceAdapter({openProjectClient:native}).projectPacket({packageRef:"delivery-package:909",sourceRef:"openproject://work_packages/909"});
+  const fields = packet.draft_groups.flatMap(group=>group.fields).filter(field=>field.route_binding.operation_kind==="plan_apply");
+  for(const key of ["target_pi","iteration"]){
+    const optional=fields.find(field=>field.backend_field===key&&!field.required);
+    assert.deepEqual(optional.target_node_ids,["1010","1011"]);
+    assert.equal(optional.status,"complete");
+    assert.equal(optional.target_statuses["1010"],"complete");
+    const required=fields.find(field=>field.backend_field===key&&field.required);
+    assert.deepEqual(required.target_node_ids,["1002","1004","1012","1013","1014"]);
+    assert.equal(required.target_statuses["1012"],"missing");
+    assert.equal(required.target_statuses["1002"],"complete");
+    assert.equal(fields.some(field=>field.backend_field===key&&field.target_node_ids.includes("1015")),false);
+  }
+  const allowedKeys=fields.flatMap(field=>field.target_node_ids.map(id=>`${field.backend_field}:${id}`));
+  assert.equal(new Set(allowedKeys).size,allowedKeys.length,"required/optional scopes cannot overlap");
+  const backlog=packet.draft_groups.find(group=>group.group_id.endsWith("-backlog-planning"));
+  assert.equal(backlog.fields.length,2);
+  assert.ok(backlog.fields.every(field=>!field.required));
+  for(const field of fields.filter(field=>field.required))assert.ok(!backlog.fields.includes(field),
+    "shared selection must not merge different requiredness into a first-target editor");
+});
+
+test("Refinement does not demand or offer a write for an unavailable blank backlog planning field",async()=>{
+  const native=client();const tree=deliveryTree();
+  tree.children.push({id:1010,type:"Feature",subject:"Future",status:"new",children:[]});
+  native.getRefinementDeliveryTree=async()=>({tree,fieldMetadata:{1010:{target_pi:{writable:false,field_kind:"short_text"},iteration:{writable:false,field_kind:"short_text"}}}});
+  const packet=await createRefinementSourceAdapter({openProjectClient:native}).projectPacket({packageRef:"delivery-package:909",sourceRef:"openproject://work_packages/909"});
+  const planning=packet.draft_groups.flatMap(g=>g.fields).filter(f=>["target_pi","iteration"].includes(f.backend_field));
+  assert.equal(planning.some(f=>f.target_node_ids.includes("1010")),false);
+});
+
 test("Refinement receipt persistence replays identical output without duplicate comments", async () => {
   const openProjectClient = client();
   const adapter = createRefinementSourceAdapter({ openProjectClient });

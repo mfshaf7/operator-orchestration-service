@@ -1,5 +1,6 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { assertRefinementPacket } from "./contracts.js";
+import { isRefinementPlanningField, refinementPlanningFieldRequired } from "./planning-fields.js";
 
 const GOVERNANCE_ROUTE =
   "POST /v1/delivery-initiatives/{delivery_id}/governance";
@@ -128,6 +129,25 @@ function fieldProjection(definition, nodes, target, metadata) {
   };
 }
 
+function workItemFieldProjections(definition, nodes, metadata) {
+  if (!isRefinementPlanningField({ backend_field: definition.backendField })) {
+    return [fieldProjection(definition, nodes, "work_item", metadata)].filter(Boolean);
+  }
+  // Existing v1 fields already have explicit target ids and required markers.
+  // Partition their targets instead of imposing one obligation on every branch.
+  return [true, false].flatMap((required) => {
+    const selected = nodes.filter((node) =>
+      refinementPlanningFieldRequired(node, definition.backendField) === required,
+    );
+    const projected = fieldProjection({
+      ...definition,
+      fieldKey: definition.fieldKey + (required ? "" : "-backlog"),
+      required,
+    }, selected, "work_item", metadata);
+    return projected ? [projected] : [];
+  });
+}
+
 function refinementTreeNode(node) {
   return {
     id: String(node.id),
@@ -156,9 +176,9 @@ export function buildRefinementPacket({
     fieldProjection(definition, [deliveryTree], "initiative", fieldMetadata),
   ).filter(Boolean);
   const itemTargets = workItems.length > 0 ? workItems : [deliveryTree];
-  const workItemFields = WORK_ITEM_FIELDS.map((definition) =>
-    fieldProjection(definition, itemTargets, "work_item", fieldMetadata),
-  ).filter(Boolean);
+  const workItemFields = WORK_ITEM_FIELDS.flatMap((definition) =>
+    workItemFieldProjections(definition, itemTargets, fieldMetadata),
+  );
   const requiredFields = [...governanceFields, ...workItemFields].filter(
     (entry) => entry.required,
   );
@@ -168,6 +188,27 @@ export function buildRefinementPacket({
   const receiptId = workDesignCompletion.event.application_id;
   const planningFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "plan_apply");
   const bulkFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "bulk_update");
+  const optionalPlanning = (entry) => isRefinementPlanningField(entry) && !entry.required;
+  const draftGroups = [
+    {
+      group_id: `${packageRef}-governance`,
+      title: "Initiative Governance",
+      summary: "Review the package-level fields that remain with the Delivery initiative.",
+      fields: governanceFields,
+    },
+    {
+      group_id: `${packageRef}-work-items`,
+      title: "Work Item Metadata",
+      summary: "Review item-scoped metadata before the package enters execution control.",
+      fields: workItemFields.filter((entry) => !optionalPlanning(entry)),
+    },
+    {
+      group_id: `${packageRef}-backlog-planning`,
+      title: "Backlog Planning",
+      summary: "Future scope may retain blank PI and blank or backlog Iteration.",
+      fields: workItemFields.filter(optionalPlanning),
+    },
+  ].filter((group) => group.fields.length > 0);
   const applyPlan = {
     summary: "Apply reviewed governance, coordinated PI planning and ID-scoped metadata through existing Delivery authorities.",
     expected_routes: [GOVERNANCE_ROUTE, PLAN_APPLY_ROUTE, BULK_UPDATE_ROUTE],
@@ -196,6 +237,7 @@ export function buildRefinementPacket({
   const packetRevision = canonicalDigest({
     apply_plan: applyPlan,
     metadata_fields: [...governanceFields, ...workItemFields],
+    draft_groups: draftGroups,
     delivery_tree: deliveryTree,
     field_metadata: fieldMetadata,
     source_revision: source.sourceRevision,
@@ -217,20 +259,7 @@ export function buildRefinementPacket({
       finalized_brief_ref: `brief://work-design/${receiptId}/final`,
     },
     target_tree: refinementTreeNode(deliveryTree),
-    draft_groups: [
-      {
-        group_id: `${packageRef}-governance`,
-        title: "Initiative Governance",
-        summary: "Review the package-level fields that remain with the Delivery initiative.",
-        fields: governanceFields,
-      },
-      {
-        group_id: `${packageRef}-work-items`,
-        title: "Work Item Metadata",
-        summary: "Review item-scoped metadata before the package enters execution control.",
-        fields: workItemFields,
-      },
-    ].filter((group) => group.fields.length > 0),
+    draft_groups: draftGroups,
     readiness_gates: [
       {
         gate_id: `${packageRef}-work-design-handoff`,
