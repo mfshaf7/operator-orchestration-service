@@ -85553,7 +85553,11 @@
                         "provider-busy",
                         "model-not-advertised",
                         "registration-changed",
-                        "metadata-matched"
+                        "metadata-matched",
+                        "connection-verified",
+                        "last-request-failed",
+                        "recent-model-success",
+                        "model-verification-required"
                       ]
                     }
                   }
@@ -85597,7 +85601,11 @@
                         "provider-busy",
                         "model-not-advertised",
                         "registration-changed",
-                        "metadata-matched"
+                        "metadata-matched",
+                        "connection-verified",
+                        "last-request-failed",
+                        "recent-model-success",
+                        "model-verification-required"
                       ]
                     },
                     "observed_runtime_version": {
@@ -85618,6 +85626,38 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "last_success": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "kind",
+                            "at",
+                            "reference"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "verification",
+                                "request"
+                              ]
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "reference": {
+                              "type": "string",
+                              "pattern": "^(sha256:|ai-routing-selection:)[0-9a-f]{64}$"
+                            }
+                          }
                         },
                         {
                           "type": "null"

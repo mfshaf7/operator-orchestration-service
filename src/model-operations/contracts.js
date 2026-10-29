@@ -115,7 +115,8 @@ export function assertBackends(value) {
 const HEALTH_STATES = ["available", "unavailable", "verification-needed", "unknown"];
 const HEALTH_CODES = ["connection-not-probed", "check-budget-exhausted", "metadata-available", "account-sign-in-required",
   "account-present-connection-unprobed", "provider-metadata-invalid", "provider-unavailable", "provider-busy",
-  "model-not-advertised", "registration-changed", "metadata-matched"];
+  "model-not-advertised", "registration-changed", "metadata-matched", "connection-verified",
+  "last-request-failed", "recent-model-success", "model-verification-required"];
 export function assertProviderHealth(value, configuration, now = Date.now()) {
   if (value === null || value === undefined) return null;
   const keys = ["configuration_revision", "configuration_digest", "checked_at", "expires_at", "backends", "models"];
@@ -129,11 +130,21 @@ export function assertProviderHealth(value, configuration, now = Date.now()) {
   for (const [rows, field, known] of [[value.backends, "backend_id", config.backends], [value.models, "model_id", config.models]]) {
     const seen = new Set();
     for (const row of rows) {
-      const expected = field === "backend_id" ? "backend_id,code,state" : "code,model_id,observed_model_digest,observed_runtime_version,state";
+      const expected = field === "backend_id" ? "backend_id,code,state" :
+        (Object.hasOwn(row ?? {}, "last_success") ? "code,last_success,model_id,observed_model_digest,observed_runtime_version,state" : "code,model_id,observed_model_digest,observed_runtime_version,state");
       if (!object(row) || Object.keys(row).sort().join(",") !== expected || !Object.hasOwn(known, row[field]) || seen.has(row[field]) ||
           !HEALTH_STATES.includes(row.state) || !HEALTH_CODES.includes(row.code)) invalidOwner();
       if (field === "model_id" && (!(row.observed_runtime_version === null || text(row.observed_runtime_version, 2048)) ||
           !(row.observed_model_digest === null || text(row.observed_model_digest, 200)))) invalidOwner();
+      if (field === "model_id" && row.last_success != null) {
+        const success = row.last_success, at = Date.parse(success.at);
+        if (!object(success) || Object.keys(success).sort().join(",") !== "at,kind,reference" ||
+            !["verification", "request"].includes(success.kind) || !text(success.at, 64) || !Number.isFinite(at) || at < 0 || at > start ||
+            !/^(sha256:|ai-routing-selection:)[0-9a-f]{64}$/.test(success.reference)) invalidOwner();
+      }
+      if ((row.code === "connection-verified" && (field !== "backend_id" || row.state !== "available")) ||
+          (row.code === "recent-model-success" && (field !== "model_id" || row.state !== "available" || !row.last_success || start - Date.parse(row.last_success.at) > 900000)) ||
+          (["last-request-failed", "model-verification-required"].includes(row.code) && (field !== "model_id" || row.state !== "verification-needed"))) invalidOwner();
       seen.add(row[field]);
     }
   }

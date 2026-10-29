@@ -292,3 +292,23 @@ test("post-start health is optional, bound to current configuration, and cannot 
   platform.backends = backends;
   assert.equal((await service.registry({ ...identity, includeHealth: true })).health, null);
 });
+
+test("provider success remains historical and rejects future or unbounded evidence", async t => {
+  const { service, platform } = await fixture(t);
+  await service.create({ ...identity, input: request() }); await service.idle();
+  const snapshot = await platform.configuration(), start = Date.now() - 1000;
+  const modelId = Object.keys(snapshot.configuration.models)[0];
+  // The first fixture command registers a backend; bind a synthetic registered model for this pure contract check.
+  snapshot.configuration.models[modelId ?? "sha256:" + "a".repeat(64)] ??= {};
+  const knownId = Object.keys(snapshot.configuration.models)[0];
+  const health = { configuration_revision: snapshot.revision, configuration_digest: snapshot.digest,
+    checked_at: new Date(start).toISOString(), expires_at: new Date(start + 120000).toISOString(), backends: [],
+    models: [{ model_id: knownId, state: "verification-needed", code: "last-request-failed", observed_runtime_version: null,
+      observed_model_digest: null, last_success: { kind: "verification", at: new Date(start - 1000000).toISOString(), reference: "sha256:" + "b".repeat(64) } }] };
+  assert.deepEqual(assertProviderHealth(health, snapshot), health);
+  health.models[0].last_success.at = new Date(start + 1).toISOString();
+  assert.throws(() => assertProviderHealth(health, snapshot));
+  health.models[0].last_success.at = new Date(start - 1).toISOString();
+  health.models[0].last_success.account = "never forward";
+  assert.throws(() => assertProviderHealth(health, snapshot));
+});
