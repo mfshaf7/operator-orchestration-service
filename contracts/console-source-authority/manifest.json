@@ -12,6 +12,7 @@
     "vary_header": "Accept"
   },
   "projection_routes": [
+    { "method": "get", "path": "/v1/operator-saved-work/{kind}/{subject_id}" },
     { "method": "get", "path": "/v1/prototypes" },
     { "method": "get", "path": "/v1/prototype-source-requests" },
     { "method": "get", "path": "/v1/prototype-source-requests/{request_id}" },
