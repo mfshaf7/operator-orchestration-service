@@ -6,6 +6,7 @@ readonly PROFILE_ID="${DEVINT_PROFILE_ID:?DEVINT_PROFILE_ID is required}"
 readonly NAMESPACE="${DEVINT_NAMESPACE:?DEVINT_NAMESPACE is required}"
 readonly OPERATOR="${DEVINT_OPERATOR:?DEVINT_OPERATOR is required}"
 readonly STATE_ROOT="${DEVINT_STATE_ROOT:?DEVINT_STATE_ROOT is required}"
+readonly NPM_CACHE_ROOT="${STATE_ROOT}/npm-cache"
 readonly SESSION_FILE="${DEVINT_SESSION_FILE:?DEVINT_SESSION_FILE is required}"
 readonly WORKSPACE_ROOT="${DEVINT_WORKSPACE_ROOT:?DEVINT_WORKSPACE_ROOT is required}"
 readonly REPO_PATHS_JSON="${DEVINT_REPO_PATHS_JSON:?DEVINT_REPO_PATHS_JSON is required}"
@@ -112,7 +113,12 @@ need_cmd() {
 }
 
 ensure_state_dirs() {
+  if [[ -L "${NPM_CACHE_ROOT}" ]]; then
+    echo "refused: runtime dependency cache must not be a symlink." >&2
+    return 2
+  fi
   mkdir -p \
+    "${NPM_CACHE_ROOT}" \
     "${STATE_ROOT}" \
     "${LOGS_DIR}" \
     "${RENDERED_DIR}" \
@@ -127,6 +133,7 @@ ensure_state_dirs() {
     "${MODEL_PROFILE_REQUEST_STATE}" \
     "${ORCHESTRATION_ACTIVATION_ROOT}"
   chmod 700 \
+    "${NPM_CACHE_ROOT}" \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
     "${DELIVERY_SOURCE_EXECUTOR_RESULT_STORE}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
@@ -742,7 +749,7 @@ wait_for_refinement_worker_rollout() {
     --timeout=180s
   kubectl_cmd -n "${NAMESPACE}" rollout status \
     "deployment/${REFINEMENT_WORKER_DEPLOYMENT}" \
-    --timeout=180s
+    --timeout=600s
 }
 
 refinement_catalog_runtime_state() {

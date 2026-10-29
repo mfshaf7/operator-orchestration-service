@@ -502,9 +502,11 @@ spec:
               chown -R 1000:1000 /workspace-inventory-state
               chown -R 1000:1000 /agent-console-state
               chown -R 1000:1000 /model-profile-request-state
-              cd /runtime
-              npm ci --omit=dev
+              chown -R 1000:1000 /runtime
+              node /source/dev-integration/profiles/accepted-idea-delivery/scripts/install_runtime_dependencies.mjs
           volumeMounts:
+            - name: npm-cache
+              mountPath: /npm-cache
             - name: operator-source
               mountPath: /source
               readOnly: true
@@ -621,6 +623,10 @@ spec:
               mountPath: /var/run/oos/orchestration-activation
               readOnly: true
       volumes:
+        - name: npm-cache
+          hostPath:
+            path: ${NPM_CACHE_ROOT}
+            type: Directory
         - name: operator-source
           hostPath:
             path: ${operator_repo}
@@ -717,9 +723,11 @@ spec:
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
               cp -R /source/templates /runtime/
-              cd /runtime
-              npm ci --omit=dev
+              chown -R 1000:1000 /runtime
+              node /source/dev-integration/profiles/accepted-idea-delivery/scripts/install_runtime_dependencies.mjs
           volumeMounts:
+            - name: npm-cache
+              mountPath: /npm-cache
             - name: operator-source
               mountPath: /source
               readOnly: true
@@ -778,6 +786,10 @@ spec:
               mountPath: /var/run/oos/orchestration-activation
               readOnly: true
       volumes:
+        - name: npm-cache
+          hostPath:
+            path: ${NPM_CACHE_ROOT}
+            type: Directory
         - name: operator-source
           hostPath:
             path: ${operator_repo}
@@ -822,9 +834,11 @@ spec:
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
               cp -R /source/templates /runtime/
-              cd /runtime
-              npm ci --omit=dev
+              chown -R 1000:1000 /runtime
+              node /source/dev-integration/profiles/accepted-idea-delivery/scripts/install_runtime_dependencies.mjs
           volumeMounts:
+            - name: npm-cache
+              mountPath: /npm-cache
             - name: operator-source
               mountPath: /source
               readOnly: true
@@ -868,6 +882,10 @@ spec:
             - name: worker-runtime
               mountPath: /runtime
       volumes:
+        - name: npm-cache
+          hostPath:
+            path: ${NPM_CACHE_ROOT}
+            type: Directory
         - name: operator-source
           hostPath:
             path: ${operator_repo}
