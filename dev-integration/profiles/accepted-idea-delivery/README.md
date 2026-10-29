@@ -348,6 +348,31 @@ make devint-up PROFILE=accepted-idea-delivery \
   EXTRA_ARGS="--repo-path operator-orchestration-service=/home/mfshaf7/worktrees/oos-delivery --repo-path platform-engineering=/home/mfshaf7/worktrees/platform-delivery"
 ```
 
+## Dependency preparation during recovery
+
+The API, orchestration worker and Refinement worker share only an npm download
+cache under this operator profile's `npm-cache` state directory. Each init
+container still creates fresh `node_modules` with `npm ci --omit=dev`, the selected
+lockfile and npm integrity checks. The cache contains no caller credential or
+business record and is never executable authority. It is disposable; a missing
+cache downloads locked dependencies again. A symlink cache root is refused.
+The directory is operator-owned, mode0700. Package installation drops to uid/gid
+1000, including lifecycle scripts; it never writes cached packages as host root.
+
+`--prefer-offline` reuses verified downloads. Fetches remain bounded at30seconds
+with one retry; normal npm audit reporting is retained. Dependency preparation
+has an eight-minute process bound, followed by a ten-minute worker rollout
+allowance. These are failure deadlines, not expected startup durations. Failed
+installation or rollout remains a failed profile and uses existing compensation;
+no ready state is fabricated. The worker deployment-generation check retains its
+separate three-minute bound. Normal down/restart preserves the package cache.
+Do not point it at a developer's home cache or copy credentials into it.
+
+The pinned API image contains a different dependency lock from current source;
+its bundled dependencies are not silently substituted. The existing GHCR image
+registry is not an npm package mirror. No new registry service is required for
+this cache. Review and exact composed acceptance precede native activation.
+
 ## Smoke Scope
 
 The shared `make devint-smoke PROFILE=accepted-idea-delivery` path is now

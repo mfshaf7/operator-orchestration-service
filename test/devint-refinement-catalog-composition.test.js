@@ -86,6 +86,12 @@ case "$query" in
   *"get deployment operator-orchestration-service-refinement-worker -o jsonpath={.metadata.generation}"*) printf '%s' "\${TEST_WORKER_GENERATION:-2}" ;;
   *"get deployment operator-orchestration-service-refinement-worker"*) printf '%s' "\${TEST_WORKER_AVAILABLE:-1}" ;;
   *"wait --for=jsonpath={.status.observedGeneration}="*"deployment/operator-orchestration-service-refinement-worker"*) exit "\${TEST_GENERATION_WAIT_STATUS:-0}" ;;
+  *"rollout status deployment/operator-orchestration-service-refinement-worker"*)
+    budget="\${query##*--timeout=}"
+    budget="\${budget%s}"
+    [[ "$budget" -ge "\${TEST_WORKER_PREPARATION_SECONDS:-0}" ]] || exit 1
+    exit "\${TEST_WORKER_ROLLOUT_STATUS:-0}"
+    ;;
   *"data.CGG_REFINEMENT_CALLER_SECRET"*) printf '%s' "\${TEST_REFINEMENT_SECRET_ENCODED:-}" ;;
   *"data.WGCF_REPOSITORY_READINESS_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
   *"data.WGCF_WORKSPACE_INTAKE_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
@@ -407,6 +413,26 @@ test("worker rollout waits for the restarted deployment generation", () => {
   assert.equal(stale.status, 1);
   assert.match(stale.k3sLog, /status\.observedGeneration}=2/);
   assert.doesNotMatch(stale.k3sLog, /rollout status/);
+});
+
+test("worker rollout tolerates a cold dependency install but still reports failure", () => {
+  const cold = runCommon("wait_for_refinement_worker_rollout", {
+    TEST_WORKER_PREPARATION_SECONDS: "360",
+  });
+  assert.equal(cold.status, 0, cold.stderr);
+  const failed = runCommon("wait_for_refinement_worker_rollout", {
+    TEST_WORKER_ROLLOUT_STATUS: "1",
+  });
+  assert.equal(failed.status, 1);
+});
+
+test("dependency cache survives preparation and refuses redirected host storage", () => {
+  const retained = runCommon('ensure_state_dirs; printf retained > "$NPM_CACHE_ROOT/probe"; ensure_state_dirs; cat "$NPM_CACHE_ROOT/probe"');
+  assert.equal(retained.status, 0, retained.stderr);
+  assert.equal(retained.stdout, "retained");
+  const redirected = runCommon('mkdir "$STATE_ROOT/elsewhere"; ln -s "$STATE_ROOT/elsewhere" "$NPM_CACHE_ROOT"; ensure_state_dirs');
+  assert.equal(redirected.status, 2);
+  assert.match(redirected.stderr, /cache must not be a symlink/);
 });
 
 test("Workspace operations readiness requires the dedicated identity projection", () => {
