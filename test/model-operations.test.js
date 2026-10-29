@@ -8,7 +8,7 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createModelOperationsRuntime } from "../src/model-operations/runtime.js";
 import { selectionEvidence } from "../src/model-operations/selection-evidence.js";
-import { assertBackends, assertConfiguration, digest } from "../src/model-operations/contracts.js";
+import { assertBackends, assertConfiguration, assertProviderHealth, digest } from "../src/model-operations/contracts.js";
 import { createModelOperationsService } from "../src/model-operations/service.js";
 import { createModelOperationsPlatformClient, ModelOwnerError } from "../src/model-operations/platform-client.js";
 import { createModelProfileRequestStore } from "../src/model-profile-request/store.js";
@@ -258,4 +258,30 @@ test("unavailable native progress is explicit uncertainty, then reconciliation u
   assert.equal(unknown.account_login.command_id, waiting.account_login.command_id);
   platform.login = login; await control(service, unknown, "reconcile"); await service.idle();
   assert.equal((await read(service)).state, "awaiting-account"); assert.equal(platform.calls[0].command_id, platform.calls[1].command_id);
+});
+
+test("post-start health is optional, bound to current configuration, and cannot disable management", async t => {
+  const { service, platform } = await fixture(t);
+  await service.create({ ...identity, input: request() }); await service.idle();
+  const snapshot = await platform.configuration();
+  const start = Date.now() - 1000;
+  const health = { configuration_revision: snapshot.revision, configuration_digest: snapshot.digest,
+    checked_at: new Date(start).toISOString(), expires_at: new Date(start + 120000).toISOString(),
+    backends: [{ backend_id: "local", state: "unavailable", code: "provider-unavailable" }], models: [] };
+  const backends = platform.backends.bind(platform);
+  platform.backends = async () => ({ ...await backends(), health });
+  assert.deepEqual((await service.registry(identity)).health, health);
+  assert.equal(platform.calls.length, 1);
+  health.configuration_revision++;
+  assert.equal((await service.registry(identity)).health, null);
+  health.configuration_revision--;
+  health.token = "never forward";
+  const registry = await service.registry(identity);
+  assert.equal(registry.health, null); assert.equal(registry.configuration.revision, 1);
+  assert.equal(JSON.stringify(registry).includes("never forward"), false);
+  delete health.token;
+  health.expires_at = new Date(start - 1).toISOString();
+  assert.equal(assertProviderHealth(health, snapshot), null);
+  platform.backends = backends;
+  assert.equal((await service.registry(identity)).health, null);
 });

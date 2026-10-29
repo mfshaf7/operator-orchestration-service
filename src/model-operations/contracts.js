@@ -103,12 +103,39 @@ export function assertConfiguration(value, expectedRevision = null) {
   return value;
 }
 export function assertBackends(value) {
-  if (!object(value) || Object.keys(value).sort().join(",") !== "backends,tasks" || !Array.isArray(value.tasks) || !value.tasks.every(x => text(x, 300)) || !Array.isArray(value.backends)) invalidOwner();
+  if (!object(value) || !["backends,tasks", "backends,health,tasks"].includes(Object.keys(value).sort().join(",")) || !Array.isArray(value.tasks) || !value.tasks.every(x => text(x, 300)) || !Array.isArray(value.backends)) invalidOwner();
   for (const backend of value.backends) {
     if (!object(backend) || Object.keys(backend).sort().join(",") !== "account_login_supported,allowed_tasks,availability,backend_id,provider,registered" ||
         !text(backend.backend_id) || !text(backend.provider) || !Array.isArray(backend.allowed_tasks) ||
         !backend.allowed_tasks.every(task => value.tasks.includes(task)) || typeof backend.registered !== "boolean" ||
         typeof backend.account_login_supported !== "boolean" || backend.availability !== "not-probed") invalidOwner();
+  }
+  return value;
+}
+const HEALTH_STATES = ["available", "unavailable", "verification-needed", "unknown"];
+const HEALTH_CODES = ["connection-not-probed", "check-budget-exhausted", "metadata-available", "account-sign-in-required",
+  "account-present-connection-unprobed", "provider-metadata-invalid", "provider-unavailable", "provider-busy",
+  "model-not-advertised", "registration-changed", "metadata-matched"];
+export function assertProviderHealth(value, configuration, now = Date.now()) {
+  if (value === null || value === undefined) return null;
+  const keys = ["configuration_revision", "configuration_digest", "checked_at", "expires_at", "backends", "models"];
+  if (!object(value) || Object.keys(value).sort().join(",") !== keys.sort().join(",") ||
+      value.configuration_revision !== configuration.revision || value.configuration_digest !== configuration.digest ||
+      !text(value.checked_at, 64) || !text(value.expires_at, 64) ||
+      !Array.isArray(value.backends) || value.backends.length > 32 || !Array.isArray(value.models) || value.models.length > 256) invalidOwner();
+  const start = Date.parse(value.checked_at), end = Date.parse(value.expires_at);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 120_000 || start > now || end <= now) return null;
+  const config = configuration.configuration;
+  for (const [rows, field, known] of [[value.backends, "backend_id", config.backends], [value.models, "model_id", config.models]]) {
+    const seen = new Set();
+    for (const row of rows) {
+      const expected = field === "backend_id" ? "backend_id,code,state" : "code,model_id,observed_model_digest,observed_runtime_version,state";
+      if (!object(row) || Object.keys(row).sort().join(",") !== expected || !Object.hasOwn(known, row[field]) || seen.has(row[field]) ||
+          !HEALTH_STATES.includes(row.state) || !HEALTH_CODES.includes(row.code)) invalidOwner();
+      if (field === "model_id" && (!(row.observed_runtime_version === null || text(row.observed_runtime_version, 2048)) ||
+          !(row.observed_model_digest === null || text(row.observed_model_digest, 200)))) invalidOwner();
+      seen.add(row[field]);
+    }
   }
   return value;
 }

@@ -54,7 +54,17 @@ const actionInputs = {
 const request = object({ schema_version: { const: 1 }, request_id: id, idempotency_key: id,
   expected_configuration_revision: integer, action: { enum: Object.keys(actionInputs) }, input: { type: "object" } });
 request.allOf = Object.entries(actionInputs).map(([action, input]) => ({ if: { properties: { action: { const: action } } }, then: { properties: { input } } }));
+const healthObservation = { state: { enum: ["available", "unavailable", "verification-needed", "unknown"] },
+  code: { enum: ["connection-not-probed", "check-budget-exhausted", "metadata-available", "account-sign-in-required",
+    "account-present-connection-unprobed", "provider-metadata-invalid", "provider-unavailable", "provider-busy",
+    "model-not-advertised", "registration-changed", "metadata-matched"] } };
+const providerHealth = nullable(object({ configuration_revision: integer, configuration_digest: hash,
+  checked_at: { type: "string", format: "date-time" }, expires_at: { type: "string", format: "date-time" },
+  backends: array(object({ backend_id: string, ...healthObservation }), { maxItems: 32 }),
+  models: array(object({ model_id: hash, ...healthObservation, observed_runtime_version: nullable({ ...string, maxLength: 2048 }),
+    observed_model_digest: nullable(string) }), { maxItems: 256 }) }));
 const components = {
+  ProviderHealth: providerHealth,
   Selection: object({ model_id: hash, effort }),
   Route: nullable(object({ primary: ref("Selection"), fallbacks: array(ref("Selection"), { maxItems: 4 }), on_exhausted: { const: "fail-closed" } })),
   Request: request,
@@ -72,7 +82,7 @@ const components = {
     failure: nullable(object({ code: string, retryable: { type: "boolean" } })),
     history: array(object({ sequence: { type: "integer", minimum: 1 }, type: string, state: string, occurred_at: { type: "string", format: "date-time" } }), { maxItems: 128 }),
     next_action: { enum: ["await-progress", "complete-account-sign-in", "retry-or-cancel", "reconcile-original-operation", "review-owner-evidence", "complete", "refresh-and-create-corrected-request"] } }),
-  Registry: object({ schema_version: { const: 1 }, tasks: array(string), backends: array(object({ backend_id: string, provider: string, allowed_tasks: array(string), registered: { type: "boolean" }, account_login_supported: { type: "boolean" }, availability: { const: "not-probed" } })), configuration: ref("Configuration") }),
+  Registry: object({ schema_version: { const: 1 }, tasks: array(string), backends: array(object({ backend_id: string, provider: string, allowed_tasks: array(string), registered: { type: "boolean" }, account_login_supported: { type: "boolean" }, availability: { const: "not-probed" } })), configuration: ref("Configuration"), health: ref("ProviderHealth") }, ["schema_version", "tasks", "backends", "configuration"]),
   Catalogue: object({ backend_id: string, models: array(object({ model: string, supported_efforts: nullable(array(effort, { minItems: 1 })), model_digest: nullable(string), runtime_version: { ...string, maxLength: 2048 } })) }),
   List: object({ requests: array(ref("Projection"), { maxItems: 100 }), next_cursor: nullable(id) }),
 };

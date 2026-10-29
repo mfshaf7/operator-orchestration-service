@@ -103,3 +103,22 @@ runtime commissioning controls remain authoritative.
 The [API contract](../api/openapi.json) defines exact wire fields. Run
 `node --test --test-concurrency=1 test/model-operations.test.js` and
 `npm run validate:model-operations-openapi` for the owner contract checks.
+
+## Provider checks after core startup
+
+Console core startup does not require a configured, signed-in or reachable AI
+provider. After core readiness, Platform's existing observation timer checks only
+registered backends. Registry reads return cached, revision/digest-bound `health`
+metadata with a 120-second expiry; absent, stale, mismatched or invalid evidence
+means unknown health. Configuration and recovery controls remain usable.
+
+Local metadata can report availability or a changed registration. Dedicated
+account presence is reported separately from unprobed remote connectivity and
+entitlement. Routine checks never start Codex, perform inference, send project
+context, register a backend, adopt a changed model or change routes.
+
+For `verification-needed`, inspect advertised metadata and explicitly submit the
+existing `model.register` command. Successful verification updates the same model
+identity and creates a new configuration revision; routes and prior receipts are
+retained. Failed or uncertain verification does not adopt metadata. Request
+`reconcile` still means recover that original command, not accept provider drift.
