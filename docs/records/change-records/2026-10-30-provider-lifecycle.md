@@ -2,6 +2,7 @@
 security_evidence:
   review_areas: [runtime, delivery, ai]
   reviewed_artifacts:
+    - src/app.js
     - src/model-operations/contracts.js
     - src/model-operations/service.js
     - scripts/sync_model_operations_openapi.mjs
@@ -49,6 +50,9 @@ model.register verification; stable model IDs, route choices and history remain.
 Codex account presence does not assert remote connection or entitlement; routine
 checks do not launch Codex. Invocations retain strict integrity, permission,
 completion-uncertainty and ordered pre-submission fallback controls.
+
+Registry health is opt-in (`include_health=true`) so the preceding strict Console
+consumer retains its exact response shape during staged owner replacement.
 
 ## Live Verification
 

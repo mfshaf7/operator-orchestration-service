@@ -108,7 +108,7 @@ The [API contract](../api/openapi.json) defines exact wire fields. Run
 
 Console core startup does not require a configured, signed-in or reachable AI
 provider. After core readiness, Platform's existing observation timer checks only
-registered backends. Registry reads return cached, revision/digest-bound `health`
+registered backends. Registry reads with `include_health=true` return cached, revision/digest-bound `health`
 metadata with a 120-second expiry; absent, stale, mismatched or invalid evidence
 means unknown health. Configuration and recovery controls remain usable.
 

@@ -105,7 +105,7 @@ function operation(name, summary, responseName, example, { parameters = [], body
     responses: { [status]: { description: "Read the business state and authoritative next action.", content: { "application/json": { schema: ref(responseName), example } } }, ...errors } };
 }
 const routes = {
-  "/v1/model-operations/registry": { get: operation("readModelOperationsRegistry", "Read admitted backends and revisioned configuration", "Registry", { schema_version: 1, tasks: [], backends: [], configuration: snapshot }) },
+  "/v1/model-operations/registry": { get: operation("readModelOperationsRegistry", "Read admitted backends and revisioned configuration", "Registry", { schema_version: 1, tasks: [], backends: [], configuration: snapshot }, { parameters: [query("include_health", { type: "boolean" })] }) },
   "/v1/model-operations/catalogue": { get: operation("readModelOperationsCatalogue", "Discover admitted provider models and native effort metadata", "Catalogue", { backend_id: "local", models: [] }, { parameters: [query("backend_id", string, true), query("model", string)] }) },
   "/v1/model-operations/requests": {
     get: operation("listModelOperations", "List caller-owned model operations", "List", { requests: [queued], next_cursor: null }, { parameters: [query("limit", { type: "integer", minimum: 1, maximum: 100 }), query("cursor", id)] }),

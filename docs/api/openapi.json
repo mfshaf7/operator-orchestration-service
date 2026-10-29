@@ -31266,6 +31266,14 @@
               "minLength": 1,
               "maxLength": 200
             }
+          },
+          {
+            "name": "include_health",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
