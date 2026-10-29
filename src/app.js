@@ -3973,7 +3973,14 @@ async function handleModelOperations({ action, config, modelOperationsService, r
   const options = { callerId: caller.id, operatorId, requestId };
   try {
     let result;
-    if (action === "registry") result = await modelOperationsService.registry(options);
+    if (action === "registry") {
+      if ([...url.searchParams.keys()].some(key => key !== "include_health") ||
+          url.searchParams.getAll("include_health").length > 1 ||
+          url.searchParams.has("include_health") && !["true", "false"].includes(url.searchParams.get("include_health"))) {
+        throw new HttpError(400, "model_operations_invalid_input", "Select the optional provider-health projection once.");
+      }
+      result = await modelOperationsService.registry({ ...options, includeHealth: url.searchParams.get("include_health") === "true" });
+    }
     else if (action === "catalogue") result = await modelOperationsService.catalogue({ ...options, backendId: url.searchParams.get("backend_id"), model: url.searchParams.get("model") });
     else if (action === "list") result = await modelOperationsService.list({ ...options, cursor: url.searchParams.get("cursor"), limit: url.searchParams.has("limit") ? parsePositiveInteger(url.searchParams.get("limit"), "limit", { max: 100 }) : 50 });
     else if (action === "read") result = await modelOperationsService.get(options);

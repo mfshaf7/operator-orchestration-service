@@ -8,7 +8,7 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createModelOperationsRuntime } from "../src/model-operations/runtime.js";
 import { selectionEvidence } from "../src/model-operations/selection-evidence.js";
-import { assertBackends, assertConfiguration, digest } from "../src/model-operations/contracts.js";
+import { assertBackends, assertConfiguration, assertProviderHealth, digest } from "../src/model-operations/contracts.js";
 import { createModelOperationsService } from "../src/model-operations/service.js";
 import { createModelOperationsPlatformClient, ModelOwnerError } from "../src/model-operations/platform-client.js";
 import { createModelProfileRequestStore } from "../src/model-profile-request/store.js";
@@ -181,7 +181,13 @@ test("model operations HTTP API binds reads and writes, routes progress, and doe
   const { service } = await fixture(t);
   const config = loadConfig({ CALLER_ALLOWED_IDS: callerId, CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [callerId]: "console-secret" }) });
   const app = createApp({ config, modelOperationsService: service });
-  assert.equal((await invoke(app, { url: "/v1/model-operations/registry" })).code, 200);
+  const legacy = await invoke(app, { url: "/v1/model-operations/registry" });
+  assert.equal(legacy.code, 200); assert.equal(Object.hasOwn(legacy.body, "health"), false);
+  const observed = await invoke(app, { url: "/v1/model-operations/registry?include_health=true" });
+  assert.equal(observed.code, 200); assert.equal(observed.body.health, null);
+  for (const query of ["include_health=yes", "include_health=true&include_health=false", "endpoint=http://untrusted.invalid"]) {
+    assert.equal((await invoke(app, { url: "/v1/model-operations/registry?" + query })).code, 400);
+  }
   assert.equal((await invoke(app, { url: "/v1/model-operations/registry", operator: null })).code, 400);
   assert.equal((await invoke(app, { url: "/v1/model-operations/registry", secret: "incorrect" })).code, 401);
   assert.equal((await invoke(createApp({ config }), { url: "/v1/model-operations/registry" })).code, 503);
@@ -258,4 +264,31 @@ test("unavailable native progress is explicit uncertainty, then reconciliation u
   assert.equal(unknown.account_login.command_id, waiting.account_login.command_id);
   platform.login = login; await control(service, unknown, "reconcile"); await service.idle();
   assert.equal((await read(service)).state, "awaiting-account"); assert.equal(platform.calls[0].command_id, platform.calls[1].command_id);
+});
+
+test("post-start health is optional, bound to current configuration, and cannot disable management", async t => {
+  const { service, platform } = await fixture(t);
+  await service.create({ ...identity, input: request() }); await service.idle();
+  const snapshot = await platform.configuration();
+  const start = Date.now() - 1000;
+  const health = { configuration_revision: snapshot.revision, configuration_digest: snapshot.digest,
+    checked_at: new Date(start).toISOString(), expires_at: new Date(start + 120000).toISOString(),
+    backends: [{ backend_id: "local", state: "unavailable", code: "provider-unavailable" }], models: [] };
+  const backends = platform.backends.bind(platform);
+  platform.backends = async () => ({ ...await backends(), health });
+  assert.equal(Object.hasOwn(await service.registry(identity), "health"), false);
+  assert.deepEqual((await service.registry({ ...identity, includeHealth: true })).health, health);
+  assert.equal(platform.calls.length, 1);
+  health.configuration_revision++;
+  assert.equal((await service.registry({ ...identity, includeHealth: true })).health, null);
+  health.configuration_revision--;
+  health.token = "never forward";
+  const registry = await service.registry({ ...identity, includeHealth: true });
+  assert.equal(registry.health, null); assert.equal(registry.configuration.revision, 1);
+  assert.equal(JSON.stringify(registry).includes("never forward"), false);
+  delete health.token;
+  health.expires_at = new Date(start - 1).toISOString();
+  assert.equal(assertProviderHealth(health, snapshot), null);
+  platform.backends = backends;
+  assert.equal((await service.registry({ ...identity, includeHealth: true })).health, null);
 });

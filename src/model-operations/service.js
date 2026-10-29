@@ -1,5 +1,5 @@
 import {
-  assertBackends, assertCatalogue, assertConfiguration, assertControl, assertLogin,
+  assertBackends, assertProviderHealth, assertCatalogue, assertConfiguration, assertControl, assertLogin,
   assertOwnerReceipt, assertRequest, digest, fail, identifier, TERMINAL,
 } from "./contracts.js";
 import { ModelOwnerError } from "./platform-client.js";
@@ -155,13 +155,20 @@ export function createModelOperationsService({ store, platform, operatorBindings
     });
   }
   return {
-    async registry({ callerId, operatorId }) {
+    async registry({ callerId, operatorId, includeHealth = false }) {
       bind(callerId, operatorId);
       // Serial to avoid describing registrations from an older snapshot.
       const backends = assertBackends(await platform.backends({ operatorId }));
       const configuration = assertConfiguration(await platform.configuration({ operatorId }));
       for (const backend of backends.backends) backend.registered = Object.hasOwn(configuration.configuration.backends, backend.backend_id);
-      return { schema_version: 1, ...backends, configuration };
+      const { health: observedHealth, ...registry } = backends;
+      if (!includeHealth) return { schema_version: 1, ...registry, configuration };
+      let health = null;
+      try { health = assertProviderHealth(observedHealth, configuration); }
+      catch { audit?.emit({ event_type: "model.provider-observation.invalid", outcome: "health-unknown" }); }
+      // Observations cannot make owner configuration unavailable or authorize
+      // an invocation. A concurrent configuration edit invalidates this check.
+      return { schema_version: 1, ...registry, health, configuration };
     },
     async catalogue({ callerId, operatorId, backendId, model = null }) {
       bind(callerId, operatorId); identifier(backendId, "Backend");
