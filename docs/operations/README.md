@@ -9,6 +9,8 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Workspace And Proposal
 
+- [Saved operator work and browser recovery](saved-operator-work.md)
+
 - [Product Publication](product-publication-operator-surface.md)
 - [Proposal Workflow](proposal-workflow-operator-surface.md)
 - [Proposal Target Application](proposal-target-application-operator-surface.md)

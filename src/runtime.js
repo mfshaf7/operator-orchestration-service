@@ -1,4 +1,7 @@
 import { loadConfig } from "./config.js";
+import path from "node:path";
+import { createSavedWorkStore } from "./saved-work/store.js";
+import { deliveryArtWorkStateRoot } from "./delivery-art/work-session-store.js";
 import { createRepositoryOwnerBootstrapRuntime } from "./repository-owner-bootstrap/runtime.js";
 import { HttpError } from "./errors.js";
 import { createAuditLogger } from "./audit.js";
@@ -386,6 +389,7 @@ export function createRuntime({
     fetchImpl,
   });
   const app = createApp({
+    savedWorkService: env.OOS_ART_WORK_STATE_ROOT ? createSavedWorkStore({ root: path.join(deliveryArtWorkStateRoot(env), "operator-saved-work") }) : null,
     agentConsoleService,
     audit,
     catalogService,

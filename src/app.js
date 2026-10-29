@@ -1,4 +1,5 @@
 import { createDeliveryHistoryReader } from "./delivery-history-reader.js";
+import { SavedWorkError } from "./saved-work/store.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -5591,6 +5592,7 @@ async function handlePlatformOperation({
 }
 
 export function createApp({
+  savedWorkService = null,
   agentConsoleService = null,
   audit = null,
   catalogService = null,
@@ -5630,6 +5632,37 @@ export function createApp({
   return async function app(request, response) {
     try {
       const url = new URL(request.url, "http://localhost");
+
+      if ((request.method === "GET" && /^\/v1\/operator-saved-work\/[^/]+\/[^/]+$/.test(url.pathname)) ||
+          (request.method === "POST" && /^\/v1\/operator-saved-work\/[^/]+\/[^/]+$/.test(url.pathname))) {
+        const caller = authenticateCaller(request, config);
+        assertCallerIdentityBound(caller, "Saved operator work");
+        const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+        if (!savedWorkService) throw new HttpError(503, "saved_work_unavailable", "The reviewed private saved-work owner is unavailable.");
+        const allowedQuery = request.method === "GET" ? ["recovery_id"] : ["action"];
+        if ([...url.searchParams.keys()].some(key => !allowedQuery.includes(key) || url.searchParams.getAll(key).length !== 1))
+          throw new HttpError(400, "saved_work_query_invalid", "Use only the bounded save or recovery selector.");
+        const identity = { callerId: caller.id, operatorId, kind: url.pathname.split("/")[3], subjectId: decodeURIComponent(url.pathname.split("/")[4]) };
+        try {
+          if (request.method === "GET") {
+            const result = savedWorkService.read(identity, url.searchParams.get("recovery_id"));
+            sendSourceProjection(response, request, result, () => ({ recordRef: `oos://operator-saved-work/${identity.kind}/${identity.subjectId}`,
+              sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
+              sourceRef: `oos://operator-saved-work/${identity.kind}/${identity.subjectId}${url.searchParams.has("recovery_id") ? `?recovery_id=${url.searchParams.get("recovery_id")}` : ""}`,
+              sourceTimestamp: new Date().toISOString() }));
+          } else {
+            assertDeliveryMutationAuthority(caller);
+            const input = await readJsonBody(request, { canonical: true, maxBytes: 4 * 1024 * 1024 });
+            if (url.searchParams.get("action") === "preserve") sendJson(response, 200, await savedWorkService.preserve(identity, input));
+            else if (!url.searchParams.has("action")) sendJson(response, 200, await savedWorkService.save(identity, input));
+            else throw new HttpError(400, "saved_work_action_invalid", "Use a save or original-record preservation action.");
+          }
+        } catch (error) {
+          if (error instanceof SavedWorkError) throw new HttpError(error.statusCode, error.code, error.message);
+          throw error;
+        }
+        return;
+      }
 
       if (request.method === "GET" && url.pathname === "/healthz") {
         sendJson(response, 200, {
