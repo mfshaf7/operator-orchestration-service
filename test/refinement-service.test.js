@@ -170,6 +170,55 @@ function applyRequest() {
   };
 }
 
+function mixedPlanningRequest() {
+  const current=packet();
+  current.target_tree.children=["1002","1003"].map(id=>({id,kind:"Feature",title:`Feature ${id}`,description:"",draft_body:"",remark:"",children:[]}));
+  const route="POST /v1/delivery-initiatives/{delivery_id}/plan/apply";
+  current.apply_plan.expected_routes.push(route);
+  current.apply_plan.operations.push({operation_id:"planning",kind:"plan_apply",label:"Plan reviewed scope",detail:"Preserve future backlog",target:"Reviewed ART planning scope",oos_route:route,status:"planned"});
+  const fields=[];
+  for(const [id,required] of [["1002",true],["1003",false]])for(const key of ["target_pi","iteration"]){
+    fields.push({field_key:`work-${key}-${id}`,backend_field:key,label:key,field_kind:"short_text",required,status:"complete",value:required?(key==="target_pi"?"PI-2026-03":"PI-2026-03 / Iteration 1"):"",target_node_ids:[id],validation_hint:"Existing native planning rules",route_binding:{operation_kind:"plan_apply",oos_route:route,payload_key:key,target:"work_item"}});
+  }
+  current.draft_groups.push({group_id:"work-items",title:"Work metadata",summary:"Review current and future scope",fields});
+  const request=applyRequest();request.accepted_draft.apply_plan=current.apply_plan;
+  request.accepted_draft.metadata_values=Object.fromEntries(current.draft_groups.flatMap(g=>g.fields.flatMap(f=>f.target_node_ids.map(id=>[`${f.backend_field}:${id}`,f.value]))));
+  const seal=()=>{request.accepted_draft.metadata_resolutions=Object.fromEntries(Object.keys(request.accepted_draft.metadata_values).map(key=>[key,"accepted"]));const {draft_digest,...draft}=request.accepted_draft;request.accepted_draft.draft_digest=canonicalDigest(draft);};seal();
+  return {packet:current,request,seal};
+}
+
+test("Refinement accepts a mixed committed/backlog draft without fabricated planning values",async()=>{
+  const mixed=mixedPlanningRequest();let starts=0;
+  const runtime=service({sourceAdapter:{async projectPacket(){return mixed.packet;}},runAdapter:{async startRun({request}){starts++;assert.equal(request.accepted_draft.metadata_values["target_pi:1003"],"");return {state:"accepted"};}}});
+  assert.equal((await runtime.apply({callerId:"console",packageId:packageRef,request:mixed.request})).state,"accepted");assert.equal(starts,1);
+});
+
+test("Refinement validates accepted PI/iteration intent before starting any durable effects",async()=>{
+  for(const values of [
+    {"target_pi:1003":"PI-2026-04"},
+    {"target_pi:1003":"PI-2026-04","iteration:1003":"PI-2026-03 / Iteration 1"},
+    {"iteration:1003":"PI-2026-04 / Iteration 1"},
+    {"target_pi:1002":""},
+  ]){
+    const mixed=mixedPlanningRequest();Object.assign(mixed.request.accepted_draft.metadata_values,values);mixed.seal();
+    const runtime=service({sourceAdapter:{async projectPacket(){return mixed.packet;}},runAdapter:{async startRun(){assert.fail("Invalid planning must not start a run");}}});
+    await assert.rejects(runtime.apply({callerId:"console",packageId:packageRef,request:mixed.request}),error=>error.code==="request_invalid");
+  }
+});
+
+test("Refinement may explicitly commit a backlog target with a compatible reviewed iteration",async()=>{
+  const mixed=mixedPlanningRequest();Object.assign(mixed.request.accepted_draft.metadata_values,{"target_pi:1003":"PI-2026-04","iteration:1003":"PI-2026-04 / Iteration 1"});mixed.seal();
+  const runtime=service({sourceAdapter:{async projectPacket(){return mixed.packet;}},runAdapter:{async startRun(){return {state:"accepted"};}}});
+  assert.equal((await runtime.apply({callerId:"console",packageId:packageRef,request:mixed.request})).state,"accepted");
+});
+
+test("Refinement does not fabricate a blank value for an omitted read-only planning counterpart",async()=>{
+  const mixed=mixedPlanningRequest();mixed.packet.draft_groups[1].fields=mixed.packet.draft_groups[1].fields.filter(f=>!(f.backend_field==="target_pi"&&f.target_node_ids.includes("1002")));
+  delete mixed.request.accepted_draft.metadata_values["target_pi:1002"];mixed.seal();
+  const runtime=service({sourceAdapter:{async projectPacket(){return mixed.packet;}},runAdapter:{async startRun(){return {state:"accepted"};}}});
+  assert.equal((await runtime.apply({callerId:"console",packageId:packageRef,request:mixed.request})).state,"accepted");
+});
+
 function readyProjection(request) {
   const projection = {
     schema_version: 1,

@@ -12,6 +12,7 @@ import {
 import { RefinementUpstreamError } from "./http-client.js";
 import { refinementAcceptedDraftDigest } from "./run-model.js";
 import { RefinementRuntimeError } from "./temporal-adapter.js";
+import { validateRefinementPlanningValues } from "./planning-fields.js";
 
 const PROFILE_ID = "delivery-refinement-advisor-v1";
 const CONTRACT_REF = "oos.delivery-refinement.v1";
@@ -301,6 +302,15 @@ function assertAcceptedDraft(request, packet) {
         { correlationId: request.correlation_id },
       );
     }
+  }
+  try {
+    validateRefinementPlanningValues(packet, draft);
+  } catch (error) {
+    throw new RefinementServiceError(
+      "request_invalid",
+      `Accepted Refinement planning is invalid: ${error.message}`,
+      { correlationId: request.correlation_id },
+    );
   }
 }
 

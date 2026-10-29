@@ -250,6 +250,42 @@ function planningCase() {
   };
 }
 
+function mixedPlanningCase(){
+  const current=planningCase();
+  current.tree.children.push({id:1005,type:"Feature",subject:"Future",status:"new",target_pi:null,iteration:"Not committed to a PI iteration yet.",children:[{id:1006,type:"User story",subject:"Planned future child",status:"parked",target_pi:null,iteration:null,children:[]}]});
+  const reviewed=node=>({id:String(node.id),kind:node.type,title:node.subject,children:node.children.map(reviewed)});
+  current.packet.target_tree=reviewed(current.tree);
+  for(const key of ["target_pi","iteration"]){
+    current.packet.draft_groups[0].fields.push({backend_field:key,required:false,value:"",target_node_ids:["1005","1006"],target_values:{1005:key==="iteration"?"Not committed to a PI iteration yet.":"",1006:""},route_binding:current.packet.draft_groups[0].fields[0].route_binding});
+    for(const id of ["1005","1006"])current.request.accepted_draft.metadata_values[`${key}:${id}`]="";
+  }
+  return current;
+}
+
+test("Refinement native planning omits optional blank backlog values and reuses the committed result",async()=>{
+  const current=mixedPlanningCase();let calls=0;
+  const native={async applyDeliveryPlan(input){calls++;const future=input.plan.items[2];assert.equal(future.subject,"Future");for(const node of [future,...future.children]){assert.equal(Object.hasOwn(node,"target_pi"),false);assert.equal(Object.hasOwn(node,"iteration"),false);assert.equal(Object.hasOwn(node,"status"),false);}return {delivery_record_ref:"openproject://work_packages/884",plan_result:{created:[],updated:[],reused:[]}};}};
+  await createRefinementActivities({sourceAdapter:sourceAdapter(current.tree),deliveryService:native}).applyRefinementOperation({callerId:"console",...current});
+  for(const node of [current.tree.children[0],current.tree.children[0].children[0]]){node.target_pi="PI-2026-04";node.iteration="PI-2026-04 / Iteration 1";}
+  const replay=await createRefinementActivities({sourceAdapter:sourceAdapter(current.tree),deliveryService:{async applyDeliveryPlan(){assert.fail("Do not repeat applied planning");}}}).applyRefinementOperation({callerId:"console",...current});
+  assert.equal(calls,1);assert.equal(replay.reused_refs.length,5);
+});
+
+test("Refinement detects a concurrent change to retained backlog before native writes or a false receipt",async()=>{
+  const current=mixedPlanningCase();current.request.accepted_draft.metadata_values["target_pi:1005"]="   ";current.tree.children[2].target_pi="PI-2026-04";current.tree.children[2].iteration="PI-2026-04 / Iteration 1";
+  const activities=createRefinementActivities({sourceAdapter:sourceAdapter(current.tree),deliveryService:{async applyDeliveryPlan(){assert.fail("Do not overwrite unreviewed backlog changes");}}});
+  await assert.rejects(activities.applyRefinementOperation({callerId:"console",...current}),{code:"apply_conflict"});
+  for(const node of [current.tree.children[0],current.tree.children[0].children[0]]){node.target_pi="PI-2026-04";node.iteration="PI-2026-04 / Iteration 1";}
+  await assert.rejects(activities.readRefinementCanonicalState({packet:current.packet,request:current.request,operationResults:[]}),{code:"backend_readback_incomplete"});
+});
+
+test("Refinement treats whitespace-only optional planning inputs as retained values",async()=>{
+  const current=mixedPlanningCase();
+  for(const id of ["1005","1006"])for(const key of ["target_pi","iteration"])current.request.accepted_draft.metadata_values[`${key}:${id}`]="   ";
+  let writes=0;const activities=createRefinementActivities({sourceAdapter:sourceAdapter(current.tree),deliveryService:{async applyDeliveryPlan(input){writes++;for(const node of [input.plan.items[2],...input.plan.items[2].children]){assert.equal(Object.hasOwn(node,"target_pi"),false);assert.equal(Object.hasOwn(node,"iteration"),false);}return {delivery_record_ref:"openproject://work_packages/884",plan_result:{created:[],updated:[],reused:[]}};}}});
+  await activities.applyRefinementOperation({callerId:"console",...current});assert.equal(writes,1);
+});
+
 test("Refinement planning preserves native taxonomy/status and routes only accepted planning inputs", async () => {
   const current = planningCase();
   let input;

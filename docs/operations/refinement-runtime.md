@@ -67,6 +67,19 @@ retains current classification, descriptions and status; accepted classification
 changes apply afterward by explicit id, avoiding a new prefixed identity during
 plan reconciliation. Refinement never marks items Ready automatically.
 
+For a plan with current and future work, set PI and compatible Iteration only on
+the reviewed committed scope. Future new backlog Features and their valid planned
+children may keep blank PI and blank/backlog Iteration. Their planning fields are
+optional in their explicit scope; committed/active and structurally required work
+keeps required fields. Do not enter a fake PI to satisfy an unrelated branch.
+Other metadata still follows the current packet and native authority.
+
+When committing a previously uncommitted target, review PI and Iteration together.
+Invalid pairs fail before a durable run starts. Blank optional planning inputs
+retain their original values rather than clearing unreviewed state. If another
+operation changes a retained planning value after acceptance, reload and review
+the current packet; the run must not overwrite it or certify a false readback.
+
 Replay reads accepted fields before repeating any mutation. Final readback
 compares every effectful accepted field against its actual canonical target;
 returned record references alone are insufficient. A missing target, ignored
