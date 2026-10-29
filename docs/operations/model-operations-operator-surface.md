@@ -112,10 +112,25 @@ registered backends. Registry reads with `include_health=true` return cached, re
 metadata with a 120-second expiry; absent, stale, mismatched or invalid evidence
 means unknown health. Configuration and recovery controls remain usable.
 
-Local metadata can report availability or a changed registration. Dedicated
-account presence is reported separately from unprobed remote connectivity and
-entitlement. Routine checks never start Codex, perform inference, send project
-context, register a backend, adopt a changed model or change routes.
+Local metadata reports availability or a changed registration. After core
+startup, the dedicated hosted backend uses a bounded isolated native
+`account/rateLimits/read` request to check authenticated remote connectivity.
+Its model catalogue remains metadata, not model entitlement. A collector result
+is reused for 60 seconds; native process/account locks prevent overlap with
+operator work. Core readiness and browser registry reads never launch this check.
+The check never performs inference, sends project context, registers a backend,
+adopts a changed model or changes routes.
+
+`last_success` is optional historical evidence from an actual completed model
+verification or schema-valid routed request. It includes its original time,
+kind and durable receipt/selection reference. The UI marks results older than
+15 minutes stale. Success binds the exact registered model, admitted backend
+policy and dedicated account/login generation. A newer failed or uncertain
+request, changed metadata, missing account or current connection failure takes
+precedence; historical success cannot clear it. Older receipts without an
+authoritative timestamp do not acquire one from file modification times.
+Without recent model proof, a reachable hosted connection still says
+Verification needed. Use the existing explicit verification action.
 
 For `verification-needed`, inspect advertised metadata and explicitly submit the
 existing `model.register` command. Successful verification updates the same model

@@ -57,12 +57,15 @@ request.allOf = Object.entries(actionInputs).map(([action, input]) => ({ if: { p
 const healthObservation = { state: { enum: ["available", "unavailable", "verification-needed", "unknown"] },
   code: { enum: ["connection-not-probed", "check-budget-exhausted", "metadata-available", "account-sign-in-required",
     "account-present-connection-unprobed", "provider-metadata-invalid", "provider-unavailable", "provider-busy",
-    "model-not-advertised", "registration-changed", "metadata-matched"] } };
+    "model-not-advertised", "registration-changed", "metadata-matched", "connection-verified",
+    "last-request-failed", "recent-model-success", "model-verification-required"] } };
 const providerHealth = nullable(object({ configuration_revision: integer, configuration_digest: hash,
   checked_at: { type: "string", format: "date-time" }, expires_at: { type: "string", format: "date-time" },
   backends: array(object({ backend_id: string, ...healthObservation }), { maxItems: 32 }),
   models: array(object({ model_id: hash, ...healthObservation, observed_runtime_version: nullable({ ...string, maxLength: 2048 }),
-    observed_model_digest: nullable(string) }), { maxItems: 256 }) }));
+    observed_model_digest: nullable(string), last_success: nullable(object({ kind: { enum: ["verification", "request"] },
+      at: { type: "string", format: "date-time" }, reference: { type: "string", pattern: "^(sha256:|ai-routing-selection:)[0-9a-f]{64}$" } }))
+    }, ["model_id", "state", "code", "observed_runtime_version", "observed_model_digest"]), { maxItems: 256 }) }));
 const components = {
   ProviderHealth: providerHealth,
   Selection: object({ model_id: hash, effort }),
