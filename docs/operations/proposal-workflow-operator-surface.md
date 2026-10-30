@@ -1,5 +1,15 @@
 # Proposal Workflow Operator Surface
 
+## Existing Delivery links
+
+The optional read-only `delivery_ref` in the Proposal projection preserves the
+canonical link created by older consumption workflows. It is available from
+the same record/snapshot read, without another backend request. Its presence
+does not invent modern route fields, a handoff receipt or implementation status.
+Clients may inspect the linked initiative through the existing Delivery read
+boundary. A retired initiative is not implementation evidence. Completed source
+closeout still uses the existing eligibility and reciprocal-link checks.
+
 ## Purpose
 
 This is the primary operating procedure for the live versioned Proposal

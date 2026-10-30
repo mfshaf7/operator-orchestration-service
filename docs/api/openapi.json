@@ -45337,6 +45337,14 @@
           "updated_at"
         ],
         "properties": {
+          "delivery_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^openproject://work_packages/[1-9][0-9]*$",
+            "description": "Existing canonical Delivery link, including consumption before modern Proposal route receipts. This is not an implementation or handoff receipt."
+          },
           "repository_resolution": {
             "$ref": "#/components/schemas/ProposalRepositoryResolutionRecordV1"
           },

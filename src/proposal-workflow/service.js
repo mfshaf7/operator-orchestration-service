@@ -530,6 +530,7 @@ export function createProposalWorkflowService({
       triage_summary: record.triageSummary,
       decision_notes: record.operatorDecisionNotes,
       route: state.route,
+      delivery_ref: record.deliveryRef ?? null,
       handoff: state.handoff,
       source: {
         ingress: sourceIngress(record.source?.surface),
