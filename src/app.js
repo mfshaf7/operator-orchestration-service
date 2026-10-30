@@ -3984,6 +3984,8 @@ async function handleModelOperations({ action, config, modelOperationsService, r
     else if (action === "catalogue") result = await modelOperationsService.catalogue({ ...options, backendId: url.searchParams.get("backend_id"), model: url.searchParams.get("model") });
     else if (action === "list") result = await modelOperationsService.list({ ...options, cursor: url.searchParams.get("cursor"), limit: url.searchParams.has("limit") ? parsePositiveInteger(url.searchParams.get("limit"), "limit", { max: 100 }) : 50 });
     else if (action === "read") result = await modelOperationsService.get(options);
+    else if (action === "connections") result = await modelOperationsService.connections(options);
+    else if (action === "connectionOperation") result = await modelOperationsService.connectionOperation(options);
     else result = await modelOperationsService[action]({ ...options, input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }) });
     sendJson(response, action === "create" ? 202 : 200, result);
   } catch (error) {
@@ -5766,6 +5768,11 @@ export function createApp({
         else if (request.method === "POST" && url.pathname === "/v1/model-operations/requests") action = "create";
         else if (request.method === "GET" && /^\/v1\/model-operations\/requests\/[^/]+$/.test(url.pathname)) { action = "read"; requestId = decodeURIComponent(url.pathname.split("/")[4]); }
         else if (request.method === "POST" && /^\/v1\/model-operations\/requests\/[^/]+\/controls$/.test(url.pathname)) { action = "control"; requestId = decodeURIComponent(url.pathname.split("/")[4]); }
+        else if (request.method === "GET" && url.pathname === "/v1/model-operations/connections") action = "connections";
+        else if (request.method === "POST" && url.pathname === "/v1/model-operations/connections/commands") action = "connectionCommand";
+        else if (request.method === "POST" && url.pathname === "/v1/model-operations/connections/credentials") action = "connectionCredentials";
+        else if (request.method === "POST" && url.pathname === "/v1/model-operations/connections/reconcile") action = "reconcileConnection";
+        else if (request.method === "GET" && /^\/v1\/model-operations\/connections\/operations\/[^/]+$/.test(url.pathname)) { action = "connectionOperation"; requestId = decodeURIComponent(url.pathname.split("/")[5]); }
         if (action) {
           await handleModelOperations({ action, config, modelOperationsService, request, requestId, response, url });
           return;

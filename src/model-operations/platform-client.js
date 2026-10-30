@@ -19,6 +19,7 @@ export function createModelOperationsPlatformClient({ baseUrl, tokenFile, caller
     try {
       response = await fetchImpl(new URL(path, base), {
         method: body === undefined ? "GET" : "POST",
+        redirect: "error",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}`,
           "X-Platform-Caller": callerId, "X-Platform-Operator": operatorId },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -51,5 +52,10 @@ export function createModelOperationsPlatformClient({ baseUrl, tokenFile, caller
     },
     command: ({ command, ...options }) => request("/v1/model-management/commands", { ...options, body: command }),
     login: ({ commandId, ...options }) => request(`/v1/model-management/account-login?${new URLSearchParams({ command_id: commandId })}`, options),
+    connections: options => request("/v1/model-management/connections", options),
+    connectionCommand: ({ command, ...options }) => request("/v1/model-management/connection-commands", { ...options, body: command }),
+    connectionCredentials: ({ credentials, ...options }) => request("/v1/model-management/connection-credentials", { ...options, body: credentials }),
+    connectionOperation: ({ commandId, ...options }) => request(`/v1/model-management/connection-operation?${new URLSearchParams({ command_id: commandId })}`, options),
+    reconcileConnection: ({ commandId, ...options }) => request("/v1/model-management/connection-reconcile", { ...options, body: { command_id: commandId } }),
   };
 }

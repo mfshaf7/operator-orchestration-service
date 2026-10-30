@@ -33135,6 +33135,511 @@
           }
         }
       }
+    },
+    "/v1/model-operations/connections": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "readProviderConnections",
+        "summary": "Read named Experimental provider connections",
+        "description": "OOS authenticates the bound operator. Platform owns durable connection intents, receipts, credential custody and original-operation recovery. API keys use only the separate transient ingress and are never stored in OOS journals. Experimental means real-account qualification is pending, independently of health. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsConnections"
+                },
+                "example": {
+                  "revision": 0,
+                  "connections": [],
+                  "presets": [
+                    {
+                      "provider": "claude-api",
+                      "label": "Claude API",
+                      "endpoint_origin": "https://api.anthropic.com",
+                      "experimental": true,
+                      "qualification": "real-account-verification-pending",
+                      "catalogue_supported": true
+                    },
+                    {
+                      "provider": "deepseek-api",
+                      "label": "DeepSeek API",
+                      "endpoint_origin": "https://api.deepseek.com",
+                      "experimental": true,
+                      "qualification": "real-account-verification-pending",
+                      "catalogue_supported": true
+                    },
+                    {
+                      "provider": "glm-api",
+                      "label": "GLM · Z.AI Standard API",
+                      "endpoint_origin": "https://api.z.ai",
+                      "experimental": true,
+                      "qualification": "real-account-verification-pending",
+                      "catalogue_supported": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/connections/commands": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "commandProviderConnection",
+        "summary": "Create, disconnect, reconnect or remove an owner-custodied connection",
+        "description": "OOS authenticates the bound operator. Platform owns durable connection intents, receipts, credential custody and original-operation recovery. API keys use only the separate transient ingress and are never stored in OOS journals. Experimental means real-account qualification is pending, independently of health. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-owned intent or revision-bound recovery control; caller and operator authority come from authenticated headers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelOperationsConnectionCommand"
+              },
+              "example": {
+                "command_id": "connection:example",
+                "expected_revision": 0,
+                "action": "connection.create",
+                "input": {
+                  "provider": "claude-api",
+                  "name": "My Claude API"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsConnectionReceipt"
+                },
+                "example": {
+                  "command_id": "connection:example",
+                  "command_digest": "sha256:aebf0d7a328911ee14f9795c41ca374a602a4eebf72e6352be6a348fd39d49df",
+                  "actor": "operator:mfshaf7",
+                  "action": "connection.create",
+                  "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                  "previous_revision": 0,
+                  "revision": 1,
+                  "state_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "receipt_digest": "sha256:52b09f051323ef3804a80673c9b479c2d981e3224de74838575ccf2d4e8e954a"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/connections/credentials": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "replaceProviderCredentials",
+        "summary": "Protected transient API-key ingress; no OOS secret persistence",
+        "description": "OOS authenticates the bound operator. Platform owns durable connection intents, receipts, credential custody and original-operation recovery. API keys use only the separate transient ingress and are never stored in OOS journals. Experimental means real-account qualification is pending, independently of health. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-owned intent or revision-bound recovery control; caller and operator authority come from authenticated headers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelOperationsConnectionCredentials"
+              },
+              "example": {
+                "command_id": "credentials:example",
+                "expected_revision": 1,
+                "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                "api_key": "EXAMPLE-ONLY-ENTER-AT-RUNTIME"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsConnectionReceipt"
+                },
+                "example": {
+                  "command_id": "credentials:example",
+                  "command_digest": "sha256:0dc918e537dd16b0c3574bcb0d414f7670022db304152764962819a5fec1284c",
+                  "actor": "operator:mfshaf7",
+                  "action": "connection.credentials",
+                  "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                  "previous_revision": 1,
+                  "revision": 2,
+                  "state_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "receipt_digest": "sha256:18f9fbf6f473bc03b9d91bb5060a7a3bd2adb190669534b6c68444c156512ff5"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/connections/operations/{command_id}": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "readProviderConnectionOperation",
+        "summary": "Read the original operator-owned safe operation",
+        "description": "OOS authenticates the bound operator. Platform owns durable connection intents, receipts, credential custody and original-operation recovery. API keys use only the separate transient ingress and are never stored in OOS journals. Experimental means real-account qualification is pending, independently of health. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsConnectionOperation"
+                },
+                "example": {
+                  "command_id": "connection:example",
+                  "command_digest": "sha256:aebf0d7a328911ee14f9795c41ca374a602a4eebf72e6352be6a348fd39d49df",
+                  "actor": "operator:mfshaf7",
+                  "action": "connection.create",
+                  "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                  "state": "finished",
+                  "receipt": {
+                    "command_id": "connection:example",
+                    "command_digest": "sha256:aebf0d7a328911ee14f9795c41ca374a602a4eebf72e6352be6a348fd39d49df",
+                    "actor": "operator:mfshaf7",
+                    "action": "connection.create",
+                    "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                    "previous_revision": 0,
+                    "revision": 1,
+                    "state_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "receipt_digest": "sha256:52b09f051323ef3804a80673c9b479c2d981e3224de74838575ccf2d4e8e954a"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-operations/connections/reconcile": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-operations",
+        "x-oos-workflow-family": "model-operations",
+        "x-oos-primary-caller": "governance-operations-console",
+        "tags": [
+          "Model Operations"
+        ],
+        "operationId": "reconcileProviderConnection",
+        "summary": "Reconcile the original custody effect without resubmitting credentials",
+        "description": "OOS authenticates the bound operator. Platform owns durable connection intents, receipts, credential custody and original-operation recovery. API keys use only the separate transient ingress and are never stored in OOS journals. Experimental means real-account qualification is pending, independently of health. Source availability does not commission runtime.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-owned intent or revision-bound recovery control; caller and operator authority come from authenticated headers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelOperationsConnectionReconcile"
+              },
+              "example": {
+                "command_id": "connection:example"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read the business state and authoritative next action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelOperationsConnectionOperation"
+                },
+                "example": {
+                  "command_id": "connection:example",
+                  "command_digest": "sha256:aebf0d7a328911ee14f9795c41ca374a602a4eebf72e6352be6a348fd39d49df",
+                  "actor": "operator:mfshaf7",
+                  "action": "connection.create",
+                  "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                  "state": "finished",
+                  "receipt": {
+                    "command_id": "connection:example",
+                    "command_digest": "sha256:aebf0d7a328911ee14f9795c41ca374a602a4eebf72e6352be6a348fd39d49df",
+                    "actor": "operator:mfshaf7",
+                    "action": "connection.create",
+                    "connection_id": "api-bdf8228a109defaa0b25c262debdaa10",
+                    "previous_revision": 0,
+                    "revision": 1,
+                    "state_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "receipt_digest": "sha256:52b09f051323ef3804a80673c9b479c2d981e3224de74838575ccf2d4e8e954a"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "401": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "403": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "404": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "409": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "413": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "500": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "502": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          },
+          "503": {
+            "description": "Bounded authorization, validation, conflict, integrity or availability failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -84105,9 +84610,16 @@
             ]
           },
           "runtime_version": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "verification_ref": {
             "type": "string",
@@ -84525,45 +85037,7 @@
           "backends": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "backend_id",
-                "provider",
-                "allowed_tasks",
-                "registered",
-                "account_login_supported",
-                "availability"
-              ],
-              "properties": {
-                "backend_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200
-                },
-                "provider": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200
-                },
-                "allowed_tasks": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  }
-                },
-                "registered": {
-                  "type": "boolean"
-                },
-                "account_login_supported": {
-                  "type": "boolean"
-                },
-                "availability": {
-                  "const": "not-probed"
-                }
-              }
+              "$ref": "#/components/schemas/ModelOperationsBackend"
             }
           },
           "configuration": {
@@ -84643,9 +85117,16 @@
                   ]
                 },
                 "runtime_version": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -85557,7 +86038,10 @@
                         "connection-verified",
                         "last-request-failed",
                         "recent-model-success",
-                        "model-verification-required"
+                        "model-verification-required",
+                        "connection-disconnected",
+                        "credential-reconcile-required",
+                        "api-key-required"
                       ]
                     }
                   }
@@ -85605,7 +86089,10 @@
                         "connection-verified",
                         "last-request-failed",
                         "recent-model-success",
-                        "model-verification-required"
+                        "model-verification-required",
+                        "connection-disconnected",
+                        "credential-reconcile-required",
+                        "api-key-required"
                       ]
                     },
                     "observed_runtime_version": {
@@ -85674,6 +86161,731 @@
             "type": "null"
           }
         ]
+      },
+      "ModelOperationsBackend": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backend_id",
+              "provider",
+              "allowed_tasks",
+              "registered",
+              "account_login_supported",
+              "availability"
+            ],
+            "properties": {
+              "backend_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "not": {
+                  "enum": [
+                    "claude-api",
+                    "deepseek-api",
+                    "glm-api"
+                  ]
+                }
+              },
+              "allowed_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "registered": {
+                "type": "boolean"
+              },
+              "account_login_supported": {
+                "type": "boolean"
+              },
+              "availability": {
+                "const": "not-probed"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backend_id",
+              "provider",
+              "allowed_tasks",
+              "registered",
+              "account_login_supported",
+              "availability",
+              "experimental",
+              "qualification",
+              "catalogue_supported",
+              "verification_max_tokens"
+            ],
+            "properties": {
+              "backend_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "provider": {
+                "const": "claude-api"
+              },
+              "allowed_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "registered": {
+                "type": "boolean"
+              },
+              "account_login_supported": {
+                "type": "boolean"
+              },
+              "availability": {
+                "const": "not-probed"
+              },
+              "experimental": {
+                "const": true
+              },
+              "qualification": {
+                "const": "real-account-verification-pending"
+              },
+              "catalogue_supported": {
+                "const": true
+              },
+              "verification_max_tokens": {
+                "const": 4096
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backend_id",
+              "provider",
+              "allowed_tasks",
+              "registered",
+              "account_login_supported",
+              "availability",
+              "experimental",
+              "qualification",
+              "catalogue_supported",
+              "verification_max_tokens"
+            ],
+            "properties": {
+              "backend_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "provider": {
+                "const": "deepseek-api"
+              },
+              "allowed_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "registered": {
+                "type": "boolean"
+              },
+              "account_login_supported": {
+                "type": "boolean"
+              },
+              "availability": {
+                "const": "not-probed"
+              },
+              "experimental": {
+                "const": true
+              },
+              "qualification": {
+                "const": "real-account-verification-pending"
+              },
+              "catalogue_supported": {
+                "const": true
+              },
+              "verification_max_tokens": {
+                "const": 4096
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backend_id",
+              "provider",
+              "allowed_tasks",
+              "registered",
+              "account_login_supported",
+              "availability",
+              "experimental",
+              "qualification",
+              "catalogue_supported",
+              "verification_max_tokens"
+            ],
+            "properties": {
+              "backend_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "provider": {
+                "const": "glm-api"
+              },
+              "allowed_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "registered": {
+                "type": "boolean"
+              },
+              "account_login_supported": {
+                "type": "boolean"
+              },
+              "availability": {
+                "const": "not-probed"
+              },
+              "experimental": {
+                "const": true
+              },
+              "qualification": {
+                "const": "real-account-verification-pending"
+              },
+              "catalogue_supported": {
+                "const": false
+              },
+              "verification_max_tokens": {
+                "const": 4096
+              }
+            }
+          }
+        ]
+      },
+      "ModelOperationsConnections": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "presets",
+          "connections"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "provider",
+                    "label",
+                    "endpoint_origin",
+                    "experimental",
+                    "qualification",
+                    "catalogue_supported"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "const": "claude-api"
+                    },
+                    "label": {
+                      "const": "Claude API"
+                    },
+                    "endpoint_origin": {
+                      "const": "https://api.anthropic.com"
+                    },
+                    "experimental": {
+                      "const": true
+                    },
+                    "qualification": {
+                      "const": "real-account-verification-pending"
+                    },
+                    "catalogue_supported": {
+                      "const": true
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "provider",
+                    "label",
+                    "endpoint_origin",
+                    "experimental",
+                    "qualification",
+                    "catalogue_supported"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "const": "deepseek-api"
+                    },
+                    "label": {
+                      "const": "DeepSeek API"
+                    },
+                    "endpoint_origin": {
+                      "const": "https://api.deepseek.com"
+                    },
+                    "experimental": {
+                      "const": true
+                    },
+                    "qualification": {
+                      "const": "real-account-verification-pending"
+                    },
+                    "catalogue_supported": {
+                      "const": true
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "provider",
+                    "label",
+                    "endpoint_origin",
+                    "experimental",
+                    "qualification",
+                    "catalogue_supported"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "const": "glm-api"
+                    },
+                    "label": {
+                      "const": "GLM · Z.AI Standard API"
+                    },
+                    "endpoint_origin": {
+                      "const": "https://api.z.ai"
+                    },
+                    "experimental": {
+                      "const": true
+                    },
+                    "qualification": {
+                      "const": "real-account-verification-pending"
+                    },
+                    "catalogue_supported": {
+                      "const": false
+                    }
+                  }
+                }
+              ]
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "connection_id",
+                "provider",
+                "name",
+                "state",
+                "credential_generation",
+                "pending_operation",
+                "updated_at",
+                "experimental",
+                "qualification",
+                "credential_present"
+              ],
+              "properties": {
+                "connection_id": {
+                  "type": "string",
+                  "pattern": "^api-[a-f0-9]{32}$"
+                },
+                "provider": {
+                  "enum": [
+                    "claude-api",
+                    "deepseek-api",
+                    "glm-api"
+                  ]
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "state": {
+                  "enum": [
+                    "active",
+                    "disconnected",
+                    "removing"
+                  ]
+                },
+                "credential_generation": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pending_operation": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "experimental": {
+                  "const": true
+                },
+                "qualification": {
+                  "const": "real-account-verification-pending"
+                },
+                "credential_present": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "maxItems": 16
+          }
+        }
+      },
+      "ModelOperationsConnectionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "expected_revision",
+          "action",
+          "input"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "action": {
+            "enum": [
+              "connection.create",
+              "connection.disconnect",
+              "connection.reconnect",
+              "connection.remove"
+            ]
+          },
+          "input": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "connection.create"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "provider",
+                    "name"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "enum": [
+                        "claude-api",
+                        "deepseek-api",
+                        "glm-api"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "connection.disconnect"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "connection_id"
+                  ],
+                  "properties": {
+                    "connection_id": {
+                      "type": "string",
+                      "pattern": "^api-[a-f0-9]{32}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "connection.reconnect"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "connection_id"
+                  ],
+                  "properties": {
+                    "connection_id": {
+                      "type": "string",
+                      "pattern": "^api-[a-f0-9]{32}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "connection.remove"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "connection_id"
+                  ],
+                  "properties": {
+                    "connection_id": {
+                      "type": "string",
+                      "pattern": "^api-[a-f0-9]{32}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelOperationsConnectionCredentials": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "expected_revision",
+          "connection_id",
+          "api_key"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "connection_id": {
+            "type": "string",
+            "pattern": "^api-[a-f0-9]{32}$"
+          },
+          "api_key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 8192,
+            "pattern": "^[!-~]+$",
+            "writeOnly": true,
+            "description": "Transient protected ingress to Platform/Vault. Never journal, log, save in a draft, or include in advisor context."
+          }
+        }
+      },
+      "ModelOperationsConnectionReconcile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          }
+        }
+      },
+      "ModelOperationsConnectionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "command_digest",
+          "actor",
+          "action",
+          "connection_id",
+          "previous_revision",
+          "revision",
+          "state_digest",
+          "receipt_digest"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "command_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "enum": [
+              "connection.create",
+              "connection.disconnect",
+              "connection.reconnect",
+              "connection.remove",
+              "connection.credentials"
+            ]
+          },
+          "connection_id": {
+            "type": "string",
+            "pattern": "^api-[a-f0-9]{32}$"
+          },
+          "previous_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "receipt_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "ModelOperationsConnectionOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "command_digest",
+          "actor",
+          "action",
+          "connection_id",
+          "state",
+          "receipt"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$"
+          },
+          "command_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "enum": [
+              "connection.create",
+              "connection.disconnect",
+              "connection.reconnect",
+              "connection.remove",
+              "connection.credentials"
+            ]
+          },
+          "connection_id": {
+            "type": "string",
+            "pattern": "^api-[a-f0-9]{32}$"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "finished",
+              "cancelled"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelOperationsConnectionReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       }
     }
   }

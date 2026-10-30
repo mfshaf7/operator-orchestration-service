@@ -14,6 +14,56 @@ before operating proof. Existing Model Profile Requests remain the procedure for
 new or changed purpose, caller, data or output permissions; they are not a
 per-model registration queue.
 
+## Experimental API connections
+
+Epic1363 extends the existing service with named Claude API, DeepSeek API and
+GLM/Z.AI Standard API connections. These integrations remain **Experimental —
+real-account testing pending**, independently of connection health or a
+successful model probe. The operator has no eligible provider accounts for
+live qualification. Controlled conformance does not establish account access.
+The existing composed Security gate and Platform commissioning remain required.
+
+1. Read `GET /v1/model-operations/connections` for the current connection revision,
+   fixed provider presets and named connection states. Credentials, provider
+   errors and private reasoning are absent from this projection.
+2. Submit `POST /v1/model-operations/connections/commands` with
+   `{command_id, expected_revision, action, input}`. `connection.create` accepts
+   `{provider, name}`; `connection.disconnect`, `connection.reconnect` and
+   `connection.remove` accept only `{connection_id}`. Reuse the original stable
+   command identity after a lost response. Endpoints are owner-selected.
+3. Explicitly enter or replace a key using the separate protected
+   `POST /v1/model-operations/connections/credentials` endpoint with
+   `{command_id, expected_revision, connection_id, api_key}`. This is transient
+   ingress to Platform/Vault. OOS does not queue, journal, log, autosave or retry
+   this body. Never put a key in a generic model operation, draft, advisor chat,
+   URL or process argument. Its durable owner identity hashes only safe metadata.
+4. Read the original result at
+   `GET /v1/model-operations/connections/operations/{command_id}`. After an
+   uncertain write, explicitly call `POST /v1/model-operations/connections/reconcile`
+   with `{command_id}`. Reconciliation reads the original custody effect; it
+   does not submit credentials again. Pending/finished/cancelled are actual
+   owner states. Refresh current connection state separately from this historical
+   receipt. After restart, the server's `pending_operation` retains the identity.
+5. Register its admitted backend and explicitly Verify a model through the
+   existing model-operation procedure below. Claude/DeepSeek use their native
+   catalogues; GLM requires an exact manually entered model ID. Verification is
+   bounded at4096 output tokens/60 seconds and may incur provider charges.
+   Unknown provider runtime/version digests remain null. Native effort choices
+   are model-specific; unknown capabilities use an explicit provider default.
+6. Save routes only after verification. Replacing credentials invalidates prior
+   model verification. Disconnect clears stored credentials and fences uncertain
+   prior writes; reconnect requires a new explicit key. Remove first requires
+   reassigning routes and removing that connection's model registrations. It
+   retires the connection identity. Configuration-history restoration never
+   restores credentials or admission for a removed connection.
+
+Connection receipts bind the operator, original safe command digest, connection,
+actual revision transition and state digest. A previously admitted pending write
+can finish after another connection advances the registry; its actual previous
+revision may therefore exceed the original expected revision. The original
+authorization digest remains exact. Configuration and connection revisions are
+separate; a connection receipt is not model verification or routing acceptance.
+
 ## Normal procedure
 
 1. Read `GET /v1/model-operations/registry` for admitted backends, existing
