@@ -94,7 +94,7 @@ export function assertConfiguration(value, expectedRevision = null) {
   for (const [key, model] of Object.entries(config.models)) {
     if (!object(model) || !text(model.backend_id) || !text(model.model) || !Array.isArray(model.supported_efforts) ||
         !model.supported_efforts.length || !model.supported_efforts.every(effort) || !SHA.test(model.verification_ref) ||
-        !(model.model_digest === null || text(model.model_digest)) || !text(model.runtime_version, 2048)) invalidOwner();
+        !(model.model_digest === null || text(model.model_digest)) || !(model.runtime_version === null || text(model.runtime_version, 2048))) invalidOwner();
     if (Object.keys(model).sort().join(",") !== "backend_id,model,model_digest,runtime_version,supported_efforts,verification_ref") invalidOwner();
     if (!Object.hasOwn(config.backends, model.backend_id) || key !== digest({ backend_id: model.backend_id, model: model.model })) invalidOwner();
   }
@@ -105,10 +105,15 @@ export function assertConfiguration(value, expectedRevision = null) {
 export function assertBackends(value) {
   if (!object(value) || !["backends,tasks", "backends,health,tasks"].includes(Object.keys(value).sort().join(",")) || !Array.isArray(value.tasks) || !value.tasks.every(x => text(x, 300)) || !Array.isArray(value.backends)) invalidOwner();
   for (const backend of value.backends) {
-    if (!object(backend) || Object.keys(backend).sort().join(",") !== "account_login_supported,allowed_tasks,availability,backend_id,provider,registered" ||
+    const api = ["claude-api", "deepseek-api", "glm-api"].includes(backend?.provider);
+    const keys = ["account_login_supported", "allowed_tasks", "availability", "backend_id", "provider", "registered",
+      ...(api ? ["experimental", "qualification", "catalogue_supported", "verification_max_tokens"] : [])];
+    if (!object(backend) || Object.keys(backend).sort().join(",") !== keys.sort().join(",") ||
         !text(backend.backend_id) || !text(backend.provider) || !Array.isArray(backend.allowed_tasks) ||
         !backend.allowed_tasks.every(task => value.tasks.includes(task)) || typeof backend.registered !== "boolean" ||
         typeof backend.account_login_supported !== "boolean" || backend.availability !== "not-probed") invalidOwner();
+    if (api && (backend.experimental !== true || backend.qualification !== "real-account-verification-pending" ||
+        backend.catalogue_supported !== (backend.provider !== "glm-api") || backend.verification_max_tokens !== 4096)) invalidOwner();
   }
   return value;
 }
@@ -116,7 +121,7 @@ const HEALTH_STATES = ["available", "unavailable", "verification-needed", "unkno
 const HEALTH_CODES = ["connection-not-probed", "check-budget-exhausted", "metadata-available", "account-sign-in-required",
   "account-present-connection-unprobed", "provider-metadata-invalid", "provider-unavailable", "provider-busy",
   "model-not-advertised", "registration-changed", "metadata-matched", "connection-verified",
-  "last-request-failed", "recent-model-success", "model-verification-required"];
+  "last-request-failed", "recent-model-success", "model-verification-required", "connection-disconnected", "credential-reconcile-required", "api-key-required"];
 export function assertProviderHealth(value, configuration, now = Date.now()) {
   if (value === null || value === undefined) return null;
   const keys = ["configuration_revision", "configuration_digest", "checked_at", "expires_at", "backends", "models"];
@@ -154,7 +159,7 @@ export function assertCatalogue(value, backendId, model = null) {
   if (!object(value) || Object.keys(value).sort().join(",") !== "backend_id,models" || value.backend_id !== backendId || !Array.isArray(value.models)) invalidOwner();
   for (const item of value.models) {
     if (!object(item) || Object.keys(item).sort().join(",") !== "model,model_digest,runtime_version,supported_efforts" ||
-        !text(item.model) || model !== null && item.model !== model || !text(item.runtime_version, 2048) ||
+        !text(item.model) || model !== null && item.model !== model || !(item.runtime_version === null || text(item.runtime_version, 2048)) ||
         !(item.model_digest === null || text(item.model_digest)) ||
         !(item.supported_efforts === null || Array.isArray(item.supported_efforts) && item.supported_efforts.length && item.supported_efforts.every(effort))) invalidOwner();
   }

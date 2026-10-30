@@ -3,6 +3,7 @@ import {
   assertOwnerReceipt, assertRequest, digest, fail, identifier, TERMINAL,
 } from "./contracts.js";
 import { ModelOwnerError } from "./platform-client.js";
+import { createConnectionOperations } from "./connections.js";
 
 const RETRYABLE = new Set(["provider-unavailable", "provider-busy", "login-busy", "management-credential-unavailable"]);
 const LOGIN_TERMINAL = new Set(["connected", "cancelled", "failed", "interrupted"]);
@@ -155,6 +156,7 @@ export function createModelOperationsService({ store, platform, operatorBindings
     });
   }
   return {
+    ...createConnectionOperations({ platform, bind, audit }),
     async registry({ callerId, operatorId, includeHealth = false }) {
       bind(callerId, operatorId);
       // Serial to avoid describing registrations from an older snapshot.
