@@ -16,6 +16,17 @@ import {
 const NOW = "2026-08-16T03:10:00.000Z";
 const AUTOMATION_USER_REF = "/api/v3/users/5";
 
+test("Proposal snapshot preserves existing Delivery linkage without inventing route receipts or mutating the source", async () => {
+  const h = createHarness({currentRecord: record({status: "accepted", deliveryRef: "openproject://work_packages/901"})});
+  const result = await h.service.getSnapshot({callerId: "governance-operations-console", proposalId: "idea-851"});
+  assert.equal(result.projection.delivery_ref, "openproject://work_packages/901");
+  assert.equal(result.projection.status, "accepted");
+  assert.equal(result.projection.route, null);
+  assert.equal(result.projection.handoff.state, "not-requested");
+  assert.equal(result.history.events.length, 0);
+  assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 0);
+});
+
 function pendingRepositoryRecord() {
   const state = readyPrototypeState();
   state.route.source_custody = { classification: "new-repo-required", repository_mode: "new",
