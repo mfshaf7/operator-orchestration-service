@@ -9,6 +9,7 @@ import { HttpError } from "../errors.js";
 
 const root = new URL("../../contracts/agent-console/", import.meta.url);
 const names = [
+  "activity-page.schema.json",
   "cgg-projection-request.schema.json",
   "cgg-projection-result.schema.json",
   "model-response.schema.json",

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { activityMetadata, createAdviceTracker, projectActivityPage } from "./activity.js";
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { createHash } from "node:crypto";
 
@@ -294,7 +296,26 @@ export function createAgentConsoleService({
       })
     : null;
 
+  const activityRuntimeId = randomUUID();
+  const activityPages = new Map();
+  let activityVersion = null;
   return {
+    recordsAdviceForCaller(callerId) { return Object.hasOwn(operatorBindings, callerId); },
+    async listActivity({ callerId, operatorId, cursor = null, limit = 10 }) {
+      assertOperatorBinding(operatorBindings, callerId, operatorId);
+      const version = await store.activityVersion();
+      if (version !== activityVersion) { activityPages.clear(); activityVersion = version; }
+      const key = JSON.stringify([callerId, operatorId, cursor, limit]);
+      let page = activityPages.get(key);
+      if (!page) {
+        page = assertAgentConsoleContract("activity-page.schema.json", await store.inspect(state => projectActivityPage(state, { callerId, operatorId, cursor, limit, runtimeId: activityRuntimeId, clock })));
+        if (activityPages.size >= 16) activityPages.delete(activityPages.keys().next().value);
+        activityPages.set(key, page);
+      }
+      return { ...structuredClone(page), observed_at: currentTime(clock) };
+    },
+    trackAdvice: createAdviceTracker({ store, clock, runtimeId: activityRuntimeId,
+      assertBinding: (callerId, operatorId) => assertOperatorBinding(operatorBindings, callerId, operatorId) }),
     async createSession({ callerId, operatorId, input }) {
       assertOperatorBinding(operatorBindings, callerId, operatorId);
       const request = assertAgentConsoleContract("session-request.schema.json", structuredClone(input));
@@ -394,6 +415,8 @@ export function createAgentConsoleService({
           failure: null,
           receipt_ref: null,
         };
+        record.activity_metadata ??= {};
+        record.activity_metadata[request.invocation_id] = activityMetadata(request.activity, activityRuntimeId);
         record.current_invocation_id = request.invocation_id;
         record.invocations[request.invocation_id] = running;
         state.invocation_keys[key] = request.invocation_id;

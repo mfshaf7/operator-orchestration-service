@@ -28,9 +28,10 @@
   "files": {
     "cgg-projection-request.schema.json": "0cea4c81111db8ec5bb61ab757fceef19ec83a33b57038b6f9eeecd854cb8881",
     "cgg-projection-result.schema.json": "45f22dd3d32cefeb20910ec9fc4857ecd336f27196c1ab101020baeefc578c0b",
-    "invocation-request.schema.json": "32eae45ab22675484283df84b4e66d4e3a22d5d40e9aec554c76d5846d488cdc",
+    "invocation-request.schema.json": "39538cf12dc1bed47395357579fa40d9aeab0db4788438f267345be6a8dd52ff",
     "model-response.schema.json": "0278481332ac0f6f42a320db7258796ba4a62bd47ebf224bc27cbb0e99f1aee0",
     "session-projection.schema.json": "ddee8336235924f92283c56b1b19f1a38be3dd8f6fbd8cd4415a7b476ea22c5c",
-    "session-request.schema.json": "5b69ae17d29e93e9b9416bf7b3d22c1219efe60395bcdc5e34d1ccdeb7c7a1a5"
+    "session-request.schema.json": "5b69ae17d29e93e9b9416bf7b3d22c1219efe60395bcdc5e34d1ccdeb7c7a1a5",
+    "activity-page.schema.json": "d635dc7a610ac03b0579b52bdb7105927af41e58276ad276d9c5221c7733fa29"
   }
 }
