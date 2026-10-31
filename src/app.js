@@ -528,6 +528,16 @@ async function handleAgentConsole({
     );
   }
   const operatorId = agentConsoleOperatorId(request);
+  if (action === "activity") {
+    response.setHeader?.("Cache-Control", "no-store");
+    const query = new URL(request.url, "http://oos.local").searchParams;
+    if ([...query.keys()].some(key => !["limit", "cursor"].includes(key)) || [...new Set(query.keys())].some(key => query.getAll(key).length !== 1) || (query.has("limit") && !/^[1-9][0-9]?$/.test(query.get("limit")))) {
+      throw new HttpError(400, "agent_console_activity_query_invalid", "Unsupported AI activity query.");
+    }
+    sendJson(response, 200, await agentConsoleService.listActivity({ callerId: caller.id, operatorId,
+      limit: query.has("limit") ? Number(query.get("limit")) : 10, cursor: query.get("cursor") }));
+    return;
+  }
   if (action === "create") {
     sendJson(response, 201, await agentConsoleService.createSession({
       callerId: caller.id,
@@ -3465,6 +3475,7 @@ async function handleDeliveryPlanApply({
 }
 
 async function handleWorkDesignAssist({
+  agentConsoleService,
   config,
   packageId,
   request,
@@ -3472,12 +3483,13 @@ async function handleWorkDesignAssist({
   workDesignService,
 }) {
   const caller = authenticateCaller(request, config);
+  const recordAdvice = agentConsoleService?.recordsAdviceForCaller?.(caller.id) === true;
+  if (recordAdvice) assertCallerIdentityBound(caller, "AI activity recording");
   const body = await readWorkDesignJsonBody(request);
-  const result = await workDesignService.assist({
-    callerId: caller.id,
-    packageId,
-    request: body,
-  });
+  const invoke = () => workDesignService.assist({ callerId: caller.id, packageId, request: body });
+  const result = recordAdvice ? await agentConsoleService.trackAdvice({ callerId: caller.id,
+    operatorId: body.operator?.id, source: "work-design", subjectRef: packageId,
+    kind: body.task?.kind === "tree_advice" ? "work-design-tree" : "work-design-context", invoke }) : await invoke();
   sendJson(response, 200, result);
 }
 
@@ -3562,6 +3574,7 @@ async function handleRefinementProjection({
 }
 
 async function handleRefinementAssist({
+  agentConsoleService,
   config,
   packageId,
   refinementService,
@@ -3569,11 +3582,13 @@ async function handleRefinementAssist({
   response,
 }) {
   const caller = authenticateCaller(request, config);
-  const result = await refinementService.assist({
-    callerId: caller.id,
-    packageId,
-    request: await readRefinementJsonBody(request),
-  });
+  const recordAdvice = agentConsoleService?.recordsAdviceForCaller?.(caller.id) === true;
+  if (recordAdvice) assertCallerIdentityBound(caller, "AI activity recording");
+  const body = await readRefinementJsonBody(request);
+  const invoke = () => refinementService.assist({ callerId: caller.id, packageId, request: body });
+  const result = recordAdvice ? await agentConsoleService.trackAdvice({ callerId: caller.id,
+    operatorId: body.operator?.id, source: "refinement", subjectRef: packageId,
+    kind: "refinement-metadata", invoke }) : await invoke();
   sendJson(response, 200, result);
 }
 
@@ -5697,6 +5712,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/agent-console/activity") {
+        await handleAgentConsole({ action: "activity", agentConsoleService, config, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/agent-console/sessions") {
         await handleAgentConsole({ action: "create", agentConsoleService, config, request, response });
         return;
@@ -6660,6 +6679,7 @@ export function createApp({
           );
         }
         await handleRefinementAssist({
+          agentConsoleService,
           config,
           packageId: decodeURIComponent(url.pathname.split("/")[3]),
           refinementService,
@@ -6746,6 +6766,7 @@ export function createApp({
           );
         }
         await handleWorkDesignAssist({
+          agentConsoleService,
           config,
           packageId: decodeURIComponent(url.pathname.split("/")[3]),
           request,

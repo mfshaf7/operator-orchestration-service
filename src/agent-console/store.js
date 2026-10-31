@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { agentConsoleDigest, agentConsoleError } from "./contracts.js";
@@ -81,6 +81,16 @@ export function createAgentConsoleStore({ root }) {
 
   return {
     transact,
+    async activityVersion() {
+      try {
+        const info = await stat(statePath, { bigint: true });
+        return `${info.ino}:${info.size}:${info.mtimeNs}`;
+      } catch (error) { if (error.code === "ENOENT") return "absent"; throw error; }
+    },
+    async inspect(projector) {
+      await initialize();
+      return structuredClone(projector(await load()));
+    },
     async read(sessionId) {
       await initialize();
       return structuredClone((await load()).sessions[sessionId] ?? null);

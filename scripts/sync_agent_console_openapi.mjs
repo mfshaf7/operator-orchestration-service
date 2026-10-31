@@ -24,6 +24,7 @@ function project(value, name) {
 }
 
 for (const [file, name] of [
+  ["activity-page.schema.json", "AgentConsoleActivityPage"],
   ["session-request.schema.json", "AgentConsoleSessionRequest"],
   ["invocation-request.schema.json", "AgentConsoleInvocationRequest"],
   ["session-projection.schema.json", "AgentConsoleSessionProjection"],
@@ -221,6 +222,18 @@ source = upsertOpenApiPath(source, "/v1/agent-console/sessions/{session_id}/clos
   ...common, operationId: "closeAgentConsoleSession", summary: "Close one revision-bound Agent Console session",
   parameters: [sessionId, operatorHeader], requestBody: requestBody("Expected revision and terminal timestamp.", ref("AgentConsoleCloseRequest"), close),
   responses: { 200: response("Closed session projection.", ref("AgentConsoleSessionProjection"), { ...completed, revision: 3, state: "closed", closed_at: close.closed_at }), ...errors },
+} });
+
+source = upsertOpenApiPath(source, "/v1/agent-console/activity", { get: {
+  ...common, operationId: "listAgentConsoleActivity", summary: "Read bounded AI activity owned by the caller and operator",
+  parameters: [operatorHeader,
+    { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50, default: 10 } },
+    { name: "cursor", in: "query", schema: { type: "string", maxLength: 2048 } }],
+  responses: { 200: response("Request summaries and evidence references; no prompts, outputs or error bodies.", ref("AgentConsoleActivityPage"), {
+    schema_version: 1, artifact_type: "ai-activity-page", caller_id: "governance-operations-console", operator_id: "operator-1",
+    observed_at: "2026-10-31T12:00:00Z", items: [], next_cursor: null,
+    coverage: "Retained Agent Console requests; native workflow advice from recording onward.",
+  }), ...errors },
 } });
 
 if (check) {

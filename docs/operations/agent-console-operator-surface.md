@@ -94,3 +94,52 @@ The pinned CGG schemas and source commit are recorded in
 contracts are generated into `docs/api/openapi.json`. Source completion for
 #1245 proves merge-ready protocol behavior; live positive and negative cases
 belong to Platform #1246 and activation acceptance belongs to Security #1248.
+
+## AI activity history
+
+The Console's Agent Runtime dock provides Recent AI activity and a bounded
+History dialog. Opening history or inspecting a row performs only owner reads.
+The row's task, source workspace, item identity, request state/time and available
+receipt/context/model-audit references come from OOS. Assistance completion does
+not imply draft acceptance or canonical workflow completion.
+
+`GET /v1/agent-console/activity` requires the same caller-specific credential
+and `x-oos-operator-id` binding as the existing Agent Console path. It accepts
+only `limit` (default 10, range 1–50) and the returned opaque `cursor`.
+Pagination is stable by request timestamp and identity; terminal updates do not
+move an item between pages. The caller cannot select a different operator or
+owner. Reads do not create a session, replay a model call, submit a draft or
+change any canonical workflow record.
+
+The projection includes retained Agent Console invocations. Optional closed
+activity kind and record identity are retained for new requests and bind their
+existing request digest. Older requests show absent labels/links explicitly.
+Native Work Design context/tree and Refinement metadata requests retain their
+existing model paths and record safe summaries in the same private store when
+Agent Console recording is active. Recording requires an enrolled caller-specific
+identity and its configured operator. Other existing native callers keep their
+original service path without entering this operator-scoped history. No prior native history is fabricated
+from stdout or browser state; its coverage begins when recording is deployed.
+
+History returns recorded working/completed/failed/cancelled outcomes. An
+unfinished reservation from an earlier owner process is unconfirmed after
+restart; history does not retry it or claim a terminal result. Native advice
+retains its actual CGG/model audit references without inventing an Agent
+Console invocation receipt. Prompt text, results, draft payloads, credentials
+and error messages never enter this read projection.
+
+The private store remains authoritative. Reads verify its existing digest;
+unchanged file versions reuse at most 16 bounded metadata pages, and writes
+invalidate that cache. The browser keeps one bounded older page rather than
+accumulating all history. A failed continuation retains that page and retries
+the same cursor. A failed refresh exposes source unavailability and retains
+previous results as an older observation, without selecting preview examples.
+Record navigation uses admitted Console workspace intents only; missing record
+metadata keeps request inspection available without a guessed destination.
+
+Source admission is separate from commissioning. This local maintenance
+candidate stays uncommitted with the operator's UI batch. Land OOS before the
+dependent Console, finish the source-scoped Security delta, bind final commits
+and use the existing Platform activation procedure before claiming live history
+qualification. Normal operation is through the Console; this GET is its owned
+API and engineering recovery surface.

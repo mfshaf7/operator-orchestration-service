@@ -525,3 +525,20 @@ test("Agent Console fails closed for operator, model, and action binding mismatc
     (error) => error.code === "agent_console_action_binding_invalid",
   );
 });
+
+test("AI activity task identity is bound to the durable invocation and its replay digest", async () => {
+  const { service, calls } = await harness();
+  await createSession(service);
+  const request = invocationRequest({ activity: { kind: "proposal-triage", subject_ref: "idea-1400" } });
+  await service.invoke({ callerId: "console-caller", operatorId: "operator-1", sessionId: "session-1", input: request });
+  const history = await service.listActivity({ callerId: "console-caller", operatorId: "operator-1" });
+  assert.equal(history.items.length, 1);
+  assert.equal(history.items[0].kind, "proposal-triage");
+  assert.equal(history.items[0].subject_ref, "idea-1400");
+  assert.equal(history.items[0].state, "completed");
+  assert.ok(history.items[0].receipt_ref.uri);
+  assert.equal(calls.length, 2);
+  await assert.rejects(service.invoke({ callerId: "console-caller", operatorId: "operator-1", sessionId: "session-1",
+    input: { ...request, activity: { kind: "proposal-triage", subject_ref: "idea-1401" } } }), /different input/);
+  assert.equal(calls.length, 2);
+});

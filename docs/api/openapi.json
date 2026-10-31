@@ -33640,6 +33640,100 @@
           }
         }
       }
+    },
+    "/v1/agent-console/activity": {
+      "get": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "listAgentConsoleActivity",
+        "summary": "Read bounded AI activity owned by the caller and operator",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request summaries and evidence references; no prompts, outputs or error bodies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleActivityPage"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "artifact_type": "ai-activity-page",
+                  "caller_id": "governance-operations-console",
+                  "operator_id": "operator-1",
+                  "observed_at": "2026-10-31T12:00:00Z",
+                  "items": [],
+                  "next_cursor": null,
+                  "coverage": "Retained Agent Console requests; native workflow advice from recording onward."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -74355,6 +74449,40 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 8000
+          },
+          "activity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "subject_ref"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "assistant-response",
+                  "proposal-triage",
+                  "proposal-disposition",
+                  "prototype-candidate",
+                  "prototype-baseline",
+                  "work-design-context",
+                  "work-design-tree",
+                  "refinement-metadata",
+                  "execution-tree",
+                  "work-design-blocker",
+                  "refinement-blocker",
+                  "definition-design"
+                ]
+              },
+              "subject_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            }
           }
         },
         "$defs": {
@@ -86884,6 +87012,202 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "AgentConsoleActivityPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "caller_id",
+          "operator_id",
+          "observed_at",
+          "items",
+          "next_cursor",
+          "coverage"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "ai-activity-page"
+          },
+          "caller_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "source",
+                "session_ref",
+                "invocation_id",
+                "kind",
+                "subject_ref",
+                "state",
+                "requested_at",
+                "completed_at",
+                "receipt_ref",
+                "audit_ref",
+                "context_ref",
+                "error_code"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 600
+                },
+                "source": {
+                  "enum": [
+                    "agent-console",
+                    "work-design",
+                    "refinement"
+                  ]
+                },
+                "session_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "invocation_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "kind": {
+                  "enum": [
+                    null,
+                    "assistant-response",
+                    "proposal-triage",
+                    "proposal-disposition",
+                    "prototype-candidate",
+                    "prototype-baseline",
+                    "work-design-context",
+                    "work-design-tree",
+                    "refinement-metadata",
+                    "execution-tree",
+                    "work-design-blocker",
+                    "refinement-blocker",
+                    "definition-design"
+                  ]
+                },
+                "subject_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "state": {
+                  "enum": [
+                    "working",
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "interrupted"
+                  ]
+                },
+                "requested_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "completed_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "receipt_ref": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "uri",
+                        "digest"
+                      ],
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "audit_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "context_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "error_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "coverage": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
           }
         }
       }
