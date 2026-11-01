@@ -1,3 +1,18 @@
+---
+security_evidence:
+  review_areas: [delivery, runtime, identity]
+  reviewed_artifacts:
+    - src/app.js
+    - src/product-publication/service.js
+    - src/product-publication/store.js
+    - src/product-publication/wgcf-client.js
+    - docs/api/openapi.json
+  findings: []
+  risks: []
+  workstreams: [WS-003, WS-005]
+  notes: Authenticated read-only source preparation and caller-owned recovery; existing publication decisions and owner credentials remain unchanged.
+---
+
 # 2026-11-01 Product publication preparation
 
 ## Summary
