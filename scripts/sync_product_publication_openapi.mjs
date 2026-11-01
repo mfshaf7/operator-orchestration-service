@@ -353,6 +353,35 @@ source = upsertConsoleCompatibleOpenApiPath(
   }, "get"),
 );
 
+source = upsertOpenApiPath(source, "/v1/product-publications/products/{product_id}/preparation", {
+  get: {
+    ...metadata, operationId: "prepareProductPublication", summary: "Load publication inputs for one registered product",
+    description: "Read-only discovery of committed owner manifest references, current caller-owned publication state and up to 20 recent requests. Does not evaluate readiness, publish, or modify owner source.",
+    parameters: [
+      { name: "product_id", in: "path", required: true, schema: { type: "string", pattern: "^product:[a-z0-9][a-z0-9._-]*$" } },
+      { name: "x-oos-operator-id", in: "header", required: true, schema: { type: "string" } },
+    ],
+    responses: { 200: { description: "Prepared source references or explicit missing-owner-information findings; original publication checks still apply.",
+      content: { "application/json": { example: {
+        schema_version: 1, product_id: readinessExample.product_id, status: "prepared", source_available: true,
+        authority_revision: commandExample.authority_revision, manifest_source: commandExample.manifest_source,
+        manifest_schema_version: commandExample.schema_version, owner_repos: [commandExample.manifest_source.repo], issues: [],
+        prepared_at: commandExample.requested_at,
+        expires_at: new Date(Date.parse(commandExample.requested_at) + 120000).toISOString(),
+        issuer: { implementation_ref: "d".repeat(40), service_identity_ref: "spiffe://example/wgcf/product-publication" },
+        current: { posture: "unlisted", version: 0, previous_receipt: null, request_id: null },
+        available_actions: ["publish"], recent_requests: [], publication_authority_granted: false,
+      }, schema: { type: "object", required: ["schema_version", "product_id", "status", "manifest_source", "current", "available_actions", "recent_requests", "expires_at", "publication_authority_granted"], properties: {
+        schema_version: { const: 1 }, product_id: { type: "string" }, status: { enum: ["prepared", "blocked"] },
+        source_available: { type: "boolean" }, authority_revision: { type: ["string", "null"] },
+        manifest_source: { type: ["object", "null"] }, current: { type: "object" },
+        available_actions: { type: "array", maxItems: 5, items: { enum: ["publish", "update", "unpublish", "archive", "restore"] } },
+        recent_requests: { type: "array", maxItems: 20, items: { type: "object" } },
+        expires_at: { type: "string", format: "date-time" }, publication_authority_granted: { const: false },
+      } } } } }, ...errors },
+  },
+});
+
 if (check) {
   if (source !== original) throw new Error("Product Publication OpenAPI projection is stale.");
 } else {

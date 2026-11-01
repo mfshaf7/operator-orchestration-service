@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -164,9 +164,17 @@ async function fixture(t, outcome = "ready", options = {}) {
       options.allowedLifecycleMaintenanceActions ??
       productPublicationManifest.lifecycle_maintenance.allowed_actions,
     clock: () => new Date(now),
-    operatorBindings: { [callerId]: operatorId },
+    operatorBindings: { [callerId]: operatorId, ...(options.operatorBindings ?? {}) },
     securityDecision: command().security_decision,
     readinessClient: {
+      async prepare(productId) {
+        if (options.sourceUnavailable) throw new Error("Source unavailable");
+        return { schema_version: 1, product_id: productId, status: "prepared",
+          manifest_source: command().manifest_source, manifest_schema_version: 1,
+          manifest_publication_posture: options.manifestPosture ?? (calls ? "internal" : "unlisted"),
+          authority_revision: authorityRevision, owner_repos: ["governance-operations-console"], issues: [],
+          prepared_at: now, expires_at: "2026-10-12T05:17:00.000Z", publication_authority_granted: false };
+      },
       async evaluate(evaluation) {
         calls += 1;
         return readinessFor(evaluation, outcome);
@@ -849,4 +857,96 @@ test("runtime activation remains limited to the reviewed profile and complete Pl
     }),
     (error) => error.code === "product_publication_security_decision_mismatch",
   );
+});
+
+
+test("publication preparation derives prior state and durable recent requests without evaluating or publishing", async t => {
+  const f = await fixture(t);
+  const productId = "product:governance-operations-console";
+  const initial = await f.service.prepare({ callerId, operatorId, productId });
+  assert.equal(initial.current.version, 0);
+  assert.equal(initial.current.previous_receipt, null);
+  assert.deepEqual(initial.recent_requests, []);
+  assert.deepEqual(initial.available_actions, ["publish"]);
+  assert.equal(f.calls(), 0);
+  await f.service.submit({ callerId, operatorId, input: command() });
+  const current = await f.service.prepare({ callerId, operatorId, productId });
+  assert.equal(current.current.version, 1);
+  assert.equal(current.current.posture, "internal");
+  assert.equal(current.current.request_id, command().request_id);
+  assert.equal(current.recent_requests[0].request_id, command().request_id);
+  assert.deepEqual(current.available_actions, ["update", "unpublish"]);
+  assert.equal(f.calls(), 1);
+  await assert.rejects(() => f.service.prepare({ callerId, operatorId: "other", productId }), /bound/);
+  await assert.rejects(() => f.service.prepare({ callerId, operatorId, productId: "../../secret" }), /registered product/);
+});
+
+
+test("preparation never reveals another caller's publication journal", async t => {
+  const f = await fixture(t, "ready", { operatorBindings: { other: "operator:other" } });
+  await f.service.submit({ callerId, operatorId, input: command() });
+  await assert.rejects(() => f.service.prepare({ callerId: "other", operatorId: "operator:other", productId: "product:governance-operations-console" }), /not found/i);
+});
+
+test("preparation client rejects forged, expired or cross-owner source references and strips unknown fields", async () => {
+  const body = { schema_version: 1, product_id: "product:sample", status: "prepared", authority_revision: authorityRevision,
+    manifest_source: { repo: "sample", path: "product-publication/manifest.json", source_revision: sourceRevision, manifest_revision: manifestRevision, manifest_digest: `sha256:${"f".repeat(64)}` },
+    manifest_schema_version: 1, manifest_publication_posture: "unlisted", owner_repos: ["sample"], issues: [],
+    issuer: { implementation_ref: implementationRef, service_identity_ref: serviceIdentityRef },
+    prepared_at: now, expires_at: "2026-10-12T05:17:00.000Z", publication_authority_granted: false, unsafe_extra: "must not be projected" };
+  let response = body;
+  const client = createWgcfProductPublicationClient({ baseUrl: "http://wgcf.test", callerId: "oos", callerSecret: "s".repeat(32), implementationRef, serviceIdentityRef,
+    clock: () => new Date(now), fetchImpl: async () => Response.json(response) });
+  assert.equal((await client.prepare("product:sample")).unsafe_extra, undefined);
+  for (const change of [
+    { product_id: "product:other" }, { issuer: { ...body.issuer, implementation_ref: "0".repeat(40) } },
+    { manifest_source: { ...body.manifest_source, path: "../../secret" } }, { owner_repos: ["other"] },
+    { expires_at: now }, { publication_authority_granted: true },
+  ]) { response = { ...body, ...change }; await assert.rejects(() => client.prepare("product:sample"), /verified/); }
+});
+
+
+test("preparation cannot turn an inconsistent stored current receipt into an initial publication", async t => {
+  const { createHash } = await import("node:crypto");
+  const root = await mkdtemp(path.join(os.tmpdir(), "oos-publication-corrupt-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const productId = "product:sample";
+  const productKey = createHash("sha256").update(productId).digest("hex");
+  const state = { schema_version: 1, records: {}, idempotency_keys: {}, products: { [productKey]: { request_id: "product-publication-request:missing" } } };
+  await writeFile(path.join(root, "state.json"), JSON.stringify({ ...state, digest: productPublicationDigest(state) }));
+  await assert.rejects(() => createProductPublicationStore({ root }).inspectProduct(productId, callerId), /inconsistent/);
+});
+
+
+test("fresh source failure leaves known original receipts readable without inventing a new initial state", async t => {
+  const f = await fixture(t, "ready", { sourceUnavailable: true });
+  const args = { callerId, operatorId, productId: "product:governance-operations-console" };
+  await assert.rejects(() => f.service.prepare(args), /Source unavailable/);
+  assert.equal(f.calls(), 0);
+  const written = await f.service.submit({ callerId, operatorId, input: command() });
+  const recovered = await f.service.prepare(args);
+  assert.equal(recovered.status, "blocked");
+  assert.equal(recovered.source_available, false);
+  assert.equal(recovered.authority_revision, null);
+  assert.equal(recovered.manifest_source, null);
+  assert.equal(recovered.current.version, 1);
+  assert.equal(recovered.current.request_id, written.request_id);
+  assert.deepEqual(recovered.available_actions, []);
+  assert.equal(recovered.recent_requests[0].request_id, written.request_id);
+  assert.equal((await f.service.get({ callerId, requestId: recovered.recent_requests[0].request_id })).receipt_digest, written.receipt_digest);
+  assert.equal(f.calls(), 1);
+});
+
+
+test("outdated owner publication state is explained before review without hiding the original receipt", async t => {
+  const f = await fixture(t, "ready", { manifestPosture: "unlisted" });
+  await f.service.submit({ callerId, operatorId, input: command() });
+  const prepared = await f.service.prepare({ callerId, operatorId, productId: "product:governance-operations-console" });
+  assert.equal(prepared.status, "blocked");
+  assert.equal(prepared.issues[0].code, "owner-publication-information-outdated");
+  assert.equal(prepared.current.version, 1);
+  assert.equal(prepared.recent_requests[0].request_id, command().request_id);
+  assert.equal(prepared.manifest_source, null);
+  assert.deepEqual(prepared.available_actions, []);
+  assert.equal(f.calls(), 1);
 });

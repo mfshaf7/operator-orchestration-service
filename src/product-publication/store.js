@@ -173,6 +173,26 @@ export function createProductPublicationStore({ root }) {
   }
   return {
     transact,
+    async inspectProduct(productId, callerId) {
+      await initialize();
+      const state = await load();
+      const product = state.products[key(productId)];
+      const current = product ? state.records[key(product.request_id)] : null;
+      if (product && (!current || current.receipt?.outcome !== "applied" || current.receipt.product_id !== productId
+        || current.command?.request_id !== product.request_id || current.receipt_digest !== product.receipt_digest
+        || current.receipt.publication_version !== product.publication_version
+        || current.receipt.publication_posture !== product.publication_posture)) {
+        throw productPublicationError("storage_invalid", "Current publication state is inconsistent with its original receipt.", 503);
+      }
+      const owned = Object.values(state.records)
+        .filter(record => record.owner_caller_id === callerId && record.receipt.product_id === productId)
+        .sort((a, b) => b.receipt.recorded_at.localeCompare(a.receipt.recorded_at)
+          || b.command.request_id.localeCompare(a.command.request_id));
+      const recent = owned.slice(0, 20)
+        .map(record => ({ request_id: record.command.request_id, action: record.command.action,
+          state: record.receipt.outcome, recorded_at: record.receipt.recorded_at }));
+      return { current: structuredClone(current), recent, latestOwned: structuredClone(owned[0] ?? null) };
+    },
     async get(requestId) {
       await initialize();
       return structuredClone((await load()).records[key(requestId)] ?? null);

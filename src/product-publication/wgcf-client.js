@@ -93,6 +93,43 @@ export function createWgcfProductPublicationClient({
   }
 
   return {
+    async prepare(productId) {
+      const body = await transport.request(`/v1/product-publication/preparations/${encodeURIComponent(productId)}`, { method: "GET" });
+      const locator = body?.manifest_source;
+      const validLocator = locator && /^[a-z0-9][a-z0-9-]*$/.test(locator.repo)
+        && typeof locator.path === "string" && /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/.test(locator.path)
+        && /^[a-f0-9]{40}$/.test(locator.source_revision) && /^[a-f0-9]{40}$/.test(locator.manifest_revision)
+        && /^sha256:[a-f0-9]{64}$/.test(locator.manifest_digest);
+      if (body?.schema_version !== 1 || body.product_id !== productId
+        || !["prepared", "blocked"].includes(body.status)
+        || !/^[a-f0-9]{40}$/.test(body.authority_revision)
+        || body.issuer?.implementation_ref !== implementationRef || body.issuer?.service_identity_ref !== serviceIdentityRef
+        || body.publication_authority_granted !== false
+        || !Array.isArray(body.owner_repos) || body.owner_repos.length > 8
+        || body.owner_repos.some(owner => typeof owner !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(owner))
+        || !Array.isArray(body.issues) || body.issues.length > 8
+        || body.issues.some(issue => typeof issue?.code !== "string" || typeof issue?.message !== "string" || issue.message.length > 1024)
+        || !Number.isFinite(Date.parse(body.prepared_at)) || !Number.isFinite(Date.parse(body.expires_at))
+        || Date.parse(body.prepared_at) > clock().getTime() + 30_000
+        || Date.parse(body.expires_at) <= clock().getTime()
+        || Date.parse(body.expires_at) <= Date.parse(body.prepared_at)
+        || Date.parse(body.expires_at) - Date.parse(body.prepared_at) > 120_000
+        || (body.status === "prepared" && (!validLocator || ![1, 2].includes(body.manifest_schema_version) || body.issues.length || !body.owner_repos.includes(locator.repo)
+          || !["unlisted", "internal", "client", "public", "archived"].includes(body.manifest_publication_posture)))
+        || (body.status === "blocked" && (locator !== null || body.manifest_schema_version !== null || !body.issues.length))) {
+        throw productPublicationError("preparation_invalid", "Publication information could not be verified. Load it again.", 502);
+      }
+      return { schema_version: 1, product_id: body.product_id, status: body.status,
+        authority_revision: body.authority_revision, manifest_source: locator ? {
+          repo: locator.repo, path: locator.path, source_revision: locator.source_revision,
+          manifest_revision: locator.manifest_revision, manifest_digest: locator.manifest_digest,
+        } : null, manifest_schema_version: body.manifest_schema_version,
+        manifest_publication_posture: body.manifest_publication_posture ?? null,
+        owner_repos: body.owner_repos, issues: body.issues.map(issue => ({ code: issue.code, message: issue.message })),
+        prepared_at: body.prepared_at, expires_at: body.expires_at,
+        issuer: { implementation_ref: implementationRef, service_identity_ref: serviceIdentityRef },
+        publication_authority_granted: false };
+    },
     async evaluate(evaluation) {
       const issued = validate(
         await transport.request("/v1/readiness/product-publication", {

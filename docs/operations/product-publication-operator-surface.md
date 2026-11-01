@@ -21,6 +21,7 @@ acceptance.
 
 | Action | Route | Result |
 | --- | --- | --- |
+| Prepare | `GET /v1/product-publications/products/{product_id}/preparation` | Read-only committed owner references, caller-owned current state and up to 20 recent requests. No readiness evaluation, source write or publication. |
 | Submit or replay | `POST /v1/product-publications` | Exact WGCF readback, publication packet, and immutable terminal OOS receipt. |
 | Read | `GET /v1/product-publications/{request_id}` | Caller-owned receipt plus the versioned lifecycle-maintenance projection and exact next action. |
 
@@ -28,7 +29,34 @@ Submit requires caller-specific `x-oos-caller-id` and
 `x-oos-caller-secret` credentials plus `x-oos-operator-id`. The operator must
 match the commissioned caller/operator binding.
 
-## Procedure
+## Product selection and preparation
+
+Preparation uses the same authenticated caller and explicit operator binding as
+publication submission. WGCF resolves one registered product's typed publication manifest from existing trusted owner source mounts;
+OOS composes its current receipt and recent journal requests from one store
+snapshot. The response expires after two minutes. Missing/ambiguous owner
+information blocks preparation without inventing a manifest or listing state.
+Unavailable journal reads fail closed rather than implying version zero. If fresh
+source cannot be read but a caller-owned journal exists, OOS returns only the
+known receipt/recent requests with source unavailable, null source authority and
+no available publication actions. Original results stay inspectable independently
+of current owner-source health. An unknown product with no journal does not get
+an invented initial state on a source failure.
+
+`prepared` means the input references were resolved, not that publication was
+approved. The existing submit path rereads owner evidence and checks current
+publication version, Security scope, readiness and explicit operator decision.
+Other callers cannot inspect the product's private publication journal. Browser
+inputs contain product identity, intended action and reason; paths, revisions,
+digests and prior receipt are prepared by the owners.
+
+This additive source extension requires exact-source Security/Platform review
+and commissioning before live operating acceptance. Existing activation and
+allowed target postures are unchanged.
+
+## Engineering protocol
+
+
 
 1. Commit the product source snapshot named by `owner_revision`.
 2. Commit the owner manifest at a later `manifest_revision`; that commit must

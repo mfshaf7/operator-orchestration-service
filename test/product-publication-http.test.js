@@ -65,3 +65,17 @@ test("Product Publication routes deny inactive runtime and missing operator attr
   });
   assert.equal((await invoke(app, { operator: "" })).code, 400);
 });
+
+test("Product preparation uses authenticated product/operator input and cannot be mistaken for a journal lookup", async () => {
+  const calls = [];
+  const app = createApp({ config, productPublicationService: {
+    async prepare(input) { calls.push(input); return { product_id: input.productId, status: "prepared" }; },
+    async submit() { throw new Error("Preparation must not submit"); },
+    async get() { throw new Error("Preparation must not read an arbitrary request"); },
+  } });
+  const args = { method: "GET", url: "/v1/product-publications/products/product%3Asample/preparation", body: "" };
+  assert.equal((await invoke(app, args)).code, 200);
+  assert.deepEqual(calls, [{ callerId, operatorId, productId: "product:sample" }]);
+  assert.equal((await invoke(app, { ...args, operator: "" })).code, 400);
+  assert.equal(calls.length, 1);
+});
