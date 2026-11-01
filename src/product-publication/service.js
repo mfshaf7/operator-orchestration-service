@@ -271,6 +271,49 @@ export function createProductPublicationService({
 
   return {
     submit,
+    async prepare({ callerId, operatorId, productId }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      if (typeof productId !== "string" || !/^product:[a-z0-9][a-z0-9._-]*$/.test(productId)) {
+        throw productPublicationError("product_invalid", "Select a registered product.", 400);
+      }
+      const { current, recent, latestOwned } = await store.inspectProduct(productId, callerId);
+      if (current) assertOwner(current, callerId);
+      let source;
+      try {
+        source = { ...await readinessClient.prepare(productId), source_available: true };
+      } catch (failure) {
+        // Original receipt recovery never requires fresh owner source. Only a
+        // known, caller-owned journal can support this partial read; no new
+        // publication inputs or inferred source authority are returned.
+        if (!latestOwned) throw failure;
+        const preparedAt = clock();
+        source = { schema_version: 1, product_id: productId, source_available: false,
+          authority_revision: null, status: "blocked", manifest_source: null, manifest_schema_version: null,
+          owner_repos: [latestOwned.command.manifest_source.repo],
+          issues: [{ code: "publication-source-unavailable", message: "Current publication information could not be loaded. Earlier request results remain available." }],
+          prepared_at: preparedAt.toISOString(), expires_at: new Date(preparedAt.getTime() + 120000).toISOString(),
+          publication_authority_granted: false };
+      }
+      const posture = current?.receipt.publication_posture ?? "unlisted";
+      if (source.status === "prepared" && source.manifest_publication_posture !== posture
+        && !(posture === "archived" && source.manifest_schema_version === 2 && source.manifest_publication_posture === "unlisted")) {
+        source = { ...source, status: "blocked", manifest_source: null, manifest_schema_version: null,
+          issues: [{ code: "owner-publication-information-outdated", message: "The owner's publication information describes an earlier catalog state. The source owner needs to update it before another change." }] };
+      }
+      const actions = { unlisted: ["publish", "archive"], internal: ["update", "unpublish"], client: ["update", "unpublish"], public: ["update", "unpublish"], archived: ["restore"] }[posture] ?? [];
+      return { ...source,
+        recent_requests: recent,
+        current: { posture, version: current?.receipt.publication_version ?? 0,
+          previous_receipt: current ? { publication_posture: posture, publication_version: current.receipt.publication_version,
+            receipt_id: current.receipt.receipt_id, receipt_digest: current.receipt_digest } : null,
+          request_id: current?.command.request_id ?? null },
+        available_actions: source.status !== "prepared" ? [] : actions.filter(action => {
+          const target = { publish: "internal", update: "internal", unpublish: "unlisted", restore: "unlisted", archive: "archived" }[action];
+          return allowedTargetPostures.includes(target) && (!["archive", "restore"].includes(action)
+            || (source.manifest_schema_version === 2 && allowedLifecycleMaintenanceActions.includes(action)));
+        }),
+      };
+    },
     async get({ callerId, requestId }) {
       const record = await store.get(requestId);
       assertOwner(record, callerId);

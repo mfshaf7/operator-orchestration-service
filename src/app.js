@@ -4087,6 +4087,7 @@ async function handleProductPublication({
   action,
   config,
   productPublicationService,
+  productId,
   request,
   requestId,
   response,
@@ -4099,6 +4100,12 @@ async function handleProductPublication({
       "product_publication_not_active",
       "Product Publication awaits Security review and Platform activation.",
     );
+  }
+  if (action === "prepare") {
+    sendJson(response, 200, await productPublicationService.prepare({
+      callerId: caller.id, operatorId: productPublicationOperatorId(request), productId,
+    }));
+    return;
   }
   if (action === "submit") {
     sendJson(response, 201, await productPublicationService.submit({
@@ -5840,6 +5847,11 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && /^\/v1\/product-publications\/products\/[^/]+\/preparation$/.test(url.pathname)) {
+        await handleProductPublication({ action: "prepare", config, productPublicationService, request,
+          productId: decodeURIComponent(url.pathname.split("/")[4]), response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/product-publications") {
         await handleProductPublication({
           action: "submit",
