@@ -216,6 +216,8 @@ test("Catalog runtime accepts an independently composed readiness caller", () =>
 
 test("Platform operation adapter is disabled by default and keeps every trust binding explicit", () => {
   assert.equal(loadConfig({}).platformOperation.enabled, false);
+  assert.equal(loadConfig({}).platformOperation.profilesEnabled, false);
+  assert.equal(loadConfig({ OOS_DEV_INTEGRATION_PROFILES_ENABLED: "true" }).platformOperation.profilesEnabled, true);
   const config = loadConfig({
     OOS_PLATFORM_OPERATION_ENABLED: "true",
     OOS_RUNTIME_PROFILE: "dev-integration",
@@ -235,6 +237,8 @@ test("Platform operation adapter is disabled by default and keeps every trust bi
   });
   assert.deepEqual(config.platformOperation, {
     enabled: true,
+    productsEnabled: false,
+    profilesEnabled: false,
     profile: "dev-integration",
     stateRoot: "/var/lib/oos/platform-operation",
     operatorBindings: {

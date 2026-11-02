@@ -6823,6 +6823,68 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/platform-operations/history") {
+        const caller=authenticateCaller(request,config);
+        assertCallerIdentityBound(caller,"Platform operation history");
+        if(request.method!=="GET")throw new HttpError(405,"method_not_allowed","History is read-only.");
+        if(!platformOperationService?.history)throw new HttpError(503,"platform_history_unavailable","Scoped history is not configured.");
+        if([...url.searchParams.keys()].some(key=>!["workspace","limit","cursor"].includes(key)||url.searchParams.getAll(key).length!==1))throw new HttpError(400,"platform_history_query_invalid","Use only workspace, limit and cursor.");
+        sendJson(response,200,await platformOperationService.history({callerId:caller.id,workspace:url.searchParams.get("workspace")??"all",limit:Number(url.searchParams.get("limit")??"10"),cursor:url.searchParams.get("cursor")}));return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/governed-products") {
+        const caller = authenticateCaller(request, config);
+        assertCallerIdentityBound(caller, "Governed product readback");
+        if (request.method !== "GET") throw new HttpError(405, "method_not_allowed", "Product projection is read-only.");
+        if (!platformOperationService?.governedProducts) throw new HttpError(503,"governed_products_not_configured","Reviewed product readback is not enabled.");
+        const allowed = new Set(["limit","offset","q","maturity","endpoint","product_id"]);
+        if ([...url.searchParams.keys()].some(key=>!allowed.has(key)||url.searchParams.getAll(key).length!==1||url.searchParams.get(key).length>200)) throw new HttpError(400,"governed_product_query_invalid","Use bounded singular product filters.");
+        for (const name of ["limit","offset"]) {
+          const value=url.searchParams.get(name);
+          if(value!==null&&(!/^\d{1,5}$/.test(value)||Number(value)<(name==="limit"?1:0)||Number(value)>(name==="limit"?25:10000)))throw new HttpError(400,"governed_product_query_invalid","Product pagination is outside its bounds.");
+        }
+        if(url.searchParams.has("maturity")&&!["all","fully-governed","platform-integrated","owner-managed"].includes(url.searchParams.get("maturity"))||url.searchParams.has("endpoint")&&!["all","stage","production","unavailable"].includes(url.searchParams.get("endpoint")))throw new HttpError(400,"governed_product_query_invalid","Use a supported product filter.");
+        sendJson(response,200,await platformOperationService.governedProducts({callerId:caller.id,query:Object.fromEntries(url.searchParams)}));
+        return;
+      }
+
+      if (url.pathname === "/v1/dev-integration/profiles" ||
+          /^\/v1\/dev-integration\/profiles\/[^/]+$/.test(url.pathname) ||
+          url.pathname === "/v1/dev-integration/requests" ||
+          /^\/v1\/dev-integration\/requests\/[^/]+$/.test(url.pathname)) {
+        const caller = authenticateCaller(request, config);
+        assertCallerIdentityBound(caller, "Dev Integration profile");
+        const service = platformOperationService?.profileIntegration;
+        if (!service) throw new HttpError(503, "dev_integration_not_configured", "The reviewed profile integration is not enabled.");
+        if (request.method === "GET" && url.pathname === "/v1/dev-integration/profiles") {
+          const query = Object.fromEntries(url.searchParams);
+          if ([...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length !== 1))
+            throw new HttpError(400, "dev_integration_query_invalid", "Profile filters must be singular.");
+          sendJson(response, 200, await service.profiles({ callerId: caller.id, query }));
+          return;
+        }
+        if (request.method === "GET" && /^\/v1\/dev-integration\/profiles\/[^/]+$/.test(url.pathname)) {
+          if (url.search) throw new HttpError(400, "dev_integration_query_invalid", "Use the exact profile identity for a detail read.");
+          sendJson(response, 200, await service.profiles({ callerId: caller.id,
+            query: { profile_id: decodeURIComponent(url.pathname.split("/").at(-1)) } }));
+          return;
+        }
+        if (request.method === "POST" && url.pathname === "/v1/dev-integration/requests") {
+          sendJson(response, 201, await service.submit({ callerId: caller.id, input: await readJsonBody(request) }));
+          return;
+        }
+        if (request.method === "GET" && url.pathname === "/v1/dev-integration/requests") {
+          sendJson(response, 200, await service.listRequests({ callerId: caller.id,
+            offset: Number(url.searchParams.get("offset") ?? 0), limit: Number(url.searchParams.get("limit") ?? 20) }));
+          return;
+        }
+        if (request.method === "GET" && /^\/v1\/dev-integration\/requests\/[^/]+$/.test(url.pathname)) {
+          sendJson(response, 200, await service.get({ callerId: caller.id, requestId: decodeURIComponent(url.pathname.split("/").at(-1)) }));
+          return;
+        }
+        throw new HttpError(405, "dev_integration_method_invalid", "Only the documented profile operation is admitted.");
+      }
+
       if (request.method === "GET" && url.pathname === "/v1/platform-operations/source-preparations") {
         await handlePlatformOperation({ action: "source-preparation-list",
           config, platformOperationService, request, response, url });

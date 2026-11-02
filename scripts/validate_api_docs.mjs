@@ -656,6 +656,12 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/platform-operations/")) {
     return pattern.replace("[^/]+", "{operation_id}");
   }
+  if (pattern.startsWith("/v1/dev-integration/profiles/")) {
+    return pattern.replace("[^/]+", "{profile_id}");
+  }
+  if (pattern.startsWith("/v1/dev-integration/requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
 
   fail(`unsupported route regex family: ${literal}`);
 }

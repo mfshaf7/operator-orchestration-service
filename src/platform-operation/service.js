@@ -108,6 +108,12 @@ export function createPlatformOperationService({
     }
   }
 
+  async function history({callerId,workspace="all",limit=10,cursor=null}) {
+    assertCaller(operatorBindings,callerId);
+    const result=store.historyPage({workspace,limit,cursor});
+    return {workflow_id:"platform-operation-list",operations:result.records.map(publicProjection),page:result.page};
+  }
+
   async function list({ callerId, limit = 100 }) {
     assertCaller(operatorBindings, callerId);
     const bounded = Number.isSafeInteger(limit) && limit > 0 && limit <= 200 ? limit : 100;
@@ -280,7 +286,7 @@ export function createPlatformOperationService({
     return normalizePlatformOperationCommand(command);
   }
   return {
-    catalog, control, get, list, submit,
+    catalog, control, get, list, history, submit,
     ensureSourceCredential,
     async withSourceLease({ callerId, operatorId, ...scope }) {
       assertOperator(operatorBindings, callerId, operatorId);
@@ -406,10 +412,12 @@ function blockedForProvider(record, error, clock) {
   const code = error?.code ?? "platform_operation_provider_unavailable";
   const detail = error?.message ?? "Platform operation owner readback is unavailable.";
   const prior = record.provider_operation;
+  if (record.command.capability_id.startsWith("release.openclaw.") && prior?.state === "blocked" && prior.blocker?.code === code && prior.blocker?.reason === detail) return record;
   return {
     ...record,
     state: "blocked",
     provider_operation: {
+      ...(prior?.release_workflow ? {release_workflow:structuredClone(prior.release_workflow)} : {}),
       schema_version: 1,
       operation_id: prior?.operation_id ?? `platform-owner:unresolved:${record.command.command_id}`,
       command_id: record.command.command_id,
@@ -495,6 +503,8 @@ function publicProjection(record, { reconciled = false, replayed = false } = {})
 }
 
 function nextAction(operation) {
+  if (operation.state === "queued" && operation.release_workflow?.phase === "awaiting-approval") return { code: "approve-owner-environment", authority: "operator", reason: "Approve the original protected GitHub environment job, then refresh this operation." };
+  if (operation.state === "running" && operation.release_workflow?.phase === "awaiting-review") return { code: "review-owner-source", authority: "operator", reason: "Review and merge the original source change in GitHub, then refresh this operation. Workflow success alone does not complete the release." };
   if (operation.state === "succeeded") {
     return { code: "complete", authority: "operator", reason: "Platform receipt and owner readback are terminal." };
   }

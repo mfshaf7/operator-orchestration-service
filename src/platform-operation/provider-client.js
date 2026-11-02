@@ -1,4 +1,6 @@
+import { assertGovernedProductProjection } from "./governed-product-contracts.js";
 import { HttpError } from "../errors.js";
+import { assertDevIntegrationProfileProjection } from "./dev-integration-contracts.js";
 import {
   assertPlatformOperationCatalog,
   assertPlatformOperationProjection,
@@ -86,6 +88,16 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    async getGovernedProducts(query = {}) {
+      return assertGovernedProductProjection(await request(`/v1/console-operations/governed-products?${new URLSearchParams(query)}`));
+    },
+    async getDevIntegrationProfiles(query = {}) {
+      const allowed = new Set(["limit", "offset", "q", "owner", "lifecycle", "lane", "profile_id"]);
+      if (Object.keys(query).some(key => !allowed.has(key)))
+        throw new HttpError(400, "dev_integration_query_invalid", "Unsupported profile filter.");
+      return assertDevIntegrationProfileProjection(await request(
+        `/v1/console-operations/dev-integration/profiles?${new URLSearchParams(query)}`));
+    },
     async readPrototypeClosureDisposition(lookup) {
       return request("/v1/console-operations/prototype-closure-dispositions", {
         body: lookup, method: "POST",

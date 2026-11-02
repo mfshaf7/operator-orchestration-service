@@ -14,6 +14,35 @@ import { createPlatformOperationProviderClient } from "../src/platform-operation
 import { createPlatformOperationService } from "../src/platform-operation/service.js";
 import { createPlatformOperationStore } from "../src/platform-operation/store.js";
 import { createPlatformOperationRuntime } from "../src/platform-operation/runtime.js";
+import { assertNativeReleaseWorkflow, assertReleaseWorkflowEvidence } from "../src/platform-operation/release-workflow-contracts.js";
+
+test("native release DTOs reject private fields, foreign evidence and invented completion", () => {
+  const native={schema_version:1,workflow_id:"runtime",capability_id:"release.openclaw.runtime",action:"governed-release.change-runtime-lifecycle",available:false,unavailable_reason:"Not commissioned",source_version:`products:${"a".repeat(40)}:${"b".repeat(40)}`,fields:[]};
+  assertNativeReleaseWorkflow(native,"runtime",native.source_version);
+  for(const change of [value=>value.private_key="forbidden",value=>value.available=true,value=>value.source_version="products:stale",value=>value.fields=[{id:"state",label:"Target",description:"Select state",kind:"select",required:true,options:[],default_value:"live"}]]) {const changed=structuredClone(native);change(changed);assert.throws(()=>assertNativeReleaseWorkflow(changed,"runtime",native.source_version));}
+  const evidence={schema_version:1,workflow_id:"runtime",phase:"awaiting-approval",run_id:42,run_url:"https://github.com/mfshaf7/platform-engineering/actions/runs/42",pull_request_url:null,branch:null,merge_commit:null,desired_state_verified:false};
+  assertReleaseWorkflowEvidence(evidence,native.action);
+  for(const change of [value=>value.run_url="https://attacker.example/run",value=>value.desired_state_verified=true,value=>value.run_id=null,value=>value.token="forbidden",value=>value.workflow_id="promotion",value=>value.merge_commit="c".repeat(40)]) {const changed=structuredClone(evidence);change(changed);assert.throws(()=>assertReleaseWorkflowEvidence(changed,native.action));}
+});
+
+test("native provider evidence binds the original command and terminal receipt", () => {
+  const input=command({subject:{kind:"product-runtime-lifecycle",ref:"product:openclaw",expected_source_version:"version:42"},capability_id:"release.openclaw.runtime",action:"governed-release.change-runtime-lifecycle",input:{workflow_id:"runtime",values:{state:"suspended"}}});
+  const evidence={schema_version:1,workflow_id:"runtime",phase:"failed",run_id:null,run_url:null,pull_request_url:null,branch:null,merge_commit:null,desired_state_verified:false};
+  const value=ownerProjection(input,{state:"failed",failure:{code:"release-source-changed",detail:"Reviewed source changed before dispatch.",owner:"platform-engineering"}});
+  value.release_workflow=evidence;value.receipt.source_version=input.subject.expected_source_version;value.receipt.release_workflow=structuredClone(evidence);
+  assertPlatformOperationProjection(value,input);
+  for(const change of [value=>value.subject_ref="product:other",value=>value.capability_id="release.openclaw.promotion",value=>value.receipt.release_workflow.phase="uncertain",value=>delete value.receipt.release_workflow,value=>value.receipt.source_version="another:source",value=>value.retryable=true]){const changed=structuredClone(value);change(changed);assert.throws(()=>assertPlatformOperationProjection(changed,input));}
+});
+
+test("native owner outage retains workflow links and deduplicates repeated failure events",async t=>{
+  const root=mkdtempSync(path.join(tmpdir(),"native-release-outage-"));t.after(()=>rmSync(root,{force:true,recursive:true}));
+  const cmd=command({subject:{kind:"product-runtime-lifecycle",ref:"product:openclaw",expected_source_version:"version:42"},capability_id:"release.openclaw.runtime",action:"governed-release.change-runtime-lifecycle",input:{workflow_id:"runtime",values:{state:"suspended"}}});
+  const cat=catalog();cat.subjects=[{kind:cmd.subject.kind,ref:cmd.subject.ref,source_version:"version:42",owner:"platform-engineering",capabilities:[{...cat.subjects[0].capabilities[0],action:cmd.action,capability_id:cmd.capability_id}]}];
+  const projection=ownerProjection(cmd,{state:"queued",receipt:null});projection.release_workflow={schema_version:1,workflow_id:"runtime",phase:"awaiting-approval",run_id:42,run_url:"https://github.com/mfshaf7/platform-engineering/actions/runs/42",pull_request_url:null,branch:null,merge_commit:null,desired_state_verified:false};
+  const service=createPlatformOperationService({operatorBindings:{console:cmd.actor_ref},providerClient:{getCatalog:async()=>cat,submit:async()=>projection,readByCommand:async()=>{throw Object.assign(new Error("Owner unavailable"),{code:"platform_operation_provider_unavailable"});}},securityDecision:SECURITY,store:createPlatformOperationStore({root})});
+  const first=await service.submit({callerId:"console",input:cmd});const failed=await service.get({callerId:"console",operationId:first.operation_id});const repeat=await service.get({callerId:"console",operationId:first.operation_id});
+  assert.equal(failed.state,"blocked");assert.equal(failed.provider_operation.release_workflow.run_url,projection.release_workflow.run_url);assert.equal(repeat.provider_operation.events.length,failed.provider_operation.events.length);assert.equal(failed.next_action.code,"reconcile-owner-readback");
+});
 
 const NOW = "2026-10-15T00:00:00.000Z";
 const SECURITY = {

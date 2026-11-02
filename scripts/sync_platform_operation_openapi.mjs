@@ -1,3 +1,4 @@
+import {releaseWorkflowEvidenceSchema,nativeReleaseInputSchema} from "./release_workflow_openapi_schemas.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,6 +138,8 @@ const catalogExample = {
 };
 
 const schemas = {
+  ReleaseWorkflowEvidence:releaseWorkflowEvidenceSchema,
+  NativeReleaseWorkflowInput:nativeReleaseInputSchema,
   ...sourceCredentialSchemas,
   PlatformOperationCommand: {
     type: "object",
@@ -199,6 +202,7 @@ const schemas = {
     type: "object", additionalProperties: false,
     required: Object.keys(ownerProjectionExample),
     properties: {
+      release_workflow:ref("ReleaseWorkflowEvidence"),
       schema_version: { const: 1 }, operation_id: identifier, command_id: identifier, correlation_id: identifier,
       state: { enum: ["requested", "queued", "running", "blocked", "succeeded", "failed", "cancelled"] },
       attempt: { type: "integer", minimum: 1 }, subject_ref: identifier, capability_id: identifier,
@@ -262,6 +266,7 @@ const paths = {
   "/v1/platform-operations/{operation_id}/controls": { post: { ...meta, tags: ["Platform Operations"], summary: "Retry or cancel one Platform operation", description: "Persists an idempotent retry or cancel request before dispatch. Unknown outcomes remain blocked for owner reconciliation and may only be replayed with the same immutable control binding.", operationId: "controlPlatformOperation", parameters: [{ name: "operation_id", in: "path", required: true, schema: identifier }], requestBody: { required: true, description: "One bounded operator control with its own idempotency binding.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["control"], properties: { control: ref("PlatformOperationControl") } }, example: { control: { schema_version: 1, control_id: "control:cancel:1", idempotency_key: "idempotency:control:cancel:1", action: "cancel", operator_id: "operator:workspace-owner", reason: "Stop before another owner effect.", requested_at: "2026-10-15T00:00:02.000Z" } } } } }, responses: { ...success("Updated operation record.", ref("PlatformOperationRecord"), recordExample), "404": { $ref: "#/components/responses/NotFoundError" } } } },
 };
 
+schemas.PlatformOperationCommand.allOf.push({if:{properties:{capability_id:{enum:["release.openclaw.readiness","release.openclaw.promotion","release.openclaw.runtime"]}},required:["capability_id"]},then:{properties:{input:ref("NativeReleaseWorkflowInput")}}});
 let synchronized = original;
 for (const [name, schema] of Object.entries(schemas)) synchronized = upsertOpenApiComponent(synchronized, name, schema);
 for (const [route, operation] of Object.entries(paths)) synchronized = upsertOpenApiPath(synchronized, route, operation);
