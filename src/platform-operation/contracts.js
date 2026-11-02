@@ -1,5 +1,6 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
+import { assertReleaseWorkflowEvidence, assertNativeReleaseInput } from "./release-workflow-contracts.js";
 import {
   assertSourceCredentialOperationReceipt as assertSourceCredentialReceipt,
   assertSourceCredentialTimestamp,
@@ -182,6 +183,10 @@ export function normalizePlatformOperationCommand(value) {
   if (command.schema_version !== 1) {
     invalid("schema_version", "must be 1");
   }
+  if (command.capability_id.startsWith("release.openclaw.")) {
+    try { assertNativeReleaseInput(command.input, command.capability_id); }
+    catch { invalid("input", "must contain the exact native workflow and bounded string values"); }
+  }
   const expectedKind = SOURCE_CREDENTIAL_ACTIONS.includes(command.action)
     ? "dev-integration-profile"
     : command.action.startsWith("dev-integration.")
@@ -246,8 +251,16 @@ export function assertPlatformOperationCatalog(value) {
 
 export function assertPlatformOperationProjection(value, command = null) {
   plainObject(value, "operation");
-  exactFields(value, PROJECTION_FIELDS, "operation");
+  exactFields(value, "release_workflow" in value ? new Set([...PROJECTION_FIELDS, "release_workflow"]) : PROJECTION_FIELDS, "operation");
+  if ("release_workflow" in value) {
+    const release = assertReleaseWorkflowEvidence(value.release_workflow, value.action);
+    if (["failed", "cancelled"].includes(value.state) && release.phase !== value.state || ["applied", "no-change"].includes(release.phase) && value.state !== "succeeded") invalid("operation.release_workflow", "must retain terminal owner meaning");
+    if (value.subject_ref !== "product:openclaw" || value.capability_id !== "release.openclaw." + release.workflow_id || (command && command.input.workflow_id !== release.workflow_id)) invalid("operation.release_workflow", "must bind the original product and workflow");
+    if (value.retryable || (value.state === "succeeded" && !release.desired_state_verified) || (release.phase === "awaiting-approval" && !["queued", "blocked"].includes(value.state)) || (release.phase === "awaiting-review" && !["running", "blocked"].includes(value.state))) invalid("operation.release_workflow", "must match the original owner state");
+    if (value.receipt && (!value.receipt.release_workflow || canonicalDigest(value.receipt.release_workflow) !== canonicalDigest(release))) invalid("operation.receipt.release_workflow", "must match its terminal operation");
+  }
   if (value.schema_version !== 1) invalid("operation.schema_version", "must be 1");
+  if (String(value.capability_id).startsWith("release.openclaw.") && ["succeeded", "failed", "cancelled"].includes(value.state) && !("release_workflow" in value)) invalid("operation.release_workflow", "is required for native terminal evidence");
   identifier(value.operation_id, "operation.operation_id");
   identifier(value.command_id, "operation.command_id");
   identifier(value.correlation_id, "operation.correlation_id");
@@ -427,7 +440,12 @@ function assertReceipt(value, label, action, command) {
   if (value === null) return;
   plainObject(value, label);
   const sourceSuccess = SOURCE_CREDENTIAL_ACTIONS.includes(action) && value.outcome === "succeeded";
-  exactFields(value, sourceSuccess ? new Set([...RECEIPT_FIELDS, "source_credential"]) : RECEIPT_FIELDS, label);
+  const nativeRelease = "release_workflow" in value;
+  exactFields(value, new Set([...RECEIPT_FIELDS, ...(sourceSuccess ? ["source_credential"] : []), ...(nativeRelease ? ["release_workflow"] : [])]), label);
+  if (nativeRelease) {
+    assertReleaseWorkflowEvidence(value.release_workflow, action);
+    if (command && value.source_version !== command.subject.expected_source_version) invalid(`${label}.source_version`, "must bind the reviewed native source");
+  }
   identifier(value.receipt_ref, `${label}.receipt_ref`);
   enumValue(value.outcome, ["succeeded", "failed", "cancelled"], `${label}.outcome`);
   timestamp(value.recorded_at, `${label}.recorded_at`);

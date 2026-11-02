@@ -524,6 +524,8 @@ export function loadConfig(
     },
     platformOperation: {
       enabled: parseBoolean(env.OOS_PLATFORM_OPERATION_ENABLED),
+      productsEnabled: parseBoolean(env.OOS_GOVERNED_PRODUCTS_ENABLED),
+      profilesEnabled: parseBoolean(env.OOS_DEV_INTEGRATION_PROFILES_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_PLATFORM_OPERATION_STATE_ROOT?.trim() || undefined,
       operatorBindings: parseCallerOperatorBindings(

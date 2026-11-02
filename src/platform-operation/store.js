@@ -1,3 +1,4 @@
+import {createOperationHistoryPager} from "./history-page.js";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -41,7 +42,9 @@ export function createPlatformOperationStore({ root = platformOperationStateRoot
     root, failure: (code, message) => new PlatformOperationStoreError(`platform_operation_${code}`, message),
   });
 
+  const historyPage=createOperationHistoryPager({directory:records,read});
   return {
+    historyPage,
     sourcePreparation(intentId) {
       return read(path.join(sourcePreparations, `${key(intentId)}.json`), "Source credential preparation");
     },

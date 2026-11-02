@@ -4,6 +4,9 @@ import { createPlatformOperationProviderClient } from "./provider-client.js";
 import { createPlatformOperationService } from "./service.js";
 import { createPlatformOperationStore } from "./store.js";
 import { createSourceCredentialAuthority } from "./source-credential-authority.js";
+import { createDevIntegrationProfileService } from "./dev-integration-service.js";
+import path from "node:path";
+import { platformOperationStateRoot } from "./store.js";
 
 export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourceCredentialResolvers } = {}) {
   if (!config?.enabled) return null;
@@ -23,20 +26,23 @@ export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourc
   }
   const securityDecision = assertPlatformOperationSecurityDecision(config);
   const store = createPlatformOperationStore({ root: config.stateRoot });
-  return createPlatformOperationService({
+  const providerClient = createPlatformOperationProviderClient({
+    allowHttp: config.providerAllowHttp, baseUrl: config.providerBaseUrl,
+    callerId: config.providerCallerId, callerSecret: config.providerCallerSecret, fetchImpl,
+  });
+  const service = createPlatformOperationService({
     audit,
     operatorBindings: config.operatorBindings,
-    providerClient: createPlatformOperationProviderClient({
-      allowHttp: config.providerAllowHttp,
-      baseUrl: config.providerBaseUrl,
-      callerId: config.providerCallerId,
-      callerSecret: config.providerCallerSecret,
-      fetchImpl,
-    }),
+    providerClient,
     securityDecision,
     sourceCredentialAuthority: createSourceCredentialAuthority({
       providerCallerId: config.providerCallerId, resolvers: sourceCredentialResolvers, store,
     }),
     store,
   });
+  service.profileIntegration = config.profilesEnabled === true
+    ? createDevIntegrationProfileService({ root: path.join(config.stateRoot ?? platformOperationStateRoot(), "dev-integration"),
+      providerClient, operatorBindings: config.operatorBindings, audit }) : null;
+  service.governedProducts = config.productsEnabled === true ? async ({query}) => providerClient.getGovernedProducts(query) : null;
+  return service;
 }

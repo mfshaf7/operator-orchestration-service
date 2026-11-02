@@ -33918,6 +33918,869 @@
           }
         }
       }
+    },
+    "/v1/dev-integration/profiles": {
+      "get": {
+        "operationId": "listDevIntegrationProfiles",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Read canonical integration profiles without runtime probes",
+        "description": "Authenticated native Dev Integration workflow. Source staged; exact reviewed runtime commissioning is required.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "lane",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "lifecycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "profile_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded owner readback; recording does not grant admission or runtime authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevIntegrationProfileProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "source_version": "registry:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "observed_at": "2026-11-02T00:00:00.000Z",
+                  "owner_versions": {},
+                  "profiles": [],
+                  "request_options": {
+                    "owner_repos": [
+                      "platform-engineering"
+                    ],
+                    "lane_classes": [
+                      "integration-devint"
+                    ],
+                    "runtime_platforms": [
+                      "local-k3s"
+                    ],
+                    "state_models": [
+                      "disposable",
+                      "persistent"
+                    ]
+                  },
+                  "page": {
+                    "offset": 0,
+                    "limit": 20,
+                    "total": 0,
+                    "next_offset": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The reviewed integration, source or request store is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "dev_integration_not_configured",
+                  "message": "The reviewed profile integration is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/dev-integration/profiles/{profile_id}": {
+      "get": {
+        "operationId": "readDevIntegrationProfile",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Read one exact owner profile",
+        "description": "Authenticated native Dev Integration workflow. Source staged; exact reviewed runtime commissioning is required.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded owner readback; recording does not grant admission or runtime authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevIntegrationProfileProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "source_version": "registry:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "observed_at": "2026-11-02T00:00:00.000Z",
+                  "owner_versions": {},
+                  "profiles": [],
+                  "request_options": {
+                    "owner_repos": [
+                      "platform-engineering"
+                    ],
+                    "lane_classes": [
+                      "integration-devint"
+                    ],
+                    "runtime_platforms": [
+                      "local-k3s"
+                    ],
+                    "state_models": [
+                      "disposable",
+                      "persistent"
+                    ]
+                  },
+                  "page": {
+                    "offset": 0,
+                    "limit": 20,
+                    "total": 0,
+                    "next_offset": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The reviewed integration, source or request store is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "dev_integration_not_configured",
+                  "message": "The reviewed profile integration is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/dev-integration/requests": {
+      "get": {
+        "operationId": "listDevIntegrationRequests",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Read caller-bound native request history",
+        "description": "Authenticated native Dev Integration workflow. Source staged; exact reviewed runtime commissioning is required.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded owner readback; recording does not grant admission or runtime authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevIntegrationProfileRequestList"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "requests": [],
+                  "page": {
+                    "offset": 0,
+                    "limit": 20,
+                    "total": 0,
+                    "next_offset": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The reviewed integration, source or request store is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "dev_integration_not_configured",
+                  "message": "The reviewed profile integration is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      },
+      "post": {
+        "operationId": "recordDevIntegrationRequest",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Record or replay one native profile request",
+        "description": "Authenticated native Dev Integration workflow. Source staged; exact reviewed runtime commissioning is required.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Submit the exact reviewed profile intent, stable original request identity and explicit approval. OOS derives actor, time and durable request ownership; this does not admit or launch the profile.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevIntegrationProfileRequest"
+              },
+              "example": {
+                "request_id": "devint-request:example",
+                "expected_source_version": "registry:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "request": {
+                  "profileId": "example-runtime",
+                  "ownerRepo": "platform-engineering",
+                  "purpose": "An isolated integration runtime.",
+                  "laneClass": "integration-devint",
+                  "participatingRepos": [
+                    "platform-engineering"
+                  ],
+                  "runtimePlatform": "local-k3s",
+                  "runtimeStateModel": "disposable",
+                  "dependencies": [],
+                  "expectedWrites": {
+                    "classification": "none",
+                    "targets": []
+                  },
+                  "securityTriggers": [],
+                  "persistence": null,
+                  "replacesProfileId": null
+                },
+                "approval": {
+                  "decision": "approved",
+                  "intent_digest": "sha256:db466dcc652ac8afe9a4e2eb7171549ff2486a00d452cd8305115cbe40b0f99f"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bounded owner readback; recording does not grant admission or runtime authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevIntegrationProfileRequestRecord"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "dev-integration-profile-request",
+                  "request_id": "devint-request:example",
+                  "expected_source_version": "registry:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "request": {
+                    "profileId": "example-runtime",
+                    "ownerRepo": "platform-engineering",
+                    "purpose": "An isolated integration runtime.",
+                    "laneClass": "integration-devint",
+                    "participatingRepos": [
+                      "platform-engineering"
+                    ],
+                    "runtimePlatform": "local-k3s",
+                    "runtimeStateModel": "disposable",
+                    "dependencies": [],
+                    "expectedWrites": {
+                      "classification": "none",
+                      "targets": []
+                    },
+                    "securityTriggers": [],
+                    "persistence": null,
+                    "replacesProfileId": null
+                  },
+                  "intent_digest": "sha256:db466dcc652ac8afe9a4e2eb7171549ff2486a00d452cd8305115cbe40b0f99f",
+                  "operator_id": "operator:workspace-owner",
+                  "state": "recorded",
+                  "created_at": "2026-11-02T00:00:00.000Z",
+                  "updated_at": "2026-11-02T00:00:00.000Z",
+                  "request_ref": "oos://dev-integration/requests/devint-request:example",
+                  "receipt": {
+                    "request_ref": "oos://dev-integration/requests/devint-request:example",
+                    "request_id": "devint-request:example",
+                    "intent_digest": "sha256:db466dcc652ac8afe9a4e2eb7171549ff2486a00d452cd8305115cbe40b0f99f",
+                    "operator_id": "operator:workspace-owner",
+                    "recorded_at": "2026-11-02T00:00:00.000Z",
+                    "outcome": "request-recorded",
+                    "digest": "sha256:fb03e8354a14cbf0c837e11e4c97f167c811e7fa17a3a938f6999f5fe2a85dde"
+                  },
+                  "admission": {
+                    "state": "not-checked",
+                    "lifecycle": null,
+                    "source_version": null,
+                    "observed_at": null,
+                    "profile_ref": null
+                  },
+                  "readback": "current",
+                  "next_action": {
+                    "code": "review-profile-request",
+                    "owner": "platform-engineering",
+                    "reason": "Request recorded for owner review. Admission and runtime launch remain separate."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The reviewed integration, source or request store is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "dev_integration_not_configured",
+                  "message": "The reviewed profile integration is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/dev-integration/requests/{request_id}": {
+      "get": {
+        "operationId": "readDevIntegrationRequest",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Recover an original native request and independent admission readback",
+        "description": "Authenticated native Dev Integration workflow. Source staged; exact reviewed runtime commissioning is required.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^devint-request:[A-Za-z0-9._:-]+$",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded owner readback; recording does not grant admission or runtime authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevIntegrationProfileRequestRecord"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "dev-integration-profile-request",
+                  "request_id": "devint-request:example",
+                  "expected_source_version": "registry:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "request": {
+                    "profileId": "example-runtime",
+                    "ownerRepo": "platform-engineering",
+                    "purpose": "An isolated integration runtime.",
+                    "laneClass": "integration-devint",
+                    "participatingRepos": [
+                      "platform-engineering"
+                    ],
+                    "runtimePlatform": "local-k3s",
+                    "runtimeStateModel": "disposable",
+                    "dependencies": [],
+                    "expectedWrites": {
+                      "classification": "none",
+                      "targets": []
+                    },
+                    "securityTriggers": [],
+                    "persistence": null,
+                    "replacesProfileId": null
+                  },
+                  "intent_digest": "sha256:db466dcc652ac8afe9a4e2eb7171549ff2486a00d452cd8305115cbe40b0f99f",
+                  "operator_id": "operator:workspace-owner",
+                  "state": "recorded",
+                  "created_at": "2026-11-02T00:00:00.000Z",
+                  "updated_at": "2026-11-02T00:00:00.000Z",
+                  "request_ref": "oos://dev-integration/requests/devint-request:example",
+                  "receipt": {
+                    "request_ref": "oos://dev-integration/requests/devint-request:example",
+                    "request_id": "devint-request:example",
+                    "intent_digest": "sha256:db466dcc652ac8afe9a4e2eb7171549ff2486a00d452cd8305115cbe40b0f99f",
+                    "operator_id": "operator:workspace-owner",
+                    "recorded_at": "2026-11-02T00:00:00.000Z",
+                    "outcome": "request-recorded",
+                    "digest": "sha256:fb03e8354a14cbf0c837e11e4c97f167c811e7fa17a3a938f6999f5fe2a85dde"
+                  },
+                  "admission": {
+                    "state": "not-checked",
+                    "lifecycle": null,
+                    "source_version": null,
+                    "observed_at": null,
+                    "profile_ref": null
+                  },
+                  "readback": "current",
+                  "next_action": {
+                    "code": "review-profile-request",
+                    "owner": "platform-engineering",
+                    "reason": "Request recorded for owner review. Admission and runtime launch remain separate."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "The reviewed integration, source or request store is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "dev_integration_not_configured",
+                  "message": "The reviewed profile integration is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/governed-products": {
+      "get": {
+        "operationId": "listGovernedProducts",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Inspect registered products and recorded owner release evidence",
+        "description": "Read-only owner projection. Source staged; exact-source Security review and commissioning remain required. Opening an owner workflow does not dispatch it or approve a protected environment.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "maturity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "endpoint",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inspect registered products and recorded owner release evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernedProductProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "governed-product-projection",
+                  "source_version": "products:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "observed_at": "2026-01-01T00:00:00Z",
+                  "products": [],
+                  "page": {
+                    "offset": 0,
+                    "limit": 20,
+                    "total": 0,
+                    "next_offset": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "Reviewed owner integration is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "governed_products_not_configured",
+                  "message": "Product readback is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/platform-operations/history": {
+      "get": {
+        "operationId": "pagePlatformOperationHistory",
+        "tags": [
+          "Platform Operations"
+        ],
+        "summary": "Page original operation history within an exact workspace",
+        "description": "Read-only owner projection. Source staged; exact-source Security review and commissioning remain required. Opening an owner workflow does not dispatch it or approve a protected environment.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "dev-integration",
+                "governed-releases"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page original operation history within an exact workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOperationHistoryPage"
+                },
+                "example": {
+                  "workflow_id": "platform-operation-list",
+                  "operations": [],
+                  "page": {
+                    "workspace": "governed-releases",
+                    "limit": 10,
+                    "total": 0,
+                    "snapshot": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "next_cursor": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "description": "Reviewed owner integration is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "governed_products_not_configured",
+                  "message": "Product readback is not enabled.",
+                  "details": null
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "platform-operation"
+      }
     }
   },
   "components": {
@@ -78238,6 +79101,29 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "capability_id": {
+                  "enum": [
+                    "release.openclaw.readiness",
+                    "release.openclaw.promotion",
+                    "release.openclaw.runtime"
+                  ]
+                }
+              },
+              "required": [
+                "capability_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "input": {
+                  "$ref": "#/components/schemas/NativeReleaseWorkflowInput"
+                }
+              }
+            }
           }
         ],
         "properties": {
@@ -78490,6 +79376,9 @@
           "events"
         ],
         "properties": {
+          "release_workflow": {
+            "$ref": "#/components/schemas/ReleaseWorkflowEvidence"
+          },
           "schema_version": {
             "const": 1
           },
@@ -87400,6 +88289,1766 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500
+          }
+        }
+      },
+      "DevIntegrationPage": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_offset": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "offset",
+          "limit",
+          "total",
+          "next_offset"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationProfileIntent": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 128
+          },
+          "ownerRepo": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 128
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "laneClass": {
+            "enum": [
+              "prototype-devint",
+              "integration-devint",
+              "governed-devint"
+            ]
+          },
+          "participatingRepos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "runtimePlatform": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "runtimeStateModel": {
+            "enum": [
+              "disposable",
+              "persistent"
+            ]
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "expectedWrites": {
+            "type": "object",
+            "properties": {
+              "classification": {
+                "enum": [
+                  "none",
+                  "prototype-local",
+                  "canonical-backend",
+                  "external-sandbox"
+                ]
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "maxItems": 128,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "classification",
+              "targets"
+            ],
+            "additionalProperties": false
+          },
+          "securityTriggers": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "identity",
+                "secrets",
+                "runtime-privilege",
+                "ai-review"
+              ]
+            },
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "persistence": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "justification": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "retainedDataScope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "suspendResumeSemantics": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "storageRequirement": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "destructiveResetSemantics": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "cutoverPlan": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "sharedSmokeMutationMode": {
+                    "const": "read-only"
+                  },
+                  "disposableCompanionProfileId": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "justification",
+                  "retainedDataScope",
+                  "suspendResumeSemantics",
+                  "storageRequirement",
+                  "destructiveResetSemantics",
+                  "cutoverPlan",
+                  "sharedSmokeMutationMode",
+                  "disposableCompanionProfileId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replacesProfileId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "profileId",
+          "ownerRepo",
+          "purpose",
+          "laneClass",
+          "participatingRepos",
+          "runtimePlatform",
+          "runtimeStateModel",
+          "dependencies",
+          "expectedWrites",
+          "securityTriggers",
+          "persistence",
+          "replacesProfileId"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationProfileRequest": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "pattern": "^devint-request:[A-Za-z0-9._:-]+$",
+            "maxLength": 128
+          },
+          "expected_source_version": {
+            "type": "string",
+            "pattern": "^registry:[a-f0-9]{40}$"
+          },
+          "request": {
+            "$ref": "#/components/schemas/DevIntegrationProfileIntent"
+          },
+          "approval": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "const": "approved"
+              },
+              "intent_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "decision",
+              "intent_digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "request_id",
+          "expected_source_version",
+          "request",
+          "approval"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationRecordingReceipt": {
+        "type": "object",
+        "properties": {
+          "request_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^devint-request:[A-Za-z0-9._:-]+$",
+            "maxLength": 128
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outcome": {
+            "const": "request-recorded"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "request_ref",
+          "request_id",
+          "intent_digest",
+          "operator_id",
+          "recorded_at",
+          "outcome",
+          "digest"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationAdmissionReadback": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "not-checked",
+              "unavailable",
+              "not-registered",
+              "registered",
+              "different-request"
+            ]
+          },
+          "lifecycle": {
+            "oneOf": [
+              {
+                "enum": [
+                  "proposed",
+                  "build-admitted",
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_version": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^registry:[a-f0-9]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observed_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "lifecycle",
+          "source_version",
+          "observed_at",
+          "profile_ref"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationProfileRequestRecord": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "dev-integration-profile-request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^devint-request:[A-Za-z0-9._:-]+$",
+            "maxLength": 128
+          },
+          "request": {
+            "$ref": "#/components/schemas/DevIntegrationProfileIntent"
+          },
+          "expected_source_version": {
+            "type": "string",
+            "pattern": "^registry:[a-f0-9]{40}$"
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "state": {
+            "const": "recorded"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/DevIntegrationRecordingReceipt"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/DevIntegrationAdmissionReadback"
+          },
+          "readback": {
+            "const": "current"
+          },
+          "next_action": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "code",
+              "owner",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "request",
+          "expected_source_version",
+          "intent_digest",
+          "operator_id",
+          "state",
+          "created_at",
+          "updated_at",
+          "request_ref",
+          "receipt",
+          "admission",
+          "readback",
+          "next_action"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationOwnerProfile": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 128
+          },
+          "owner_repo": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 128
+          },
+          "lifecycle": {
+            "enum": [
+              "proposed",
+              "build-admitted",
+              "active",
+              "suspended",
+              "retired"
+            ]
+          },
+          "lane_class": {
+            "enum": [
+              "prototype-devint",
+              "integration-devint",
+              "governed-devint"
+            ]
+          },
+          "purpose": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "participating_repos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "maxItems": 128
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "maxItems": 128
+          },
+          "request_record_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runtime": {
+            "type": "object",
+            "properties": {
+              "platform": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state_model": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "disposable",
+                      "persistent"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "unknown",
+                      "running",
+                      "stopped",
+                      "starting",
+                      "stopping",
+                      "degraded",
+                      "failed",
+                      "unavailable"
+                    ]
+                  },
+                  "observed_at": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source_ref": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "state",
+                  "observed_at",
+                  "source_ref"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "platform",
+              "state_model",
+              "observation"
+            ],
+            "additionalProperties": false
+          },
+          "expected_writes": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "classification": {
+                    "enum": [
+                      "none",
+                      "prototype-local",
+                      "canonical-backend",
+                      "external-sandbox"
+                    ]
+                  },
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "maxItems": 128
+                  }
+                },
+                "required": [
+                  "classification",
+                  "targets"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "persistence": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "justification": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "retained_data_scope": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspend_resume_semantics": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "storage_size_or_class": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reset_semantics": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cutover_plan": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "justification",
+                  "retained_data_scope",
+                  "suspend_resume_semantics",
+                  "storage_size_or_class",
+                  "reset_semantics",
+                  "cutover_plan"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "security_owner": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "security_triggers": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "identity",
+                    "secrets",
+                    "runtime-privilege",
+                    "ai-review"
+                  ]
+                },
+                "maxItems": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "admission_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "maxItems": 128
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "registry_revision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$"
+              },
+              "owner_revision": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "ref",
+              "registry_revision",
+              "owner_revision"
+            ],
+            "additionalProperties": false
+          },
+          "stage_handoff": {
+            "type": "object",
+            "properties": {
+              "owner_repo": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "governed_surface": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "required_checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 128
+              },
+              "result": {
+                "const": "unknown"
+              },
+              "check_results": {
+                "type": "array",
+                "maxItems": 0,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              },
+              "smoke_summary_ref": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "session_manifest_ref": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "promotion_report_ref": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "owner_repo",
+              "governed_surface",
+              "required_checks",
+              "result",
+              "check_results",
+              "smoke_summary_ref",
+              "session_manifest_ref",
+              "promotion_report_ref"
+            ],
+            "additionalProperties": false
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "profile_id",
+          "owner_repo",
+          "lifecycle",
+          "lane_class",
+          "purpose",
+          "participating_repos",
+          "dependencies",
+          "request_record_ref",
+          "runtime",
+          "expected_writes",
+          "persistence",
+          "security_owner",
+          "security_triggers",
+          "admission_refs",
+          "source",
+          "stage_handoff",
+          "gaps"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationProfileProjection": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "source_version": {
+            "type": "string",
+            "pattern": "^registry:[a-f0-9]{40}$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "owner_versions": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{40}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DevIntegrationOwnerProfile"
+            },
+            "maxItems": 25
+          },
+          "request_options": {
+            "type": "object",
+            "properties": {
+              "owner_repos": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "maxLength": 128
+                },
+                "maxItems": 128
+              },
+              "lane_classes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "prototype-devint",
+                    "integration-devint",
+                    "governed-devint"
+                  ]
+                },
+                "maxItems": 128
+              },
+              "runtime_platforms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "maxItems": 128
+              },
+              "state_models": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "disposable",
+                    "persistent"
+                  ]
+                },
+                "maxItems": 128
+              }
+            },
+            "required": [
+              "owner_repos",
+              "lane_classes",
+              "runtime_platforms",
+              "state_models"
+            ],
+            "additionalProperties": false
+          },
+          "page": {
+            "$ref": "#/components/schemas/DevIntegrationPage"
+          }
+        },
+        "required": [
+          "schema_version",
+          "source_version",
+          "observed_at",
+          "owner_versions",
+          "profiles",
+          "request_options",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "DevIntegrationProfileRequestList": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DevIntegrationProfileRequestRecord"
+            },
+            "maxItems": 25
+          },
+          "page": {
+            "$ref": "#/components/schemas/DevIntegrationPage"
+          }
+        },
+        "required": [
+          "schema_version",
+          "requests",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "GovernedProductProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "governed-product-projection"
+          },
+          "source_version": {
+            "type": "string",
+            "pattern": "^products:[a-f0-9]{40}:[a-f0-9]{40}$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "products": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "product_id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "maxLength": 200
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "maturity": {
+                  "enum": [
+                    "fully-governed",
+                    "platform-integrated",
+                    "owner-managed"
+                  ]
+                },
+                "platform_owner": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "maxLength": 200
+                },
+                "security_owner": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "maxLength": 200
+                },
+                "highest_real_endpoint": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "maxLength": 200
+                },
+                "stage_supported": {
+                  "type": "boolean"
+                },
+                "production_supported": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                        "maxLength": 200
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "status": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "recorded_at": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "source_bundle": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "image_digest": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^sha256:[a-f0-9]{64}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "evidence_ref": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "url": {
+                        "type": "string",
+                        "pattern": "^https://github\\.com/mfshaf7/",
+                        "maxLength": 2048
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "status",
+                      "recorded_at",
+                      "source_bundle",
+                      "image_digest",
+                      "evidence_ref",
+                      "url"
+                    ]
+                  }
+                },
+                "runtime": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "enum": [
+                            "live",
+                            "traffic-stopped",
+                            "suspended",
+                            "quarantined"
+                          ]
+                        },
+                        "recorded_at": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https://github\\.com/mfshaf7/",
+                          "maxLength": 2048
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "recorded_at",
+                        "url"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "workflows": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                        "maxLength": 200
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "environment": {
+                        "enum": [
+                          "stage",
+                          "prod"
+                        ]
+                      },
+                      "url": {
+                        "type": "string",
+                        "pattern": "^https://github\\.com/mfshaf7/",
+                        "maxLength": 2048
+                      },
+                      "native": {
+                        "$ref": "#/components/schemas/NativeReleaseWorkflow"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "environment",
+                      "url"
+                    ]
+                  }
+                },
+                "guidance_url": {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/mfshaf7/",
+                  "maxLength": 2048
+                },
+                "execution": {
+                  "enum": [
+                    "owner-workflow",
+                    "unsupported",
+                    "unavailable"
+                  ]
+                },
+                "unavailable_reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "product_id",
+                "label",
+                "maturity",
+                "platform_owner",
+                "security_owner",
+                "highest_real_endpoint",
+                "stage_supported",
+                "production_supported",
+                "evidence",
+                "runtime",
+                "workflows",
+                "guidance_url",
+                "execution",
+                "unavailable_reason"
+              ]
+            }
+          },
+          "page": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "next_offset": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "offset",
+              "limit",
+              "total",
+              "next_offset"
+            ]
+          },
+          "source_posture": {
+            "enum": [
+              "accepted-snapshot",
+              "owner-main",
+              "retained-owner-main"
+            ]
+          },
+          "source_notice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "source_version",
+          "observed_at",
+          "products",
+          "page"
+        ]
+      },
+      "PlatformOperationHistoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflow_id": {
+            "const": "platform-operation-list"
+          },
+          "operations": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/PlatformOperationRecord"
+            }
+          },
+          "page": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "workspace": {
+                "enum": [
+                  "all",
+                  "dev-integration",
+                  "governed-releases"
+                ]
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "snapshot": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "workspace",
+              "limit",
+              "total",
+              "snapshot",
+              "next_cursor"
+            ]
+          }
+        },
+        "required": [
+          "workflow_id",
+          "operations",
+          "page"
+        ]
+      },
+      "NativeReleaseWorkflow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "capability_id",
+          "action",
+          "available",
+          "unavailable_reason",
+          "source_version",
+          "fields"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "enum": [
+              "readiness",
+              "promotion",
+              "runtime"
+            ]
+          },
+          "capability_id": {
+            "type": "string",
+            "pattern": "^release\\.openclaw\\.(readiness|promotion|runtime)$"
+          },
+          "action": {
+            "enum": [
+              "governed-release.execute-step",
+              "governed-release.change-runtime-lifecycle"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_version": {
+            "type": "string",
+            "pattern": "^products:[a-f0-9]{40}:[a-f0-9]{40}$"
+          },
+          "fields": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label",
+                "description",
+                "kind",
+                "required",
+                "options",
+                "default_value"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_:-]*$",
+                  "maxLength": 150
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "kind": {
+                  "enum": [
+                    "text",
+                    "select"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "options": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "label",
+                      "value"
+                    ],
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      }
+                    }
+                  }
+                },
+                "default_value": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              }
+            }
+          }
+        }
+      },
+      "ReleaseWorkflowEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "phase",
+          "run_id",
+          "run_url",
+          "pull_request_url",
+          "branch",
+          "merge_commit",
+          "desired_state_verified"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "enum": [
+              "readiness",
+              "promotion",
+              "runtime"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "prepared",
+              "dispatching",
+              "uncertain",
+              "queued",
+              "awaiting-approval",
+              "in-progress",
+              "awaiting-review",
+              "applied",
+              "no-change",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^https://github\\.com/mfshaf7/platform-engineering/actions/runs/[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pull_request_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^https://github\\.com/mfshaf7/platform-engineering/pull/[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(stage/approve-|promote/prod-|prod/openclaw-(live|traffic-stopped|suspended|quarantined)-)[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merge_commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "desired_state_verified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "NativeReleaseWorkflowInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflow_id",
+          "values"
+        ],
+        "properties": {
+          "workflow_id": {
+            "enum": [
+              "readiness",
+              "promotion",
+              "runtime"
+            ]
+          },
+          "values": {
+            "type": "object",
+            "maxProperties": 24,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_:-]{0,149}$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 2048
+            }
           }
         }
       }

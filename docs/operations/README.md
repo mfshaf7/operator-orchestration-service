@@ -42,6 +42,8 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Shared Runtime Controls
 
+- [Dev Integration profiles and native requests](dev-integration-profiles.md)
+
 - [Platform Operations And Source Authorization](platform-operation-adapter.md)
 - [Private Transaction Recovery](private-transaction-recovery.md)
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
@@ -54,3 +56,5 @@ Use the Console as the normal operator client where the selected surface says
 that integration is available. Use the OOS CLI for engineering, recovery, or
 diagnostic work described by the selected surface. Do not infer mutation
 authority from a route existing in source.
+
+- [Governed product readback and owner workflow access](governed-release-readback.md) — registered products, recorded evidence, protected owner workflow navigation and scoped operation history.
