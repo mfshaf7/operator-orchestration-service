@@ -259,12 +259,14 @@ test("repository custody keeps read and provisioning identities separate", () =>
     OOS_RUNTIME_PROFILE: "dev-integration",
     OOS_REPOSITORY_CUSTODY_ENABLED: "true",
     OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN: "read-token",
+    OOS_REPOSITORY_PROVIDER_ACCOUNT: "example-owner",
     OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN: "provision-token",
     OOS_REPOSITORY_PROVIDER_SANDBOX: "true",
   });
 
   assert.equal(config.repositoryCustody.profile, "dev-integration");
   assert.equal(config.repositoryCustody.providerReadInstallationToken, "read-token");
+  assert.equal(config.repositoryCustody.providerReadAccount, "example-owner");
   assert.equal(
     config.repositoryCustody.providerProvisioningInstallationToken,
     "provision-token",
