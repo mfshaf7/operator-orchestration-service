@@ -290,6 +290,27 @@ test("provider client rejects unsupported and oversized provider responses", asy
   );
 });
 
+test("organization metadata reader covers a later repository with unchanged credentials and no per-repository setup",async()=>{
+ const calls=[],repositories=new Map([["existing",123456789]]);
+ const client=createGitHubRepositoryProviderClient({readAccount:"example-org",readInstallationToken:"org-metadata-token",provisioningInstallationToken:"must-not-be-used",
+  fetchImpl:async(url,init)=>{calls.push({url,init});const name=new URL(url).pathname.split('/').at(-1);return Response.json({id:repositories.get(name),owner:{login:'example-org'},name,html_url:`https://github.com/example-org/${name}`,visibility:'private',archived:false});}});
+ assert.equal((await client.lookup({owner:'example-org',name:'existing'})).provider_repository_id,'123456789');
+ // The next repository appears after connection setup. No client, token,
+ // configuration, installation selection or grant is changed for the lookup.
+ repositories.set('new-project',987654321);
+ assert.equal((await client.lookup({owner:'example-org',name:'new-project'})).provider_repository_id,'987654321');
+ await assert.rejects(client.lookup({owner:'different-org',name:'private-project'}),{code:'repository_provider_owner_not_admitted'});
+ assert.equal(calls.length,2);
+ for(const {init} of calls){assert.equal(init.method,'GET');assert.equal(init.headers.Authorization,'Bearer org-metadata-token');}
+});
+
+test('organization scope rejects foreign immutable-ID readback and malformed configuration',async()=>{
+ assert.throws(()=>createGitHubRepositoryProviderClient({readAccount:'org/path'}),{code:'repository_provider_account_invalid'});
+ const client=createGitHubRepositoryProviderClient({readAccount:'example-org',readInstallationToken:'metadata-token',
+  fetchImpl:async()=>Response.json({id:123456789,owner:{login:'other-owner'},name:'repo',html_url:'https://github.com/other-owner/repo',default_branch:'main'})});
+ await assert.rejects(client.read(custodyRequest()),{code:'repository_provider_owner_not_admitted'});
+});
+
 test("repository coordinate lookup uses read identity and GET only without claiming custody",async()=>{
  const calls=[];
  const client=createGitHubRepositoryProviderClient({clock:TEST_CLOCK,readInstallationToken:"read-only-token",provisioningInstallationToken:"create-token",

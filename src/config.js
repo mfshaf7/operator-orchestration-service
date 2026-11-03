@@ -601,6 +601,8 @@ export function loadConfig(
         env.OOS_REPOSITORY_PROVIDER_API_BASE_URL ?? "https://api.github.com",
       providerReadInstallationToken:
         env.OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN ?? "",
+      providerReadAccount:
+        env.OOS_REPOSITORY_PROVIDER_ACCOUNT?.trim() || undefined,
       providerProvisioningInstallationToken:
         env.OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN ?? "",
       providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),

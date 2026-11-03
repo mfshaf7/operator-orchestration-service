@@ -9,6 +9,31 @@ OOS fails startup closed if that setting is used outside
 runtime is currently operating: Platform must still deliver fresh dedicated
 credentials and complete the live evidence owned by ART `#1291` and `#1298`.
 
+## Account Metadata Reader
+
+The optional account metadata connection supports one GitHub personal account
+or organization with an explicit Metadata-read-only installation grant,
+including future repositories. Platform owns selection, short-lived token
+issuance, Vault custody, renewal and delivery. OOS receives the installation
+token and `OOS_REPOSITORY_PROVIDER_ACCOUNT`, never the App private key.
+
+Coordinate lookup rejects another account before contacting GitHub. Readback by
+immutable repository ID also rejects a foreign owner. A new repository under
+the connected account uses the same reader without an installation edit or an
+OOS repository allowlist update. Provider responses still validate immutable
+identity, owner, name, URL, response bounds and archive state. Existing selected
+mode remains available when no account-wide connection was chosen.
+
+The reader performs metadata GETs only. Source contents, repository creation
+and lifecycle writes use their separate authorities; a reader outage never
+falls back to the provisioning token. All existing OOS caller authorization and
+custody approval/readiness boundaries remain in place. This source extension
+does not prove that a deployed reader is connected. Platform's
+[primary identity procedure](https://github.com/mfshaf7/platform-engineering/blob/main/docs/components/operator-orchestration-service/repository-provider-identity.md#account-metadata-reader)
+and the
+[Security delta](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-11-03-account-repository-reader.md)
+own commissioning and activation evidence.
+
 ## Required Runtime Inputs
 
 When activation is approved, Platform provides:
@@ -18,6 +43,7 @@ When activation is approved, Platform provides:
 - `WGCF_REPOSITORY_CUSTODY_CALLER_SECRET`
 - `OOS_REPOSITORY_PROVIDER_API_BASE_URL`
 - `OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN`
+- `OOS_REPOSITORY_PROVIDER_ACCOUNT` for the optional account-wide metadata connection
 - `OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN`
 - `OOS_REPOSITORY_CUSTODY_STATE_ROOT`
 

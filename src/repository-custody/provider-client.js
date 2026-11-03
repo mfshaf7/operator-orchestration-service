@@ -126,8 +126,12 @@ export function createGitHubRepositoryProviderClient({
   fetchImpl = globalThis.fetch,
   provisioningInstallationToken,
   readInstallationToken,
+  readAccount,
   sandbox = false,
 }) {
+  if (readAccount !== undefined && (typeof readAccount !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(readAccount))) {
+    throw new HttpError(503, "repository_provider_account_invalid", "The repository reader account is invalid.");
+  }
   const baseUrl = apiBaseUrl.replace(/\/+$/, "");
   let parsedBaseUrl;
   try {
@@ -183,6 +187,9 @@ export function createGitHubRepositoryProviderClient({
   async function readRepository(request, response, expectedRepositoryId = null) {
     if (!response.ok) throw providerFailure(response);
     const body = await readBoundedJson(response);
+    if (request.action !== "provision-new" && readAccount && (typeof body?.owner?.login !== "string" || body.owner.login.toLowerCase() !== readAccount.toLowerCase())) {
+      throw new HttpError(403, "repository_provider_owner_not_admitted", "The repository is outside the connected account.");
+    }
     const providerRepositoryId = String(body?.id ?? "");
     if (
       !/^[1-9][0-9]*$/.test(providerRepositoryId) ||
@@ -250,13 +257,16 @@ export function createGitHubRepositoryProviderClient({
       if (typeof owner !== "string" || typeof name !== "string" || !coordinate.test(owner) || !coordinate.test(name) || name.toLowerCase().endsWith(".git")) {
         throw new HttpError(400, "repository_provider_lookup_invalid", "Use the organization and repository name from a GitHub repository URL.");
       }
+      if (readAccount && owner.toLowerCase() !== readAccount.toLowerCase()) {
+        throw new HttpError(403, "repository_provider_owner_not_admitted", "The repository is outside the connected account.");
+      }
       const context = { action: "link-existing", target: {provider: "github", provider_host: "github.com"} };
       assertConfigured(context);
       const response = await providerRequest(`${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
         { method: "GET", headers: providerHeaders(readInstallationToken), signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw providerFailure(response);
       const body = await readBoundedJson(response);
-      if (!/^[1-9][0-9]*$/.test(String(body?.id ?? "")) ||
+      if (!/^[1-9][0-9]*$/.test(String(body?.id ?? "")) || typeof body?.owner?.login !== "string" || typeof body?.name !== "string" ||
           body?.owner?.login?.toLowerCase() !== owner.toLowerCase() || body?.name?.toLowerCase() !== name.toLowerCase() ||
           body?.html_url !== `https://github.com/${body.owner.login}/${body.name}` ||
           typeof body.archived !== "boolean" ||
