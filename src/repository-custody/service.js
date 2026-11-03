@@ -317,6 +317,15 @@ export function createRepositoryCustodyService({
   readinessClient,
   store,
 }) {
+  async function lookup({owner, name}) {
+    if (typeof owner !== "string" || typeof name !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(owner) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name) || name.toLowerCase().endsWith(".git")) {
+      throw new HttpError(400, "repository_provider_lookup_invalid", "Provide valid GitHub organization and repository coordinates.");
+    }
+    if (typeof providerClient?.lookup !== "function") throw new HttpError(503, "repository_provider_not_configured", "Repository lookup is not available.");
+    return providerClient.lookup({owner, name});
+  }
+
   async function project(requestId) {
     let record;
     try {
@@ -344,6 +353,11 @@ export function createRepositoryCustodyService({
       );
     }
 
+    if (request.correlation.correlation_id.startsWith("repo-request://") &&
+        (!["provision-new", "link-existing"].includes(request.action) || !/^repo-request:\/\/proposal\/idea-[1-9][0-9]*$/.test(request.correlation.correlation_id))) {
+      throw new HttpError(400, "repository_custody_request_origin_invalid",
+        "A repository request association requires its exact Proposal reference and an admitted create or attach action.");
+    }
     try {
       return await store.transact(request.request_id, async ({ current, put }) => {
         if (current?.request?.request_digest !== undefined &&
@@ -389,6 +403,9 @@ export function createRepositoryCustodyService({
             (predecessor.provider_readback &&
               predecessor.provider_operation.provider_repository_id !==
                 predecessor.provider_readback.repository_identity.provider_repository_id) ||
+            ((predecessor.request.correlation.correlation_id.startsWith("repo-request://") ||
+              request.correlation.correlation_id.startsWith("repo-request://")) &&
+              predecessor.request.correlation.correlation_id !== request.correlation.correlation_id) ||
             !exactMatch(predecessor.request.target, request.target) ||
             !exactMatch(predecessor.request.provisioning, request.provisioning) ||
             !exactMatch(predecessor.request.requested_custody, request.requested_custody) ||
@@ -476,6 +493,7 @@ export function createRepositoryCustodyService({
 
   return {
     execute,
+    lookup,
     project,
     async list({ cursor = null, limit = 25 } = {}) {
       try {

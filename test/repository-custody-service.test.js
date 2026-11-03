@@ -92,10 +92,10 @@ test("canonical custody listing rereads durable evidence without provider mutati
   }
 });
 
-function provisioningHarness({ create, find, read, decision, applyApprovedSettings } = {}) {
+function provisioningHarness({ create, find, read, decision, applyApprovedSettings, requestOverrides = {} } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-repository-provisioning-"));
   const calls = [];
-  const request = provisionRequest();
+  const request = provisionRequest(requestOverrides);
   const targetDecision = decision ?? provisionDecision(request);
   const service = createRepositoryCustodyService({
     audit: { emit(event) { calls.push({ operation: "audit", event }); } },
@@ -679,4 +679,45 @@ test("acknowledged creation cannot succeed or change settings on another immutab
       assert.equal(target.calls.some(c => c.operation === "settings"), false);
     } finally { target.cleanup(); }
   }
+});
+
+for (const original of ["repo-request://proposal/idea-851", "standalone"]) {
+  test(`correction cannot reassign ${original} creation to another requirement`, async () => {
+    const target = provisioningHarness({requestOverrides:{correlation:{correlation_id:original,causation_id:null}},read:incompleteBaseline,decision:provisionDecision});
+    try {
+      await target.service.execute({callerId:"console",input:target.request});
+      const before=target.calls.length;
+      await assert.rejects(target.service.execute({callerId:"console",input:correctionFor(target.request,{correlation:{correlation_id:"repo-request://proposal/idea-852",causation_id:target.request.request_id}})}),
+        {code:"repository_custody_correction_invalid"});
+      assert.equal(target.calls.length,before);
+    } finally {target.cleanup();}
+  });
+}
+test("bound partial creation correction keeps its original requirement and creates no second repository",async()=>{
+  let applied=false;
+  const target=provisioningHarness({requestOverrides:{correlation:{correlation_id:"repo-request://proposal/idea-851",causation_id:null}},
+    decision:provisionDecision,read:input=>applied?provisionReadback(input):incompleteBaseline(input),applyApprovedSettings:()=>{}});
+  try {
+    const failed=await target.service.execute({callerId:"console",input:target.request});assert.equal(failed.status,"failed");
+    applied=true;
+    const result=await target.service.execute({callerId:"console",input:correctionFor(target.request)});
+    assert.equal(result.status,"succeeded");assert.equal(result.request.correlation.correlation_id,"repo-request://proposal/idea-851");
+    assert.equal(target.calls.filter(call=>call.operation==="create").length,1);
+  }finally{target.cleanup();}
+});
+test("malformed requirement association is rejected before provider work",async()=>{
+ const target=harness();
+ try{await assert.rejects(target.service.execute({callerId:"console",input:custodyRequest({correlation:{correlation_id:"repo-request://unverified/851",causation_id:null}})}),{code:"repository_custody_request_origin_invalid"});
+  assert.equal(target.calls.length,0);
+ }finally{target.cleanup();}
+});
+
+test("explicit request-bound existing attachment keeps fresh provider verification and receipt",async()=>{
+ const target=harness({decision: input=>custodyDecision(input)});
+ try{const input=custodyRequest({correlation:{correlation_id:"repo-request://proposal/idea-851",causation_id:null}});
+  const result=await target.service.execute({callerId:"console",input});
+  assert.equal(result.status,"succeeded");assert.equal(result.request.action,"link-existing");
+  assert.equal(result.request.correlation.correlation_id,"repo-request://proposal/idea-851");
+  assert.equal(result.provider_operation.command,"read-provider");
+ }finally{target.cleanup();}
 });

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
+import { applicationEvidenceKinds } from "./application-verification.js";
 import { canonicalDigest } from "./canonical-json.js";
 
 export const DELIVERY_ART_EVIDENCE_PROFILE_PATH =
@@ -88,6 +89,10 @@ export function validateDeliveryArtEvidenceProfile(profile, ownerRepo) {
       "The owner evidence profile must declare at least one bounded command.",
     );
   }
+  const manualChecks = profile.application_verification?.manual_checks ?? [];
+  if (new Set(manualChecks.map(check => check.id)).size !== manualChecks.length) {
+    throw new DeliveryArtEvidenceAcquisitionError("delivery_art_evidence_profile_invalid", "Manual verification check IDs must be unique.");
+  }
   const ids = new Set();
   for (const command of profile.commands) {
     const id = assertString(command?.id, "commands[].id");
@@ -152,7 +157,7 @@ export function validateDeliveryArtEvidenceProfile(profile, ownerRepo) {
 }
 
 function matchingCaseIds(command, cases) {
-  if (command.conformance_binding !== "matching-fidelity") return [];
+  if (command.scope === "source-controls" || command.conformance_binding !== "matching-fidelity") return [];
   const selectedIds = command.conformance_case_ids === undefined
     ? null
     : new Set(command.conformance_case_ids);
@@ -177,9 +182,11 @@ export function validateDeliveryArtEvidenceProfileCoverage({
   ownerRepo,
   profile,
   requiredEvidenceKinds = [],
+  sourceLanding = false,
 }) {
   const normalizedProfile = validateDeliveryArtEvidenceProfile(profile, ownerRepo);
-  const requiredKinds = [...new Set(requiredEvidenceKinds)].sort();
+  const sourceKinds = applicationEvidenceKinds(normalizedProfile);
+  const requiredKinds = [...new Set(requiredEvidenceKinds)].filter(kind => kind !== "tests" || !sourceLanding || sourceKinds.includes("tests")).sort();
   const unsupportedRequiredKinds = requiredKinds.filter((kind) =>
     !COLLECTIONS.has(kind));
   if (unsupportedRequiredKinds.length > 0) {
@@ -223,6 +230,7 @@ export function selectTrustedDeliveryArtEvidenceProfile({
   ownerRepo,
   readProfileText,
   requiredEvidenceKinds = [],
+  sourceLanding = false,
   revisions,
 }) {
   if (!Array.isArray(revisions) || revisions.length === 0) {
@@ -265,6 +273,7 @@ export function selectTrustedDeliveryArtEvidenceProfile({
         ownerRepo,
         profile,
         requiredEvidenceKinds,
+        sourceLanding,
       });
       return {
         profile: coverage.profile,
@@ -288,6 +297,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
   requiredEvidenceKinds = [],
   source,
   trustedProfileRevisions = [],
+  sourceLanding = false,
 }) {
   if (!/^[0-9a-f]{40}$/.test(String(source?.base_commit ?? "")) ||
       !/^[0-9a-f]{40}$/.test(String(source?.head_commit ?? ""))) {
@@ -301,6 +311,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
     ownerRepo,
     profile,
     requiredEvidenceKinds,
+    sourceLanding,
   });
   const normalizedProfile = coverage.profile;
   const cases = coverage.cases;
@@ -326,6 +337,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
       conformance_case_ids: conformanceCaseIds,
     })),
     owner_repo: ownerRepo,
+    ...(normalizedProfile.application_verification ? { application_verification: structuredClone(normalizedProfile.application_verification) } : {}),
     profile_digest: profileDigest,
     profile_id: normalizedProfile.profile_id,
     profile_path: DELIVERY_ART_EVIDENCE_PROFILE_PATH,
@@ -366,6 +378,7 @@ function resultDigestInput(result, receipt) {
 function evidenceDigestInput(receipt) {
   return {
     acquisition_id: receipt.acquisition_id,
+    ...(receipt.application_verification ? { application_verification: receipt.application_verification } : {}),
     owner_repo: receipt.owner_repo,
     profile_digest: receipt.profile_digest,
     profile_id: receipt.profile_id,
@@ -453,6 +466,7 @@ export function projectDeliveryArtOwnerEvidence(
   return {
     acquisition: {
       acquisition_id: receipt.acquisition_id,
+      ...(receipt.application_verification ? { application_verification: structuredClone(receipt.application_verification) } : {}),
       profile_digest: receipt.profile_digest,
       profile_id: receipt.profile_id,
       profile_path: receipt.profile_path,

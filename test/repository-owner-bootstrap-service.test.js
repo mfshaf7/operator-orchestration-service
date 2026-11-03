@@ -7,12 +7,13 @@ import test from "node:test";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createRepositoryOwnerBootstrapStore } from "../src/repository-owner-bootstrap/store.js";
 import { createRepositoryOwnerBootstrapService } from "../src/repository-owner-bootstrap/service.js";
-import { inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths } from "../src/repository-owner-bootstrap/scaffold.js";
+import { sourceControlEvidenceProfile } from "../src/delivery-art/application-verification.js";
+import { inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, planSourceOwnerVerification, sourceOwnerBootstrapPaths } from "../src/repository-owner-bootstrap/scaffold.js";
 
 const callerId = "console", operatorId = "operator:fixture", owner = "workflow-owner";
 const NOW = "2026-10-19T10:00:00.000Z";
 const args = { callerId, operatorId, requestId: "bootstrap-request:workflow-owner" };
-function harness(t, { existingControls = false } = {}) {
+function harness(t, { existingControls = false, configureVerification = false } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-bootstrap-workflow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const authority = { schema_version: 1, owner_repo: owner, classification: "proposed", inventory_posture: null,
@@ -29,10 +30,20 @@ function harness(t, { existingControls = false } = {}) {
   const blankFiles = Object.fromEntries(sourceOwnerBootstrapPaths(false).map(name => [name, name === "README.md" ? "# Actual project purpose\n" : null]));
   const seed = planSourceOwnerBootstrap({ authority, fetchedBase: "1".repeat(40), profile, applicationMarkers: ["app/main.mjs"], withCi: false, observedFiles: blankFiles });
   const completedFiles = Object.fromEntries(seed.files.map(file => [file.path, file.content]));
-  const observedFiles = existingControls ? completedFiles : blankFiles;
-  const plan = existingControls ? null : seed;
+  const observedFiles = existingControls || configureVerification ? completedFiles : blankFiles;
+  if (configureVerification) {
+    authority.classification = "active"; authority.inventory_posture = "active";
+    authority.inventory_entry_ref = authority.intake_entry_ref; authority.intake_entry_ref = null;
+    authority.source_bootstrap_eligible = false; authority.verification_setup_eligible = true; authority.ordinary_source_eligible = true;
+    const selected = sourceControlEvidenceProfile(owner);
+    selected.commands.push({ ...profile.commands.find(command => command.kind === "validations"), scope: "source-controls" });
+    selected.application_verification = { mode: "manual", manual_checks: [{ id: "add-item", action: "Add an item", expected_result: "The item appears" }] };
+    preparationInput.evidence_profile = selected; preparationInput.operation = "configure-verification";
+  }
+  const plan = configureVerification ? planSourceOwnerVerification({ authority, fetchedBase: "1".repeat(40), profile: preparationInput.evidence_profile,
+    applicationMarkers: [], withCi: false, observedFiles }) : existingControls ? null : seed;
   const body = { schema_version: 1, workflow_id: "repository-owner-bootstrap-preparation", caller_id: callerId, operator_id: operatorId,
-    decision_ref: preparationInput.decision_ref, custody_request_id: preparationInput.custody_request_id,
+    ...(configureVerification ? { operation: "configure-verification" } : {}), decision_ref: preparationInput.decision_ref, custody_request_id: preparationInput.custody_request_id,
     custody_receipt_digest: `sha256:${"b".repeat(64)}`, owner_authority: authority, plan,
     ...(existingControls ? { existing_owner_controls: inspectExistingSourceOwnerControls({ ownerRepo: owner, fetchedBase: "1".repeat(40), observedFiles }) } : {}), authorization: "preparation-only",
     credential_issued: false, checkout_created: false, canonical_mutation: false, runtime_activation: false };
@@ -261,4 +272,19 @@ test("owner-readiness requires a completed canonical checkout and current real p
   assert.equal(ready.canonical_checkout_commit, "f".repeat(40));
   h.changeActualProfile();
   await assert.rejects(h.service.ownerReadiness(selection), /reinspect the existing owner/);
+});
+
+test("active verification retains one Inventory-bound request through source approval, review, merge and cold recovery", async t => {
+  const h = harness(t, { configureVerification: true });
+  const created = await h.service.create({ callerId, operatorId, input: h.input });
+  assert.equal(created.operation, "configure-verification");
+  const source = await h.service.prepareSourceCredential({ callerId, operatorId, subject: { kind: "repository-bootstrap", owner_repo: owner, source_request_id: args.requestId }, decision: null });
+  assert.equal(source.subject.operation, "configure-verification"); assert.equal(source.subject.intake_entry_ref, null);
+  assert.equal(source.subject.inventory_entry_ref.id, `repo:${owner}`); assert.equal(source.subject.workflow_write, false);
+  await assert.rejects(h.start(), /Explicit exact source approval/);
+  h.approve(); await h.start(); await h.accept();
+  for (const action of ["publish", "review", "merge", "close"]) await h.service[action]({ ...args, input: h.deliver(action) });
+  const complete = h.reopen().read(args);
+  assert.equal(complete.state, "succeeded"); assert.equal(complete.app_acceptance, false);
+  assert.equal(h.calls.apply, 1); assert.equal(h.calls.cleanup, 1); assert.equal(h.calls.stop, 1);
 });

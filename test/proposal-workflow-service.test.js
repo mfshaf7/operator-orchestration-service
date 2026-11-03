@@ -45,7 +45,7 @@ function repositoryResolution() {
 
 function successfulRepositoryCustody() {
   return { status: "succeeded", receipt: { outcome: "succeeded" }, receipt_ref: repositoryResolution().custody_receipt_ref,
-    request: { requested_custody: { workspace_owner_ref: "repo:todo" } },
+    request: { action: "provision-new", correlation: {correlation_id: "repo-request://proposal/idea-851"}, requested_custody: { workspace_owner_ref: "repo:todo" } },
     provider_readback: { repository_identity: { provider: "github", provider_repository_id: "12345" }, canonical_url: "https://github.com/example-workspace/todo" } };
 }
 
@@ -896,4 +896,38 @@ test("Proposal snapshot preserves native projection/history with one record and 
   assert.equal(h.calls.filter(([name]) => name === "getIdea").length, 1);
   assert.equal(h.calls.filter(([name]) => name === "listProposalActivities").length, 1);
   assert.equal(h.calls.some(([name]) => ["applyProposalWorkflowMutation", "addProposalEvent"].includes(name)), false);
+});
+
+for (const kind of ["unbound", "other-proposal", "unbound-existing-link"]) {
+  test(`new repository confirmation rejects ${kind} custody before mutation`, async () => {
+    const custody = successfulRepositoryCustody();
+    if (kind === "unbound-existing-link") { custody.request.action = "link-existing"; custody.request.correlation.correlation_id = "standalone"; }
+    if (kind === "unbound") custody.request.correlation.correlation_id = "repository-custody-request:standalone";
+    if (kind === "other-proposal") custody.request.correlation.correlation_id = "repo-request://proposal/idea-852";
+    const h = createHarness({currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => custody});
+    await assert.rejects(h.service.resolveRepositoryGate({callerId:"governance-operations-console",proposalId:"idea-851",resolution:repositoryResolution()}),
+      {code:"proposal_repository_creation_not_bound"});
+    assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 0);
+  });
+}
+test("historical committed acknowledgement recovers exact unbound custody without rewriting its decision", async () => {
+  const custody = successfulRepositoryCustody();
+  const h = createHarness({currentRecord:pendingRepositoryRecord(),mutationFailureAfterCommit:true,readRepositoryCustody:async()=>custody});
+  const input = {callerId:"governance-operations-console",proposalId:"idea-851",resolution:repositoryResolution()};
+  await assert.rejects(h.service.resolveRepositoryGate(input), /socket closed/);
+  // The persisted historical outcome must not be reinterpreted by a stricter new submission rule.
+  custody.request.correlation.correlation_id = "repository-custody-request:legacy";
+  custody.request.action = "link-existing";
+  const result = await h.reopen().resolveRepositoryGate(input);
+  assert.equal(result.replayed,true);
+  assert.equal(result.projection.repository_resolution_history_pending,false);
+  assert.equal(h.calls.filter(([name])=>name==="applyProposalWorkflowMutation").length,1);
+});
+
+test("explicit request-bound attachment fulfils the requirement without claiming provider creation",async()=>{
+ const custody=successfulRepositoryCustody();custody.request.action="link-existing";
+ const h=createHarness({currentRecord:pendingRepositoryRecord(),readRepositoryCustody:async()=>custody});
+ const result=await h.service.resolveRepositoryGate({callerId:"governance-operations-console",proposalId:"idea-851",resolution:repositoryResolution()});
+ assert.equal(result.projection.repository_resolution.custody_request_id,repositoryResolution().custody_request_id);
+ assert.equal(result.projection.route.source_custody.repository_gate_state,"resolved");
 });

@@ -768,6 +768,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
           return result.ok ? result.output : null;
         },
         requiredEvidenceKinds,
+        sourceLanding: true,
         revisions,
       });
     }
@@ -838,6 +839,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         ...(evidenceProfileSelection
           ? {
               evidence_profile: {
+                ...(evidenceProfileSelection.profile.application_verification ? { application_verification: structuredClone(evidenceProfileSelection.profile.application_verification) } : {}),
                 profile_id: evidenceProfileSelection.profile.profile_id,
                 profile_revision: evidenceProfileSelection.profile_revision,
                 selection: evidenceProfileSelection.used_reviewed_ancestor

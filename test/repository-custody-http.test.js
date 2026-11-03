@@ -15,15 +15,15 @@ function config() {
   });
 }
 
-async function execute(app, { body = null, method = "POST", url }) {
+async function execute(app, { body = null, method = "POST", url, callerId = "governance-operations-console", callerSecret = "console-secret" }) {
   const request = body === null
     ? Readable.from([])
     : Readable.from([Buffer.from(JSON.stringify(body))]);
   request.method = method;
   request.url = url;
   request.headers = {
-    "x-oos-caller-id": "governance-operations-console",
-    "x-oos-caller-secret": "console-secret",
+    "x-oos-caller-id": callerId,
+    "x-oos-caller-secret": callerSecret,
   };
   let statusCode = 200;
   let responseBody = "";
@@ -148,4 +148,18 @@ test("repository custody API fails closed without runtime or caller-bound creden
     body: custodyRequest(),
     url: "/v1/repository-custody/requests",
   })).statusCode, 403);
+});
+
+test("provider lookup is authenticated, bounded and read-only",async()=>{
+ const calls=[];const service={async lookup(input){calls.push(input);return {schema_version:1,provider:"github"};}};
+ const app=createApp({config:config(),deliveryService:{},ideaService:{},openProjectClient:{},repositoryCustodyService:service});
+ const response=await execute(app,{method:"GET",url:"/v1/repository-custody/provider-repository?owner=example-org&name=manual-source"});
+ assert.equal(response.statusCode,200);assert.deepEqual(calls,[{owner:"example-org",name:"manual-source"}]);
+ for(const query of ["owner=org&name=repo&host=other.test","owner=org&owner=other&name=repo","owner=org"])
+  assert.equal((await execute(app,{method:"GET",url:`/v1/repository-custody/provider-repository?${query}`})).statusCode,400);
+ const unbound=createApp({config:loadConfig({CALLER_ALLOWED_IDS:"governance-operations-console",CALLER_AUTH_SECRET:"console-secret"}),deliveryService:{},ideaService:{},openProjectClient:{},repositoryCustodyService:service});
+ assert.equal((await execute(unbound,{method:"GET",url:"/v1/repository-custody/provider-repository?owner=org&name=repo"})).statusCode,403);
+ const other=createApp({config:loadConfig({CALLER_ALLOWED_IDS:"other-operator",CALLER_AUTH_SECRETS_JSON:JSON.stringify({"other-operator":"other-secret"})}),deliveryService:{},ideaService:{},openProjectClient:{},repositoryCustodyService:service});
+ assert.equal((await execute(other,{method:"GET",url:"/v1/repository-custody/provider-repository?owner=org&name=repo",callerId:"other-operator",callerSecret:"other-secret"})).statusCode,403);
+ assert.equal(calls.length,1);
 });

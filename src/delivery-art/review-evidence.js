@@ -289,6 +289,7 @@ function projectionFindings(
   requiredCases,
   source,
   allowedCases = requiredCases,
+  requireTests = true,
 ) {
   const findings = [];
   if (evidence.changed_surfaces.length === 0) {
@@ -298,7 +299,7 @@ function projectionFindings(
       "evidence.changed_surfaces",
     ));
   }
-  if (evidence.tests.length === 0) {
+  if (requireTests && evidence.tests.length === 0) {
     findings.push(finding(
       "test_evidence_missing",
       "Attach at least one test result for the exact source revision.",
@@ -569,11 +570,17 @@ export function projectDeliveryArtReviewEvidence({
     targetReadiness,
     workStart,
   });
+  const verification = document.acquisition?.application_verification;
+  // This governs source landing only. Explicit architecture conformance and
+  // operating acceptance remain independently required and cannot be satisfied
+  // by source-control validation or a verification plan.
+  const requireTests = !(targetReadiness === "merge-ready" && ["unconfigured", "manual"].includes(verification?.mode));
   const findings = projectionFindings(
     evidence,
     cases,
     normalizedSource,
     allowedCases,
+    requireTests,
   );
   return {
     evidence_document: {
@@ -633,7 +640,7 @@ export function projectDeliveryArtReviewEvidence({
       })),
       required_evidence_kinds: [
         "changed_surfaces",
-        ...DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+        ...DELIVERY_ART_SOURCE_EVIDENCE_KINDS.filter(kind => kind !== "tests" || requireTests),
       ],
     },
     readiness: {

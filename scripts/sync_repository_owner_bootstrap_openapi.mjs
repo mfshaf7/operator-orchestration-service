@@ -32,9 +32,14 @@ function localSchema(value, name) {
 const file = closed({ path: { enum: sourceOwnerBootstrapPaths(true) }, action: { enum: ["create", "replace", "unchanged"] }, mode: { const: "100644" },
   content: { type: "string", maxLength: 65536 }, expected_digest: nullable(digest), content_digest: digest });
 const template = closed({ id: { const: "source-owner-bootstrap-v1" }, owner_repo: { const: "operator-orchestration-service" }, digest });
-const authority = closed({ owner_repo: owner, intake_entry_ref: entry, provider_repository: provider, classification: { enum: ["proposed", "admitted"] },
+const proposedAuthority = closed({ owner_repo: owner, intake_entry_ref: entry, provider_repository: provider, classification: { enum: ["proposed", "admitted"] },
   inventory_posture: { type: "null" }, custody_receipt_digest: digest, source_bootstrap_eligible: { const: true }, ordinary_source_eligible: no,
   model_writes_allowed: no, canonical_mutation: no, runtime_activation: no });
+const activeAuthority = closed({ owner_repo: owner, intake_entry_ref: { type: "null" }, inventory_entry_ref: entry, provider_repository: provider,
+  classification: { const: "active" }, inventory_posture: { const: "active" }, custody_receipt_digest: digest,
+  source_bootstrap_eligible: no, verification_setup_eligible: { const: true }, ordinary_source_eligible: { const: true },
+  model_writes_allowed: no, canonical_mutation: no, runtime_activation: no });
+const authority = { oneOf: [proposedAuthority, activeAuthority] };
 const command = { schema_version: { const: 1 }, command_id: id, expected_revision: timestamp, requested_at: timestamp };
 const pr = closed({ url: { type: "string", format: "uri" }, head_commit: commit });
 const sourceIntent = { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" };
@@ -44,28 +49,28 @@ const ready = closed({ status: { const: "existing-owner-controls" }, owner_repo:
 const preparationFields = { schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap-preparation" },
   caller_id: id, operator_id: id, decision_ref: id, custody_request_id: id, custody_receipt_digest: digest,
   owner_authority: authority, plan: nullable(ref("OwnerBootstrapPlan")), existing_owner_controls: ready,
-  next_action: { const: "admit-existing-owner-controls-no-bootstrap-review" }, authorization: { const: "preparation-only" },
+  operation: { const: "configure-verification" }, next_action: { enum: ["admit-existing-owner-controls-no-bootstrap-review", "configure-application-verification"] }, authorization: { const: "preparation-only" },
   credential_issued: no, checkout_created: no, canonical_mutation: no, runtime_activation: no, preparation_digest: digest };
-const projectionFields = { schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap" }, request_id: id,
+const projectionFields = { operation: { const: "configure-verification" }, schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap" }, request_id: id,
   owner_repo: owner, state: { enum: ["prepared", "existing-controls-inspected", "source-work", "source-created", "succeeded", "cancelled"] },
   revision: timestamp, created_at: timestamp, updated_at: timestamp, session_id: nullable(id), source_intent_ref: nullable(sourceIntent), source_start_digest: digest,
   next_action: closed({ code: id, authority: { const: "operator-orchestration-service" } }), request: ref("OwnerBootstrapRequest"), binding: evidence,
   source_delivery: evidence, draft: nullable(evidence), existing_owner_controls: nullable(ready), existing_checkout: evidence,
   prepared_source_intent_refs: { type: "array", items: sourceIntent }, cancellation: evidence,
   app_acceptance: no, inventory_admission: no, runtime_activation: no };
-const basicProjectionFields = Object.keys(projectionFields).filter(key => !["request", "binding", "source_delivery", "draft", "existing_owner_controls", "existing_checkout", "prepared_source_intent_refs", "cancellation"].includes(key));
+const basicProjectionFields = Object.keys(projectionFields).filter(key => !["operation", "request", "binding", "source_delivery", "draft", "existing_owner_controls", "existing_checkout", "prepared_source_intent_refs", "cancellation"].includes(key));
 export const ownerBootstrapSchemas = {
   OwnerBootstrapEvidenceProfile: localSchema(profile, "OwnerBootstrapEvidenceProfile"),
   OwnerBootstrapChangeSet: localSchema(changeSet, "OwnerBootstrapChangeSet"),
-  OwnerBootstrapPreparationInput: closed({ owner_repo: owner, custody_request_id: id, evidence_profile: ref("OwnerBootstrapEvidenceProfile"),
-    application_markers: { type: "array", minItems: 1, maxItems: 48, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 255 } },
-    with_ci: { type: "boolean" }, decision_ref: id }),
+  OwnerBootstrapPreparationInput: closed({ owner_repo: owner, custody_request_id: id, evidence_profile: nullable(ref("OwnerBootstrapEvidenceProfile")), operation: { enum: ["bootstrap", "configure-verification"] },
+    application_markers: { type: "array", minItems: 0, maxItems: 48, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 255 } },
+    with_ci: { type: "boolean" }, decision_ref: id }, ["owner_repo", "custody_request_id", "evidence_profile", "application_markers", "with_ci", "decision_ref"]),
   OwnerBootstrapPlan: closed({ schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap-plan" }, owner_repo: owner,
-    provider_repository: provider, intake_entry_ref: entry, fetched_base: commit, template, evidence_profile_digest: digest,
-    application_markers: { type: "array", minItems: 1, maxItems: 48, items: { type: "string" } }, ci_selected: { type: "boolean" },
-    requires_workflow_permission: { type: "boolean" }, source_change_required: { type: "boolean" }, files: { type: "array", minItems: sourceOwnerBootstrapPaths(false).length, maxItems: sourceOwnerBootstrapPaths(true).length, items: file },
-    model_invoked: no, app_import: no, canonical_mutation: no, runtime_activation: no, plan_digest: digest }),
-  OwnerBootstrapPreparation: closed(preparationFields, Object.keys(preparationFields).filter(key => !["existing_owner_controls", "next_action"].includes(key))),
+    operation: { const: "configure-verification" }, inventory_entry_ref: entry, provider_repository: provider, intake_entry_ref: nullable(entry), fetched_base: commit, template, evidence_profile_digest: digest,
+    application_markers: { type: "array", minItems: 0, maxItems: 48, items: { type: "string" } }, ci_selected: { type: "boolean" },
+    requires_workflow_permission: { type: "boolean" }, source_change_required: { type: "boolean" }, files: { type: "array", minItems: 3, maxItems: sourceOwnerBootstrapPaths(true).length, items: file },
+    model_invoked: no, app_import: no, canonical_mutation: no, runtime_activation: no, plan_digest: digest }, ["schema_version", "workflow_id", "owner_repo", "provider_repository", "intake_entry_ref", "fetched_base", "template", "evidence_profile_digest", "application_markers", "ci_selected", "requires_workflow_permission", "source_change_required", "files", "model_invoked", "app_import", "canonical_mutation", "runtime_activation", "plan_digest"]),
+  OwnerBootstrapPreparation: closed(preparationFields, Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key))),
   OwnerBootstrapRequest: closed({ schema_version: { const: 1 }, request_id: id, preparation_input: ref("OwnerBootstrapPreparationInput"),
     expected_preparation_digest: digest, workflow_approval_ref: nullable(id), requested_at: timestamp }),
   OwnerBootstrapProjection: closed(projectionFields, basicProjectionFields),

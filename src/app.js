@@ -4303,6 +4303,18 @@ async function handleRepositoryCustodyProjection({
   }));
 }
 
+async function handleRepositoryProviderLookup({config, repositoryCustodyService, request, response, url}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository provider lookup");
+  if (caller.id !== "governance-operations-console") throw new HttpError(403, "repository_provider_lookup_caller_denied", "Repository identity lookup is limited to the operator Console.");
+  if ([...url.searchParams.keys()].some(key => !["owner", "name"].includes(key)) ||
+      url.searchParams.getAll("owner").length !== 1 || url.searchParams.getAll("name").length !== 1) {
+    throw new HttpError(400, "repository_provider_lookup_invalid", "Provide one GitHub organization and repository name.");
+  }
+  const result = await repositoryCustodyService.lookup({owner:url.searchParams.get("owner"),name:url.searchParams.get("name")});
+  sendJson(response, 200, result);
+}
+
 async function handleRepositoryCustodyList({ config, repositoryCustodyService, request, response, url }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Repository custody reads");
@@ -6492,6 +6504,11 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/repository-custody/provider-repository") {
+        if (!repositoryCustodyService) throw new HttpError(503, "repository_custody_runtime_not_configured", "The repository custody runtime is not configured.");
+        await handleRepositoryProviderLookup({config, repositoryCustodyService, request, response, url});
+        return;
+      }
       if (
         request.method === "GET" &&
         url.pathname === "/v1/repository-custody/requests"

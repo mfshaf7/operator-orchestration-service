@@ -37,7 +37,8 @@ export function bootstrapSourceSession({ requestDigest, requestId, callerId, ope
   }
   const paths = plan.files.filter(file => file.action !== "unchanged").map(file => file.path).sort();
   const subject = assertBootstrapCredentialSubject({ kind: "repository-bootstrap", owner_repo: plan.owner_repo,
-    intake_entry_ref: plan.intake_entry_ref, custody_receipt_digest: preparation.custody_receipt_digest,
+    intake_entry_ref: plan.intake_entry_ref,
+    ...(plan.operation === "configure-verification" ? { operation: plan.operation, inventory_entry_ref: plan.inventory_entry_ref } : {}), custody_receipt_digest: preparation.custody_receipt_digest,
     template_digest: plan.template.digest, plan_digest: planDigest, decision_ref: preparation.decision_ref,
     allowed_paths: paths, workflow_write: plan.requires_workflow_permission,
     workflow_approval_ref: workflowApprovalRef });
@@ -63,11 +64,11 @@ export function bootstrapSourceChangeSet(plan, session) {
   const changes = plan.files.filter(file => file.action !== "unchanged");
   if (canonicalDigest(changes.map(file => file.path).sort()) !== canonicalDigest(session.subject.allowed_paths) ||
       changes.some(file => file.mode !== "100644" || !["create", "replace"].includes(file.action) ||
-        (file.action === "create" ? file.expected_digest !== null : file.path !== "AGENTS.md" || !DIGEST.test(file.expected_digest ?? "")) || typeof file.content !== "string" ||
+        (file.action === "create" ? file.expected_digest !== null : (session.subject.operation === "configure-verification" ? !session.subject.allowed_paths.includes(file.path) : file.path !== "AGENTS.md") || !DIGEST.test(file.expected_digest ?? "")) || typeof file.content !== "string" ||
         !file.content.isWellFormed() || Buffer.byteLength(file.content) > 65_536)) fail("Bootstrap may create only its exact approved finite regular owner-control files.");
   const changeSet = { schema_version: 1, change_set_id: `owner-bootstrap-plan:${digest.slice(7)}`, session_id: session.session_id,
     base_commit: plan.fetched_base, objective_digest: session.objective_digest,
-    commit_message: "chore: bootstrap reviewed source owner controls",
+    commit_message: plan.operation === "configure-verification" ? "chore: configure reviewed application verification" : "chore: bootstrap reviewed source owner controls",
     operations: changes.map(file => ({ action: file.action, path: file.path, content: file.content, expected_digest: file.expected_digest })) };
   if (!validateDeliveryArtSourceRealizationChangeSet(changeSet).valid) fail("Bootstrap must retain the existing bounded native source change-set wire.");
   return changeSet;

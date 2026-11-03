@@ -27575,7 +27575,7 @@
                     "template": {
                       "id": "source-owner-bootstrap-v1",
                       "owner_repo": "operator-orchestration-service",
-                      "digest": "sha256:0e8759fce364b276eb9082b4f875375c195a2f217fe5c9ead86efcd9dfd4eb02"
+                      "digest": "sha256:a6186e5a163cedc8064f1ac227a543409c7fa57f6994c5df1cfcc2111552f2dc"
                     },
                     "evidence_profile_digest": "sha256:8438250fbbde2e71f39a71041334bdd1f37977d182e97e57744a6ee239822cbe",
                     "application_markers": [
@@ -27629,17 +27629,17 @@
                         "path": "contracts/delivery-art-work-session/evidence-profile.schema.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://operator-orchestration-service.local/contracts/delivery-art-work-session/evidence-profile.schema.json\",\n  \"title\": \"Delivery ART owner evidence profile\",\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"required\": [\"schema_version\", \"profile_id\", \"owner_repo\", \"commands\"],\n  \"properties\": {\n    \"schema_version\": { \"const\": 1 },\n    \"profile_id\": { \"$ref\": \"#/$defs/identifier\" },\n    \"owner_repo\": { \"$ref\": \"#/$defs/identifier\" },\n    \"commands\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": { \"$ref\": \"#/$defs/command\" }\n    }\n  },\n  \"$defs\": {\n    \"identifier\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"maxLength\": 160,\n      \"pattern\": \"^[A-Za-z0-9][A-Za-z0-9._:-]*$\"\n    },\n    \"nonEmptyString\": { \"type\": \"string\", \"minLength\": 1 },\n    \"command\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\n        \"id\",\n        \"kind\",\n        \"name\",\n        \"executable\",\n        \"args\",\n        \"fidelity\",\n        \"conformance_binding\",\n        \"timeout_seconds\"\n      ],\n      \"properties\": {\n        \"id\": { \"$ref\": \"#/$defs/identifier\" },\n        \"kind\": {\n          \"enum\": [\"tests\", \"validations\", \"runtime_and_live\", \"security_and_trust\"]\n        },\n        \"name\": { \"$ref\": \"#/$defs/nonEmptyString\" },\n        \"executable\": {\n          \"enum\": [\"git\", \"node\", \"npm\", \"python3\"]\n        },\n        \"args\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": { \"type\": \"string\", \"minLength\": 1 }\n        },\n        \"fidelity\": {\n          \"enum\": [\n            \"pure-unit\",\n            \"filesystem\",\n            \"real-git\",\n            \"process-crash\",\n            \"sandbox-runtime\",\n            \"live-backend\"\n          ]\n        },\n        \"conformance_binding\": {\n          \"enum\": [\"matching-fidelity\", \"none\"]\n        },\n        \"conformance_case_ids\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"uniqueItems\": true,\n          \"items\": { \"$ref\": \"#/$defs/identifier\" }\n        },\n        \"timeout_seconds\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 1800\n        }\n      }\n    }\n  }\n}\n",
+                        "content": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://operator-orchestration-service.local/contracts/delivery-art-work-session/evidence-profile.schema.json\",\n  \"title\": \"Delivery ART owner evidence profile\",\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"required\": [\n    \"schema_version\",\n    \"profile_id\",\n    \"owner_repo\",\n    \"commands\"\n  ],\n  \"properties\": {\n    \"schema_version\": {\n      \"const\": 1\n    },\n    \"profile_id\": {\n      \"$ref\": \"#/$defs/identifier\"\n    },\n    \"owner_repo\": {\n      \"$ref\": \"#/$defs/identifier\"\n    },\n    \"commands\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"$ref\": \"#/$defs/command\"\n      }\n    },\n    \"application_verification\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\n        \"mode\",\n        \"manual_checks\"\n      ],\n      \"properties\": {\n        \"mode\": {\n          \"enum\": [\n            \"unconfigured\",\n            \"manual\",\n            \"automated\",\n            \"mixed\"\n          ]\n        },\n        \"manual_checks\": {\n          \"type\": \"array\",\n          \"maxItems\": 48,\n          \"items\": {\n            \"type\": \"object\",\n            \"additionalProperties\": false,\n            \"required\": [\n              \"id\",\n              \"action\",\n              \"expected_result\"\n            ],\n            \"properties\": {\n              \"id\": {\n                \"$ref\": \"#/$defs/identifier\"\n              },\n              \"action\": {\n                \"type\": \"string\",\n                \"minLength\": 1,\n                \"maxLength\": 2048\n              },\n              \"expected_result\": {\n                \"type\": \"string\",\n                \"minLength\": 1,\n                \"maxLength\": 2048\n              }\n            }\n          }\n        }\n      }\n    }\n  },\n  \"$defs\": {\n    \"identifier\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"maxLength\": 160,\n      \"pattern\": \"^[A-Za-z0-9][A-Za-z0-9._:-]*$\"\n    },\n    \"nonEmptyString\": {\n      \"type\": \"string\",\n      \"minLength\": 1\n    },\n    \"command\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\n        \"id\",\n        \"kind\",\n        \"name\",\n        \"executable\",\n        \"args\",\n        \"fidelity\",\n        \"conformance_binding\",\n        \"timeout_seconds\"\n      ],\n      \"properties\": {\n        \"id\": {\n          \"$ref\": \"#/$defs/identifier\"\n        },\n        \"kind\": {\n          \"enum\": [\n            \"tests\",\n            \"validations\",\n            \"runtime_and_live\",\n            \"security_and_trust\"\n          ]\n        },\n        \"name\": {\n          \"$ref\": \"#/$defs/nonEmptyString\"\n        },\n        \"executable\": {\n          \"enum\": [\n            \"git\",\n            \"node\",\n            \"npm\",\n            \"python3\"\n          ]\n        },\n        \"args\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"string\",\n            \"minLength\": 1\n          }\n        },\n        \"fidelity\": {\n          \"enum\": [\n            \"pure-unit\",\n            \"filesystem\",\n            \"real-git\",\n            \"process-crash\",\n            \"sandbox-runtime\",\n            \"live-backend\"\n          ]\n        },\n        \"conformance_binding\": {\n          \"enum\": [\n            \"matching-fidelity\",\n            \"none\"\n          ]\n        },\n        \"conformance_case_ids\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"uniqueItems\": true,\n          \"items\": {\n            \"$ref\": \"#/$defs/identifier\"\n          }\n        },\n        \"timeout_seconds\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 1800\n        },\n        \"scope\": {\n          \"enum\": [\n            \"source-controls\",\n            \"application\"\n          ]\n        }\n      },\n      \"allOf\": [\n        {\n          \"if\": {\n            \"properties\": {\n              \"scope\": {\n                \"const\": \"source-controls\"\n              }\n            },\n            \"required\": [\n              \"scope\"\n            ]\n          },\n          \"then\": {\n            \"properties\": {\n              \"kind\": {\n                \"const\": \"validations\"\n              }\n            }\n          }\n        }\n      ]\n    }\n  },\n  \"allOf\": [\n    {\n      \"if\": {\n        \"required\": [\n          \"application_verification\"\n        ]\n      },\n      \"then\": {\n        \"properties\": {\n          \"commands\": {\n            \"contains\": {\n              \"type\": \"object\",\n              \"required\": [\n                \"scope\",\n                \"kind\"\n              ],\n              \"properties\": {\n                \"scope\": {\n                  \"const\": \"source-controls\"\n                },\n                \"kind\": {\n                  \"const\": \"validations\"\n                }\n              }\n            }\n          }\n        }\n      }\n    },\n    {\n      \"if\": {\n        \"required\": [\n          \"application_verification\"\n        ],\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"mode\": {\n                \"const\": \"unconfigured\"\n              }\n            }\n          }\n        }\n      },\n      \"then\": {\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"manual_checks\": {\n                \"maxItems\": 0\n              }\n            }\n          },\n          \"commands\": {\n            \"items\": {\n              \"required\": [\n                \"scope\"\n              ],\n              \"properties\": {\n                \"scope\": {\n                  \"const\": \"source-controls\"\n                }\n              }\n            }\n          }\n        }\n      }\n    },\n    {\n      \"if\": {\n        \"required\": [\n          \"application_verification\"\n        ],\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"mode\": {\n                \"const\": \"manual\"\n              }\n            }\n          }\n        }\n      },\n      \"then\": {\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"manual_checks\": {\n                \"minItems\": 1\n              }\n            }\n          },\n          \"commands\": {\n            \"not\": {\n              \"contains\": {\n                \"type\": \"object\",\n                \"required\": [\n                  \"kind\"\n                ],\n                \"properties\": {\n                  \"kind\": {\n                    \"const\": \"tests\"\n                  },\n                  \"scope\": {\n                    \"not\": {\n                      \"const\": \"source-controls\"\n                    }\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    },\n    {\n      \"if\": {\n        \"required\": [\n          \"application_verification\"\n        ],\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"mode\": {\n                \"const\": \"automated\"\n              }\n            }\n          }\n        }\n      },\n      \"then\": {\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"manual_checks\": {\n                \"maxItems\": 0\n              }\n            }\n          },\n          \"commands\": {\n            \"contains\": {\n              \"type\": \"object\",\n              \"required\": [\n                \"kind\"\n              ],\n              \"properties\": {\n                \"kind\": {\n                  \"const\": \"tests\"\n                },\n                \"scope\": {\n                  \"not\": {\n                    \"const\": \"source-controls\"\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    },\n    {\n      \"if\": {\n        \"required\": [\n          \"application_verification\"\n        ],\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"mode\": {\n                \"const\": \"mixed\"\n              }\n            }\n          }\n        }\n      },\n      \"then\": {\n        \"properties\": {\n          \"application_verification\": {\n            \"properties\": {\n              \"manual_checks\": {\n                \"minItems\": 1\n              }\n            }\n          },\n          \"commands\": {\n            \"contains\": {\n              \"type\": \"object\",\n              \"required\": [\n                \"kind\"\n              ],\n              \"properties\": {\n                \"kind\": {\n                  \"const\": \"tests\"\n                },\n                \"scope\": {\n                  \"not\": {\n                    \"const\": \"source-controls\"\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  ]\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:f0a88c4b222ad03342687eb4976864d762f70a8f112a6719ba16e2245e28f21c"
+                        "content_digest": "sha256:92d784bb9db9d49215393f4321dd3642a562bc6c4edb378ac7df909db1da8e9e"
                       },
                       {
                         "path": "contracts/delivery-art-work-session/source-bootstrap.json",
                         "action": "create",
                         "mode": "100644",
-                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:0e8759fce364b276eb9082b4f875375c195a2f217fe5c9ead86efcd9dfd4eb02\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:8438250fbbde2e71f39a71041334bdd1f37977d182e97e57744a6ee239822cbe\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
+                        "content": "{\n  \"schema_version\": 1,\n  \"owner_repo\": \"example-owner-source\",\n  \"template\": {\n    \"id\": \"source-owner-bootstrap-v1\",\n    \"owner_repo\": \"operator-orchestration-service\",\n    \"digest\": \"sha256:a6186e5a163cedc8064f1ac227a543409c7fa57f6994c5df1cfcc2111552f2dc\"\n  },\n  \"provider_repository\": {\n    \"provider\": \"github\",\n    \"provider_repository_id\": \"123456789\",\n    \"full_name\": \"example-organization/example-owner-source\"\n  },\n  \"intake_entry_ref\": {\n    \"id\": \"repo:example-owner-source\",\n    \"version\": 1,\n    \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"evidence_profile_digest\": \"sha256:8438250fbbde2e71f39a71041334bdd1f37977d182e97e57744a6ee239822cbe\",\n  \"application_markers\": [\n    \"app/main.mjs\"\n  ],\n  \"app_acceptance\": false,\n  \"inventory_admission\": false,\n  \"runtime_activation\": false\n}\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:fb8dd3dd622cf6de706e4f95e732bfd0e586bbba3ea1b6102bf274624c3a5dbe"
+                        "content_digest": "sha256:e6f9ba19a7447c211b13452a2a7e0cba89dfb4a8d024807d21118793a34142e6"
                       },
                       {
                         "path": "Makefile",
@@ -27661,9 +27661,9 @@
                         "path": "scripts/validate_owner.py",
                         "action": "create",
                         "mode": "100644",
-                        "content": "\"\"\"Owner controls only by default; never infer app readiness from bootstrap.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport re\nimport subprocess\n\nfrom jsonschema import Draft202012Validator\n\nEXPECTED_OWNER = \"example-owner-source\"\nPROFILE = \"contracts/delivery-art-work-session/evidence-profile.json\"\n\n\ndef validate(root):\n    for name in (\"README.md\", \"AGENTS.md\", PROFILE, PROFILE.replace(\".json\", \".schema.json\"),\n                 \".github/CODEOWNERS\", \".github/pull_request_template.md\"):\n        target = root / name\n        if target.is_symlink() or not target.is_file():\n            raise ValueError(\"Required owner metadata is missing or not a regular file\")\n    agents = (root / \"AGENTS.md\").read_text()\n    section = re.search(r\"^## Review guidelines[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", agents, re.I | re.M | re.S)\n    if section is None or any(term not in section[1].lower() for term in (\"source\", \"validation\", \"review\", \"authority\")):\n        raise ValueError(\"Owner review guidance is missing or incomplete\")\n    if \"@\" not in (root / \".github/CODEOWNERS\").read_text():\n        raise ValueError(\"CODEOWNERS must retain an actual owner handle\")\n    template = (root / \".github/pull_request_template.md\").read_text()\n    if any(heading not in template for heading in (\"## Summary\", \"## Governance\", \"## Validation\", \"## Advisory Review\")):\n        raise ValueError(\"Owner PR template is missing required review evidence sections\")\n    advisory = re.search(r\"^## Advisory Review[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", template, re.M | re.S)\n    if advisory is None or any(term not in advisory[1].lower() for term in\n            (\"optional\", \"requested\", \"provider\", \"scope\", \"fix-now\", \"separate-work\", \"reject-with-reason\")):\n        raise ValueError(\"Owner advisory review disposition is incomplete\")\n    profile = json.loads((root / PROFILE).read_text())\n    schema = json.loads((root / PROFILE.replace(\".json\", \".schema.json\")).read_text())\n    Draft202012Validator(schema).validate(profile)\n    if profile[\"owner_repo\"] != EXPECTED_OWNER:\n        raise ValueError(\"Evidence profile belongs to another owner\")\n    if not {\"tests\", \"validations\"}.issubset({command[\"kind\"] for command in profile[\"commands\"]}):\n        raise ValueError(\"Owner profile must include actual tests and validations\")\n    return profile\n\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--repo-root\", type=Path, default=Path(__file__).resolve().parents[1])\n    parser.add_argument(\"--application-if-present\", action=\"store_true\")\n    parser.add_argument(\"--base-commit\")\n    parser.add_argument(\"--head-commit\")\n    args = parser.parse_args()\n    root = args.repo_root.resolve()\n    profile = validate(root)\n    print(\"Owner controls valid; this is not app acceptance\")\n    if not args.application_if_present:\n        return\n    metadata = json.loads((root / \"contracts/delivery-art-work-session/source-bootstrap.json\").read_text())\n    if not any((root / marker).is_file() for marker in metadata[\"application_markers\"]):\n        print(\"Application absent: bootstrap-only validation; no application tests executed\")\n        return\n    # Match the existing evidence runner's two supported placeholders. Never\n    # turn provider/event input into a shell expression or infer a passing base.\n    bindings = {\"{{base_commit}}\": args.base_commit, \"{{head_commit}}\": args.head_commit}\n    for token, value in bindings.items():\n        if any(token in arg for command in profile[\"commands\"] for arg in command[\"args\"]):\n            if not isinstance(value, str) or not re.fullmatch(r\"[0-9a-f]{40}\", value):\n                raise ValueError(\"Application evidence requires its exact base and head commits\")\n    for command in profile[\"commands\"]:\n        if command[\"kind\"] in {\"tests\", \"validations\"}:\n            argv = list(command[\"args\"])\n            for token, value in bindings.items():\n                argv = [arg.replace(token, value) if value is not None else arg for arg in argv]\n            subprocess.run([command[\"executable\"], *argv], cwd=root, check=True, timeout=command[\"timeout_seconds\"])\n\n\nif __name__ == \"__main__\":\n    main()\n",
+                        "content": "\"\"\"Owner controls only by default; never infer app readiness from bootstrap.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport re\nimport subprocess\n\nfrom jsonschema import Draft202012Validator\n\nEXPECTED_OWNER = \"example-owner-source\"\nPROFILE = \"contracts/delivery-art-work-session/evidence-profile.json\"\n\n\ndef validate(root):\n    for name in (\"README.md\", \"AGENTS.md\", PROFILE, PROFILE.replace(\".json\", \".schema.json\"),\n                 \".github/CODEOWNERS\", \".github/pull_request_template.md\"):\n        target = root / name\n        if target.is_symlink() or not target.is_file():\n            raise ValueError(\"Required owner metadata is missing or not a regular file\")\n    agents = (root / \"AGENTS.md\").read_text()\n    section = re.search(r\"^## Review guidelines[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", agents, re.I | re.M | re.S)\n    if section is None or any(term not in section[1].lower() for term in (\"source\", \"validation\", \"review\", \"authority\")):\n        raise ValueError(\"Owner review guidance is missing or incomplete\")\n    if \"@\" not in (root / \".github/CODEOWNERS\").read_text():\n        raise ValueError(\"CODEOWNERS must retain an actual owner handle\")\n    template = (root / \".github/pull_request_template.md\").read_text()\n    if any(heading not in template for heading in (\"## Summary\", \"## Governance\", \"## Validation\", \"## Advisory Review\")):\n        raise ValueError(\"Owner PR template is missing required review evidence sections\")\n    advisory = re.search(r\"^## Advisory Review[^\\S\\n]*\\n(.*?)(?=^## |\\Z)\", template, re.M | re.S)\n    if advisory is None or any(term not in advisory[1].lower() for term in\n            (\"optional\", \"requested\", \"provider\", \"scope\", \"fix-now\", \"separate-work\", \"reject-with-reason\")):\n        raise ValueError(\"Owner advisory review disposition is incomplete\")\n    profile = json.loads((root / PROFILE).read_text())\n    schema = json.loads((root / PROFILE.replace(\".json\", \".schema.json\")).read_text())\n    Draft202012Validator(schema).validate(profile)\n    if profile[\"owner_repo\"] != EXPECTED_OWNER:\n        raise ValueError(\"Evidence profile belongs to another owner\")\n    if \"application_verification\" not in profile and not {\"tests\", \"validations\"}.issubset({command[\"kind\"] for command in profile[\"commands\"]}):\n        raise ValueError(\"Owner profile must include actual tests and validations\")\n    checks = profile.get(\"application_verification\", {}).get(\"manual_checks\", [])\n    if len({check[\"id\"] for check in checks}) != len(checks):\n        raise ValueError(\"Manual verification check IDs must be unique\")\n    return profile\n\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--repo-root\", type=Path, default=Path(__file__).resolve().parents[1])\n    parser.add_argument(\"--application-if-present\", action=\"store_true\")\n    parser.add_argument(\"--base-commit\")\n    parser.add_argument(\"--head-commit\")\n    args = parser.parse_args()\n    root = args.repo_root.resolve()\n    profile = validate(root)\n    print(\"Owner controls valid; this is not app acceptance\")\n    if not args.application_if_present:\n        return\n    if profile.get(\"application_verification\", {}).get(\"mode\") in {\"unconfigured\", \"manual\"}:\n        print(\"Application automation not configured: source controls only; no application acceptance\")\n        return\n    metadata = json.loads((root / \"contracts/delivery-art-work-session/source-bootstrap.json\").read_text())\n    if \"application_verification\" not in profile and not any((root / marker).is_file() for marker in metadata[\"application_markers\"]):\n        print(\"Application absent: bootstrap-only validation; no application tests executed\")\n        return\n    # Match the existing evidence runner's two supported placeholders. Never\n    # turn provider/event input into a shell expression or infer a passing base.\n    bindings = {\"{{base_commit}}\": args.base_commit, \"{{head_commit}}\": args.head_commit}\n    for token, value in bindings.items():\n        if any(token in arg for command in profile[\"commands\"] for arg in command[\"args\"]):\n            if not isinstance(value, str) or not re.fullmatch(r\"[0-9a-f]{40}\", value):\n                raise ValueError(\"Application evidence requires its exact base and head commits\")\n    for command in profile[\"commands\"]:\n        if command[\"kind\"] in {\"tests\", \"validations\"}:\n            argv = list(command[\"args\"])\n            for token, value in bindings.items():\n                argv = [arg.replace(token, value) if value is not None else arg for arg in argv]\n            subprocess.run([command[\"executable\"], *argv], cwd=root, check=True, timeout=command[\"timeout_seconds\"])\n\n\nif __name__ == \"__main__\":\n    main()\n",
                         "expected_digest": null,
-                        "content_digest": "sha256:15e235008869079277a008e68ebe47729be572de3f35ded4bfebb66106c34388"
+                        "content_digest": "sha256:76dbc8562913e8fd94f74f0ef144b17c280b0fb802dba4ae63bcb54fdc75935e"
                       },
                       {
                         "path": "tests/test_owner_bootstrap.py",
@@ -27678,14 +27678,14 @@
                     "app_import": false,
                     "canonical_mutation": false,
                     "runtime_activation": false,
-                    "plan_digest": "sha256:514875c59a4990189fe40a159a3d1212a1534565a532c5b5f52ffc744aab152a"
+                    "plan_digest": "sha256:8593a1515c1b02d502e433c13354bc9c9eda84fc00ab5b75d01ebc90e2be62d8"
                   },
                   "authorization": "preparation-only",
                   "credential_issued": false,
                   "checkout_created": false,
                   "canonical_mutation": false,
                   "runtime_activation": false,
-                  "preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf"
+                  "preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a"
                 }
               }
             }
@@ -27884,7 +27884,7 @@
                     ]
                   }
                 },
-                "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                 "workflow_approval_ref": null,
                 "requested_at": "2026-10-19T10:00:00.000Z"
               }
@@ -27959,7 +27959,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -28212,7 +28212,7 @@
                           ]
                         }
                       },
-                      "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                      "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                       "workflow_approval_ref": null,
                       "requested_at": "2026-10-19T10:00:00.000Z"
                     },
@@ -28285,7 +28285,7 @@
                             ]
                           }
                         },
-                        "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                        "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                         "workflow_approval_ref": null,
                         "requested_at": "2026-10-19T10:00:00.000Z"
                       },
@@ -28555,7 +28555,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29054,7 +29054,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29306,7 +29306,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29562,7 +29562,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -29817,7 +29817,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30073,7 +30073,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30331,7 +30331,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30589,7 +30589,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -30847,7 +30847,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -31100,7 +31100,7 @@
                         ]
                       }
                     },
-                    "expected_preparation_digest": "sha256:0fe6ce1432947ad43888221c5794354a4954d74bb8501443186cecf7094589cf",
+                    "expected_preparation_digest": "sha256:67cb28dbd37a1b8a78636879220aa4756a46e9ea29b59d6cefcef672c2a5d89a",
                     "workflow_approval_ref": null,
                     "requested_at": "2026-10-19T10:00:00.000Z"
                   },
@@ -34780,6 +34780,120 @@
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "platform-operation"
+      }
+    },
+    "/v1/repository-custody/provider-repository": {
+      "get": {
+        "tags": [
+          "Repository Custody"
+        ],
+        "summary": "Look up one GitHub repository identity",
+        "operationId": "lookupRepositoryProviderIdentity",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Read-only lookup of exact GitHub coordinates using the existing read installation identity. Returns metadata, not custody or request fulfilment. Subsequent reviewed attachment independently rereads by immutable ID.",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact provider identity metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryProviderLookupV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "provider": "github",
+                  "provider_host": "github.com",
+                  "provider_repository_id": "123456789",
+                  "owner": "example-organization",
+                  "name": "example-source",
+                  "canonical_url": "https://github.com/example-organization/example-source",
+                  "visibility": "public",
+                  "provider_lifecycle_state": "active",
+                  "observed_at": "2026-11-03T10:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid coordinates or unsupported query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or provider access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository not found or not accessible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Provider returned a different identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Runtime or provider read identity unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-custody"
       }
     }
   },
@@ -83716,6 +83830,52 @@
             "items": {
               "$ref": "#/components/schemas/OwnerBootstrapEvidenceProfile/$defs/command"
             }
+          },
+          "application_verification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "manual_checks"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "unconfigured",
+                  "manual",
+                  "automated",
+                  "mixed"
+                ]
+              },
+              "manual_checks": {
+                "type": "array",
+                "maxItems": 48,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "action",
+                    "expected_result"
+                  ],
+                  "properties": {
+                    "id": {
+                      "$ref": "#/components/schemas/OwnerBootstrapEvidenceProfile/$defs/identifier"
+                    },
+                    "action": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "expected_result": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "$defs": {
@@ -83801,10 +83961,243 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 1800
+              },
+              "scope": {
+                "enum": [
+                  "source-controls",
+                  "application"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "scope": {
+                      "const": "source-controls"
+                    }
+                  },
+                  "required": [
+                    "scope"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "kind": {
+                      "const": "validations"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "application_verification"
+              ]
+            },
+            "then": {
+              "properties": {
+                "commands": {
+                  "contains": {
+                    "type": "object",
+                    "required": [
+                      "scope",
+                      "kind"
+                    ],
+                    "properties": {
+                      "scope": {
+                        "const": "source-controls"
+                      },
+                      "kind": {
+                        "const": "validations"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "application_verification"
+              ],
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "mode": {
+                      "const": "unconfigured"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "manual_checks": {
+                      "maxItems": 0
+                    }
+                  }
+                },
+                "commands": {
+                  "items": {
+                    "required": [
+                      "scope"
+                    ],
+                    "properties": {
+                      "scope": {
+                        "const": "source-controls"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "application_verification"
+              ],
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "mode": {
+                      "const": "manual"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "manual_checks": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                "commands": {
+                  "not": {
+                    "contains": {
+                      "type": "object",
+                      "required": [
+                        "kind"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "tests"
+                        },
+                        "scope": {
+                          "not": {
+                            "const": "source-controls"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "application_verification"
+              ],
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "mode": {
+                      "const": "automated"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "manual_checks": {
+                      "maxItems": 0
+                    }
+                  }
+                },
+                "commands": {
+                  "contains": {
+                    "type": "object",
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "tests"
+                      },
+                      "scope": {
+                        "not": {
+                          "const": "source-controls"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "application_verification"
+              ],
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "mode": {
+                      "const": "mixed"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "application_verification": {
+                  "properties": {
+                    "manual_checks": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                "commands": {
+                  "contains": {
+                    "type": "object",
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "tests"
+                      },
+                      "scope": {
+                        "not": {
+                          "const": "source-controls"
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
-        }
+        ]
       },
       "OwnerBootstrapChangeSet": {
         "title": "Delivery ART source realization change set",
@@ -83979,11 +84372,24 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
           },
           "evidence_profile": {
-            "$ref": "#/components/schemas/OwnerBootstrapEvidenceProfile"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OwnerBootstrapEvidenceProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "enum": [
+              "bootstrap",
+              "configure-verification"
+            ]
           },
           "application_markers": {
             "type": "array",
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 48,
             "uniqueItems": true,
             "items": {
@@ -84023,6 +84429,32 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9._-]*$"
           },
+          "operation": {
+            "const": "configure-verification"
+          },
+          "inventory_entry_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "digest"
+            ]
+          },
           "provider_repository": {
             "type": "object",
             "additionalProperties": false,
@@ -84046,26 +84478,33 @@
             ]
           },
           "intake_entry_ref": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "digest"
+                ]
               },
-              "version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "digest": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "id",
-              "version",
-              "digest"
             ]
           },
           "fetched_base": {
@@ -84099,7 +84538,7 @@
           },
           "application_markers": {
             "type": "array",
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 48,
             "items": {
               "type": "string"
@@ -84116,7 +84555,7 @@
           },
           "files": {
             "type": "array",
-            "minItems": 11,
+            "minItems": 3,
             "maxItems": 12,
             "items": {
               "type": "object",
@@ -84247,99 +84686,204 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "owner_authority": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "owner_repo": {
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9._-]*$"
-              },
-              "intake_entry_ref": {
+            "oneOf": [
+              {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "id": {
+                  "owner_repo": {
                     "type": "string",
-                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
                   },
-                  "version": {
-                    "type": "integer",
-                    "minimum": 1
+                  "intake_entry_ref": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "digest"
+                    ]
                   },
-                  "digest": {
+                  "provider_repository": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "provider": {
+                        "const": "github"
+                      },
+                      "provider_repository_id": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$"
+                      },
+                      "full_name": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "provider_repository_id",
+                      "full_name"
+                    ]
+                  },
+                  "classification": {
+                    "enum": [
+                      "proposed",
+                      "admitted"
+                    ]
+                  },
+                  "inventory_posture": {
+                    "type": "null"
+                  },
+                  "custody_receipt_digest": {
                     "type": "string",
                     "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "source_bootstrap_eligible": {
+                    "const": true
+                  },
+                  "ordinary_source_eligible": {
+                    "const": false
+                  },
+                  "model_writes_allowed": {
+                    "const": false
+                  },
+                  "canonical_mutation": {
+                    "const": false
+                  },
+                  "runtime_activation": {
+                    "const": false
                   }
                 },
                 "required": [
-                  "id",
-                  "version",
-                  "digest"
+                  "owner_repo",
+                  "intake_entry_ref",
+                  "provider_repository",
+                  "classification",
+                  "inventory_posture",
+                  "custody_receipt_digest",
+                  "source_bootstrap_eligible",
+                  "ordinary_source_eligible",
+                  "model_writes_allowed",
+                  "canonical_mutation",
+                  "runtime_activation"
                 ]
               },
-              "provider_repository": {
+              {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "provider": {
-                    "const": "github"
-                  },
-                  "provider_repository_id": {
+                  "owner_repo": {
                     "type": "string",
-                    "pattern": "^[1-9][0-9]*$"
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
                   },
-                  "full_name": {
+                  "intake_entry_ref": {
+                    "type": "null"
+                  },
+                  "inventory_entry_ref": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "digest"
+                    ]
+                  },
+                  "provider_repository": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "provider": {
+                        "const": "github"
+                      },
+                      "provider_repository_id": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$"
+                      },
+                      "full_name": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "provider_repository_id",
+                      "full_name"
+                    ]
+                  },
+                  "classification": {
+                    "const": "active"
+                  },
+                  "inventory_posture": {
+                    "const": "active"
+                  },
+                  "custody_receipt_digest": {
                     "type": "string",
-                    "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "source_bootstrap_eligible": {
+                    "const": false
+                  },
+                  "verification_setup_eligible": {
+                    "const": true
+                  },
+                  "ordinary_source_eligible": {
+                    "const": true
+                  },
+                  "model_writes_allowed": {
+                    "const": false
+                  },
+                  "canonical_mutation": {
+                    "const": false
+                  },
+                  "runtime_activation": {
+                    "const": false
                   }
                 },
                 "required": [
-                  "provider",
-                  "provider_repository_id",
-                  "full_name"
+                  "owner_repo",
+                  "intake_entry_ref",
+                  "inventory_entry_ref",
+                  "provider_repository",
+                  "classification",
+                  "inventory_posture",
+                  "custody_receipt_digest",
+                  "source_bootstrap_eligible",
+                  "verification_setup_eligible",
+                  "ordinary_source_eligible",
+                  "model_writes_allowed",
+                  "canonical_mutation",
+                  "runtime_activation"
                 ]
-              },
-              "classification": {
-                "enum": [
-                  "proposed",
-                  "admitted"
-                ]
-              },
-              "inventory_posture": {
-                "type": "null"
-              },
-              "custody_receipt_digest": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "source_bootstrap_eligible": {
-                "const": true
-              },
-              "ordinary_source_eligible": {
-                "const": false
-              },
-              "model_writes_allowed": {
-                "const": false
-              },
-              "canonical_mutation": {
-                "const": false
-              },
-              "runtime_activation": {
-                "const": false
               }
-            },
-            "required": [
-              "owner_repo",
-              "intake_entry_ref",
-              "provider_repository",
-              "classification",
-              "inventory_posture",
-              "custody_receipt_digest",
-              "source_bootstrap_eligible",
-              "ordinary_source_eligible",
-              "model_writes_allowed",
-              "canonical_mutation",
-              "runtime_activation"
             ]
           },
           "plan": {
@@ -84410,8 +84954,14 @@
               "runtime_activation"
             ]
           },
+          "operation": {
+            "const": "configure-verification"
+          },
           "next_action": {
-            "const": "admit-existing-owner-controls-no-bootstrap-review"
+            "enum": [
+              "admit-existing-owner-controls-no-bootstrap-review",
+              "configure-application-verification"
+            ]
           },
           "authorization": {
             "const": "preparation-only"
@@ -84498,6 +85048,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "operation": {
+            "const": "configure-verification"
+          },
           "schema_version": {
             "const": 1
           },
@@ -90049,6 +90602,66 @@
               "type": "string",
               "maxLength": 2048
             }
+          }
+        }
+      },
+      "RepositoryProviderLookupV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "provider",
+          "provider_host",
+          "provider_repository_id",
+          "owner",
+          "name",
+          "canonical_url",
+          "visibility",
+          "provider_lifecycle_state",
+          "observed_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "provider": {
+            "const": "github"
+          },
+          "provider_host": {
+            "const": "github.com"
+          },
+          "provider_repository_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "owner": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+          },
+          "canonical_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "internal",
+              "public"
+            ]
+          },
+          "provider_lifecycle_state": {
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

@@ -35,8 +35,11 @@ def validate(root):
     Draft202012Validator(schema).validate(profile)
     if profile["owner_repo"] != EXPECTED_OWNER:
         raise ValueError("Evidence profile belongs to another owner")
-    if not {"tests", "validations"}.issubset({command["kind"] for command in profile["commands"]}):
+    if "application_verification" not in profile and not {"tests", "validations"}.issubset({command["kind"] for command in profile["commands"]}):
         raise ValueError("Owner profile must include actual tests and validations")
+    checks = profile.get("application_verification", {}).get("manual_checks", [])
+    if len({check["id"] for check in checks}) != len(checks):
+        raise ValueError("Manual verification check IDs must be unique")
     return profile
 
 
@@ -52,8 +55,11 @@ def main():
     print("Owner controls valid; this is not app acceptance")
     if not args.application_if_present:
         return
+    if profile.get("application_verification", {}).get("mode") in {"unconfigured", "manual"}:
+        print("Application automation not configured: source controls only; no application acceptance")
+        return
     metadata = json.loads((root / "contracts/delivery-art-work-session/source-bootstrap.json").read_text())
-    if not any((root / marker).is_file() for marker in metadata["application_markers"]):
+    if "application_verification" not in profile and not any((root / marker).is_file() for marker in metadata["application_markers"]):
         print("Application absent: bootstrap-only validation; no application tests executed")
         return
     # Match the existing evidence runner's two supported placeholders. Never
