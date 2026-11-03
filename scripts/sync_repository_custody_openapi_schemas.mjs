@@ -9,6 +9,7 @@ import {
 } from "../src/repository-custody/contracts.js";
 import {
   upsertOpenApiComponent,
+  upsertOpenApiPath as upsertPlainOpenApiPath,
 } from "./openapi_component_sync_tools.mjs";
 import {
   upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath,
@@ -318,6 +319,25 @@ synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests/
     "x-oos-workflow-family": "repository-custody",
   },
 });
+
+synchronized = upsertOpenApiComponent(synchronized, "RepositoryProviderLookupV1", {
+  type:"object",additionalProperties:false,
+  required:["schema_version","provider","provider_host","provider_repository_id","owner","name","canonical_url","visibility","provider_lifecycle_state","observed_at"],
+  properties:{schema_version:{const:1},provider:{const:"github"},provider_host:{const:"github.com"},
+    provider_repository_id:{type:"string",pattern:"^[1-9][0-9]*$"},
+    owner:{type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"},name:{type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"},
+    canonical_url:{type:"string",format:"uri"},visibility:{enum:["private","internal","public"]},
+    provider_lifecycle_state:{enum:["active","archived"]},observed_at:{type:"string",format:"date-time"}},
+});
+synchronized = upsertPlainOpenApiPath(synchronized, "/v1/repository-custody/provider-repository", {get:{
+  tags:["Repository Custody"],summary:"Look up one GitHub repository identity",operationId:"lookupRepositoryProviderIdentity",security,
+  description:"Read-only lookup of exact GitHub coordinates using the existing read installation identity. Returns metadata, not custody or request fulfilment. Subsequent reviewed attachment independently rereads by immutable ID.",
+  parameters:["owner","name"].map(name=>({name,in:"query",required:true,schema:{type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"}})),
+  responses:{200:{description:"Exact provider identity metadata.",content:{"application/json":{schema:{$ref:"#/components/schemas/RepositoryProviderLookupV1"},example:{schema_version:1,provider:"github",provider_host:"github.com",provider_repository_id:"123456789",owner:"example-organization",name:"example-source",canonical_url:"https://github.com/example-organization/example-source",visibility:"public",provider_lifecycle_state:"active",observed_at:"2026-11-03T10:00:00Z"}}}},
+    400:errorResponse("Invalid coordinates or unsupported query."),403:errorResponse("Caller or provider access denied."),404:errorResponse("Repository not found or not accessible."),
+    409:errorResponse("Provider returned a different identity."),503:errorResponse("Runtime or provider read identity unavailable.")},
+  "x-oos-owner":"operator-orchestration-service","x-oos-primary-caller":"governance-operations-console","x-oos-surface":"operator-facing","x-oos-workflow-family":"repository-custody",
+}});
 
 if (process.argv.includes("--check")) {
   if (synchronized !== original) {

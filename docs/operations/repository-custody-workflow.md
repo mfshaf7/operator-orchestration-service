@@ -86,3 +86,28 @@ Use `node --test test/repository-custody-*.test.js` for focused contract,
 client, workflow, HTTP, storage, and activation proof. Use
 `npm run validate:repository-custody-openapi-schemas` to prove generated API
 documentation matches the canonical schemas and routes.
+
+## Request-specific creation and attachment
+
+A Proposal request for new work can be fulfilled by provision-new or by explicit
+attachment of a repository already created for that request. Both operations use
+the exact `repo-request://proposal/<proposal_id>` in immutable
+`correlation.correlation_id`. Standalone custody remains valid but its receipt
+cannot directly confirm an unrelated requirement. The attachment records a new
+reviewed link receipt, preserving the original result and provider creation truth.
+
+The Console separates Create new and Already created. Attachment selects known
+custody or accepts a GitHub URL. Authenticated Console-only
+`GET /v1/repository-custody/provider-repository?owner=<owner>&name=<name>` resolves
+positive decimal identity using the existing read installation token. It accepts
+only bounded coordinates, pins GitHub, denies redirects and never creates or
+changes provider state. Metadata is not a readiness decision or custody receipt.
+The reviewed link-existing command still requires WGCF and independently reads
+provider state by immutable ID. The operator attests purpose, reviews ownership
+and approves attachment; final Proposal confirmation is separate and explicit.
+
+Corrections/resumes preserve the original association; `causation_id` continues
+to name the failed creation. A provisioning correction cannot reassign a provider
+creation to another request. Exact historical acknowledgements retain recovery
+without rewriting original outcomes. New confirmation requires a successful
+create or attach receipt for the same requirement, not an unrelated existing link.

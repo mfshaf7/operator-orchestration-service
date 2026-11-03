@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalDigest } from "./canonical-json.js";
 import { bootstrapCredentialProjection } from "../repository-owner-bootstrap/credentials.js";
 import { assertBootstrapSourceSession, bootstrapSourceChangeSet } from "../repository-owner-bootstrap/session.js";
-import { assertProposedSourceOwnerAuthority } from "../repository-owner-bootstrap/scaffold.js";
+import { assertOwnerSetupAuthority } from "../repository-owner-bootstrap/scaffold.js";
 
 const ASKPASS_PATH = fileURLToPath(
   new URL("../../scripts/agent_source_git_askpass.mjs", import.meta.url),
@@ -610,12 +610,14 @@ export function createAgentSourceIdentityAdapter({
       const selected = session ?? bootstrap.session;
       if (canonicalDigest(assertBootstrapSourceSession(selected)) !== canonicalDigest(bootstrap.session)) fail("agent_source_bootstrap_session_changed", "Bootstrap identity cannot be borrowed by another source session.");
       try {
-        const authority = assertProposedSourceOwnerAuthority(bootstrap.readAuthority({ ownerRepo: selected.owner_repo,
-          providerRepository: bootstrap.plan.provider_repository, intakeEntryRef: selected.subject.intake_entry_ref }));
+        const operation = selected.subject.operation ?? "bootstrap";
+        const authority = assertOwnerSetupAuthority(bootstrap.readAuthority({ ownerRepo: selected.owner_repo,
+          providerRepository: bootstrap.plan.provider_repository, intakeEntryRef: selected.subject.intake_entry_ref,
+          inventoryEntryRef: selected.subject.inventory_entry_ref ?? null, operation }), operation);
         const binding = authority.provider_repository;
         const account = contract.identity.installation_accounts.find(item => item.login.toLowerCase() === binding.full_name.split("/")[0].toLowerCase());
         if (!account || authority.owner_repo !== selected.owner_repo ||
-            canonicalDigest(authority.intake_entry_ref) !== canonicalDigest(selected.subject.intake_entry_ref) ||
+            canonicalDigest(operation === "configure-verification" ? authority.inventory_entry_ref : authority.intake_entry_ref) !== canonicalDigest(operation === "configure-verification" ? selected.subject.inventory_entry_ref : selected.subject.intake_entry_ref) ||
             canonicalDigest(binding) !== canonicalDigest(bootstrap.plan.provider_repository)) throw new Error();
         return { ...contract, identity: { ...contract.identity, installation_id: account.installation_id },
           resolved_repository: { owner_repo: selected.owner_repo,

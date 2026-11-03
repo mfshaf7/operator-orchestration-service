@@ -223,3 +223,64 @@ test("bootstrap validation stays distinct from real app evidence and the optiona
   assert.match(execFileSync("make", ["validate"], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }), /not app acceptance/);
   assert.throws(() => run(["--base-commit", base, "--head-commit", head]), /Command failed/, "Real app failures cannot be replaced by green bootstrap checks");
 });
+
+test('an empty application starts with source controls and no invented app plan or markers',async t=>{
+ const request=input();request.profile=null;request.applicationMarkers=[];
+ const plan=planSourceOwnerBootstrap(request);
+ const profile=JSON.parse(plan.files.find(file=>file.path==='contracts/delivery-art-work-session/evidence-profile.json').content);
+ assert.equal(profile.application_verification.mode,'unconfigured');
+ assert.ok(profile.commands.every(command=>command.kind==='validations'&&command.scope==='source-controls'));
+ assert.deepEqual(plan.application_markers,[]);assert.equal(plan.app_import,false);
+ const directory=await mkdtemp(path.join(tmpdir(),'source-controls-only-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ for(const file of plan.files){const target=path.join(directory,file.path);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,file.content);}
+ const output=execFileSync('python3',['scripts/validate_owner.py','--repo-root','.', '--application-if-present'],{cwd:directory,encoding:'utf8',timeout:30000});
+ assert.match(output,/Application automation not configured/);assert.doesNotMatch(output,/Actual project test executed/);
+});
+
+test('an active owner configures manual verification through a finite source change without a new registration',async t=>{
+ const {sourceControlEvidenceProfile}=await import('../src/delivery-art/application-verification.js');
+ const {planSourceOwnerVerification}=await import('../src/repository-owner-bootstrap/scaffold.js');
+ const {bootstrapSourceSession,bootstrapSourceChangeSet}=await import('../src/repository-owner-bootstrap/session.js');
+ const request=input();const oldPlan=planSourceOwnerBootstrap(request);
+ const observedFiles=Object.fromEntries(oldPlan.files.map(file=>[file.path,file.content]));
+ observedFiles['scripts/validate_owner.py']=(await readFile(new URL('../templates/source-owner-bootstrap/validate_owner.legacy.py.template',import.meta.url),'utf8')).replaceAll('@@OWNER@@',request.authority.owner_repo);
+ const authority={...request.authority,classification:'active',inventory_posture:'active',intake_entry_ref:null,
+  inventory_entry_ref:{id:`repo:${request.authority.owner_repo}`,version:2,digest:`sha256:${'d'.repeat(64)}`},
+  source_bootstrap_eligible:false,verification_setup_eligible:true,ordinary_source_eligible:true};
+ const profile=sourceControlEvidenceProfile(authority.owner_repo);
+ profile.commands.push(structuredClone(request.profile.commands.find(c=>c.kind==='validations')));
+ profile.application_verification={mode:'manual',manual_checks:[{id:'add-task',action:'Add a task in the preview',expected_result:'The task appears in the list'}]};
+ const plan=planSourceOwnerVerification({authority,fetchedBase:request.fetchedBase,profile,applicationMarkers:[],withCi:false,observedFiles});
+ assert.equal(plan.operation,'configure-verification');assert.equal(plan.intake_entry_ref,null);assert.deepEqual(plan.inventory_entry_ref,authority.inventory_entry_ref);
+ const changed=plan.files.filter(file=>file.action!=='unchanged');
+ assert.ok(changed.every(file=>['contracts/delivery-art-work-session/evidence-profile.json','contracts/delivery-art-work-session/evidence-profile.schema.json','contracts/delivery-art-work-session/source-bootstrap.json','scripts/validate_owner.py'].includes(file.path)));
+ assert.equal(plan.files.find(file=>file.path==='AGENTS.md').action,'unchanged');assert.equal(plan.requires_workflow_permission,false);
+ assert.equal(plan.files.find(file=>file.path==='scripts/validate_owner.py').action,'replace');
+ const body={schema_version:1,workflow_id:'repository-owner-bootstrap-preparation',operation:'configure-verification',caller_id:'console',operator_id:'operator',
+  authorization:'preparation-only',decision_ref:'operator:configure-tests',custody_receipt_digest:`sha256:${'e'.repeat(64)}`,plan};
+ const preparation={...body,preparation_digest:canonicalDigest(body)};
+ const session=bootstrapSourceSession({requestDigest:`sha256:${'f'.repeat(64)}`,requestId:'verification:active-fixture',callerId:'console',operatorId:'operator',preparation});
+ assert.equal(session.subject.intake_entry_ref,null);assert.deepEqual(session.subject.inventory_entry_ref,authority.inventory_entry_ref);
+ assert.equal(bootstrapSourceChangeSet(plan,session).operations.length,changed.length);
+ const directory=await mkdtemp(path.join(tmpdir(),'active-manual-verification-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ for(const file of plan.files){const target=path.join(directory,file.path);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,file.content);}
+ assert.match(execFileSync('python3',['scripts/validate_owner.py','--repo-root','.', '--application-if-present'],{cwd:directory,encoding:'utf8',timeout:30000}),/no application acceptance/);
+ const unsafe=structuredClone(profile);unsafe.commands=unsafe.commands.filter(c=>c.id!=='project-validation');
+ assert.throws(()=>planSourceOwnerVerification({authority,fetchedBase:request.fetchedBase,profile:unsafe,applicationMarkers:[],withCi:false,observedFiles}),/Preserve existing owner commands/);
+ assert.throws(()=>planSourceOwnerVerification({authority:request.authority,fetchedBase:request.fetchedBase,profile,applicationMarkers:[],withCi:false,observedFiles}),/active source-only/);
+});
+
+test("verification setup cannot drop independent runtime or security evidence commands", async () => {
+  const {planSourceOwnerVerification}=await import('../src/repository-owner-bootstrap/scaffold.js');
+  const initial=input();
+  initial.profile.commands.push({id:'runtime-evidence',kind:'runtime_and_live',name:'Existing operating check',executable:'node',args:['tests/browser.mjs'],fidelity:'sandbox-runtime',conformance_binding:'none',timeout_seconds:120});
+  const seed=planSourceOwnerBootstrap(initial), observedFiles=Object.fromEntries(seed.files.map(file=>[file.path,file.content]));
+  const authority={...initial.authority,classification:'active',inventory_posture:'active',inventory_entry_ref:initial.authority.intake_entry_ref,intake_entry_ref:null,source_bootstrap_eligible:false,verification_setup_eligible:true,ordinary_source_eligible:true};
+  const {sourceControlEvidenceProfile}=await import('../src/delivery-art/application-verification.js');
+  const profile=sourceControlEvidenceProfile(authority.owner_repo);
+  profile.application_verification={mode:'manual',manual_checks:[{id:'actual-check',action:'Use the app',expected_result:'The accepted behavior works'}]};
+  profile.commands.push(...initial.profile.commands.filter(command=>command.kind!=='tests'));
+  assert.doesNotThrow(()=>planSourceOwnerVerification({...initial,authority,profile,applicationMarkers:[],observedFiles}));
+  profile.commands=profile.commands.filter(command=>command.id!=='runtime-evidence');
+  assert.throws(()=>planSourceOwnerVerification({...initial,authority,profile,applicationMarkers:[],observedFiles}),/Preserve existing owner commands/);
+});

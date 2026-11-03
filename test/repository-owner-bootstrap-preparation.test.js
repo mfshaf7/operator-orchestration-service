@@ -30,12 +30,7 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
   const actualCustody = repositoryCustodyIntakeAuthority({ result, target });
   const calls = [];
   let observations = 0;
-  const service = createRepositoryOwnerBootstrapPreparation({ callerOperatorBindings: { [callerId]: operatorId },
-    custodySourceReader: async (id, options) => {
-      calls.push("custody"); assert.equal(id, request.request_id); assert.equal(options.callerId, callerId);
-      return readCustody(await custody.project(id));
-    },
-    intakeSourceClient: { proposedSourceOwner: async ({ target: selected, custodyResult }) => {
+  const intakeReader = { proposedSourceOwner: async ({ target: selected, custodyResult }) => {
       calls.push("intake"); observations++;
       assert.deepEqual(selected, target); assert.equal(custodyResult.status, "succeeded");
       const authority = { schema_version: 1, owner_repo: owner, classification: "proposed", inventory_posture: null,
@@ -47,7 +42,14 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
         canonical_mutation: false, runtime_activation: false };
       changeAuthority(authority, observations);
       return authority;
-    } },
+    } };
+  intakeReader.verificationSourceOwner = intakeReader.proposedSourceOwner;
+  const service = createRepositoryOwnerBootstrapPreparation({ callerOperatorBindings: { [callerId]: operatorId },
+    custodySourceReader: async (id, options) => {
+      calls.push("custody"); assert.equal(id, request.request_id); assert.equal(options.callerId, callerId);
+      return readCustody(await custody.project(id));
+    },
+    intakeSourceClient: intakeReader,
     sourceReader: { inspect: async ({ providerRepository, paths }) => {
       calls.push("source"); assert.deepEqual(providerRepository, actualCustody.binding);
       return inspectSource({ fetched_base: "1".repeat(40), visibility: "public", default_branch: "main",
@@ -119,4 +121,27 @@ test("selected Intake changes during provider inspection and unqualified private
   await assert.rejects(h.service.prepare({ callerId, operatorId, input: h.input }), /changed during preparation/);
   const privateSource = await harness(t, { inspectSource: value => ({ ...value, visibility: "private" }) });
   await assert.rejects(privateSource.service.prepare({ callerId, operatorId, input: privateSource.input }), /private\/client operation is not qualified/);
+});
+
+test("active verification loads the actual current plan and requires an exact reviewed change, not re-registration", async t => {
+  const initial = await harness(t);
+  const bootstrap = await initial.service.prepare({ callerId, operatorId, input: { ...initial.input, evidence_profile: null, application_markers: [] } });
+  const observed = Object.fromEntries(bootstrap.plan.files.map(file => [file.path, file.content]));
+  const active = await harness(t, { changeAuthority(value) {
+    value.classification = "active"; value.inventory_posture = "active";
+    value.inventory_entry_ref = value.intake_entry_ref; value.intake_entry_ref = null;
+    value.source_bootstrap_eligible = false; value.verification_setup_eligible = true; value.ordinary_source_eligible = true;
+  }, inspectSource: source => ({ ...source, observed_files: { ...source.observed_files, ...observed } }) });
+  const input = { ...active.input, operation: "configure-verification", with_ci: false, application_markers: [], evidence_profile: null };
+  const inspect = await active.service.prepare({ callerId, operatorId, input });
+  assert.equal(inspect.plan, null); assert.equal(inspect.next_action, "configure-application-verification");
+  assert.equal(inspect.existing_owner_controls.evidence_profile.application_verification.mode, "unconfigured");
+  const profile = structuredClone(inspect.existing_owner_controls.evidence_profile);
+  profile.application_verification = { mode: "manual", manual_checks: [{ id: "add-task", action: "Add task", expected_result: "Task appears" }] };
+  const prepared = await active.service.prepare({ callerId, operatorId, input: { ...input, evidence_profile: profile } });
+  assert.equal(prepared.operation, "configure-verification"); assert.equal(prepared.plan.intake_entry_ref, null);
+  assert.equal(prepared.plan.requires_workflow_permission, false);
+  assert.ok(prepared.plan.files.filter(file => file.action !== "unchanged").every(file => ["contracts/delivery-art-work-session/evidence-profile.json", "contracts/delivery-art-work-session/evidence-profile.schema.json", "contracts/delivery-art-work-session/source-bootstrap.json", "scripts/validate_owner.py"].includes(file.path)));
+  await active.service.verify({ callerId, operatorId, preparation: prepared });
+  await assert.rejects(active.service.prepare({ callerId, operatorId, input: { ...input, with_ci: true, evidence_profile: profile } }));
 });

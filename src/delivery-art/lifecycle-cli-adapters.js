@@ -119,6 +119,7 @@ function evidenceReceipt({ clock, providerId, request, results, startedAt }) {
     schema_version: 1,
     artifact_type: "delivery_art_owner_evidence_receipt",
     acquisition_id: request.acquisition_id,
+    ...(request.application_verification ? { application_verification: structuredClone(request.application_verification) } : {}),
     owner_repo: request.owner_repo,
     profile_digest: request.profile_digest,
     profile_id: request.profile_id,
@@ -134,6 +135,7 @@ function evidenceReceipt({ clock, providerId, request, results, startedAt }) {
     results,
     evidence_digest: canonicalDigest({
       acquisition_id: request.acquisition_id,
+      ...(request.application_verification ? { application_verification: structuredClone(request.application_verification) } : {}),
       owner_repo: request.owner_repo,
       profile_digest: request.profile_digest,
       profile_id: request.profile_id,
@@ -424,6 +426,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
       landing_unit: landingUnit,
       profile_revision: requestedProfileRevision = null,
       required_evidence_kinds: requiredEvidenceKinds,
+      source_landing: sourceLanding = false,
       source,
     }) {
       const before = await inspect(landingUnit);
@@ -501,6 +504,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
               return result.exitCode === 0 ? result.stdout : null;
             },
             requiredEvidenceKinds,
+          sourceLanding,
             revisions,
           });
           profile = selection.profile;
@@ -537,6 +541,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
             profile,
             profileRevision: selectedProfileRevision,
             requiredEvidenceKinds,
+          sourceLanding,
             source,
             trustedProfileRevisions,
           });
@@ -576,6 +581,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
               ownerRepo: landingUnit.owner_repo,
               profile,
               requiredEvidenceKinds,
+          sourceLanding,
             });
           }
         } catch (error) {

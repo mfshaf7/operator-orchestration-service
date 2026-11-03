@@ -974,6 +974,7 @@ export function createDeliveryArtLifecycleController({
             base_commit: context.source.base_commit,
           },
           required_evidence_kinds: DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+          source_landing: true,
           source: context.source,
         });
         const acquired = projectDeliveryArtOwnerEvidence(receipt, {

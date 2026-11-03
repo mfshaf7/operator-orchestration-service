@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { requireRecordAuthorityFreshnessSync } from "../record-authority-freshness.js";
 import { intakeManifest } from "../workspace-intake/contracts.js";
-import { assertProposedSourceOwnerAuthority } from "./scaffold.js";
+import { assertOwnerSetupAuthority } from "./scaffold.js";
 
 const helper = fileURLToPath(new URL("../../scripts/workspace_intake_source.py", import.meta.url));
 const environment = { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1", GIT_CONFIG_NOSYSTEM: "1",
@@ -21,17 +21,17 @@ export function createCanonicalProposedSourceOwnerReader({ authorityRoot, python
   // Bundle provenance is a required ancestor of Platform's current approved baseline.
   const freshness = () => requireRecordAuthorityFreshnessSync({ authorityRoot, git, ownerRepo: "workspace-governance",
     reviewedRevision: intakeManifest.files["workspace-intake.yaml"].commit, clock });
-  return ({ ownerRepo, providerRepository, intakeEntryRef }) => {
+  return ({ ownerRepo, providerRepository, intakeEntryRef, inventoryEntryRef = null, operation = "bootstrap" }) => {
     const before = freshness();
-    const result = assertProposedSourceOwnerAuthority(JSON.parse(execFileSync(python, [helper, "proposed-source-owner",
+    const result = assertOwnerSetupAuthority(JSON.parse(execFileSync(python, [helper, operation === "configure-verification" ? "active-verification-owner" : "proposed-source-owner",
       "--source-root", authorityRoot, "--input", "-", "--output", "-"], {
       input: JSON.stringify({ target: { kind: "repo", name: ownerRepo }, expected_provider_repository: providerRepository }),
       env: environment, encoding: "utf8", timeout: 60_000, maxBuffer: 262_144, stdio: ["pipe", "pipe", "pipe"],
-    })));
+    })), operation);
     const after = freshness();
     if (before.record_revision !== after.record_revision || result.owner_repo !== ownerRepo ||
         canonicalDigest(result.provider_repository) !== canonicalDigest(providerRepository) ||
-        canonicalDigest(result.intake_entry_ref) !== canonicalDigest(intakeEntryRef)) {
+        canonicalDigest(operation === "configure-verification" ? result.inventory_entry_ref : result.intake_entry_ref) !== canonicalDigest(operation === "configure-verification" ? inventoryEntryRef : intakeEntryRef)) {
       throw new Error("The selected proposed owner changed or lost current canonical source authority.");
     }
     return { ...result, authority_revision: before.record_revision };

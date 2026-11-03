@@ -245,6 +245,29 @@ export function createGitHubRepositoryProviderClient({
   }
 
   return {
+    async lookup({ owner, name }) {
+      const coordinate = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+      if (typeof owner !== "string" || typeof name !== "string" || !coordinate.test(owner) || !coordinate.test(name) || name.toLowerCase().endsWith(".git")) {
+        throw new HttpError(400, "repository_provider_lookup_invalid", "Use the organization and repository name from a GitHub repository URL.");
+      }
+      const context = { action: "link-existing", target: {provider: "github", provider_host: "github.com"} };
+      assertConfigured(context);
+      const response = await providerRequest(`${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
+        { method: "GET", headers: providerHeaders(readInstallationToken), signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw providerFailure(response);
+      const body = await readBoundedJson(response);
+      if (!/^[1-9][0-9]*$/.test(String(body?.id ?? "")) ||
+          body?.owner?.login?.toLowerCase() !== owner.toLowerCase() || body?.name?.toLowerCase() !== name.toLowerCase() ||
+          body?.html_url !== `https://github.com/${body.owner.login}/${body.name}` ||
+          typeof body.archived !== "boolean" ||
+          !["private", "internal", "public"].includes(body.visibility ?? (typeof body.private === "boolean" ? body.private ? "private" : "public" : null))) {
+        throw new HttpError(409, "repository_provider_identity_mismatch", "Provider lookup did not return the exact requested repository identity.");
+      }
+      return { schema_version: 1, provider: "github", provider_host: "github.com", provider_repository_id: String(body.id),
+        owner: body.owner.login, name: body.name, canonical_url: body.html_url,
+        visibility: body.visibility ?? (body.private ? "private" : "public"),
+        provider_lifecycle_state: body.archived === true ? "archived" : "active", observed_at: clock().toISOString() };
+    },
     async applyApprovedSettings(request, approvedProvisioning, readback) {
       assertConfigured(request);
       if (

@@ -574,3 +574,17 @@ test("projection digest changes for authored results but not generated source re
   assert.equal(first, second);
   assert.notEqual(first, changed);
 });
+
+test("unconfigured source landing does not fabricate app tests, while operating acceptance and declared cases remain required", () => {
+  const currentDocument = { acquisition: { application_verification: { mode: "unconfigured", manual_checks: [] } }, evidence: {
+    validations: [resultEvidence({ id: "evidence:source-only", source_revisions: [{ repo: source.repo_name, commit: source.head_commit }], conformance_case_ids: [] })],
+  } };
+  const merged = projectDeliveryArtReviewEvidence({ currentDocument, source, workStart });
+  assert.equal(merged.readiness.ready, true);
+  assert.deepEqual(merged.evidence_document.evidence.tests, []);
+  assert.deepEqual(merged.requirements.required_evidence_kinds, ["changed_surfaces", "validations"]);
+  const operating = projectDeliveryArtReviewEvidence({ currentDocument, source, workStart, targetReadiness: "operating-ready" });
+  assert.ok(operating.readiness.findings.some(finding => finding.code === "test_evidence_missing"));
+  const declared = projectDeliveryArtReviewEvidence({ architecture, currentDocument, source, workStart });
+  assert.equal(declared.readiness.ready, false);
+});

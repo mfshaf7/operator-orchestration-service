@@ -79,6 +79,17 @@ export function createWorkspaceIntakeSourceClient({ authorityRoot, python = "pyt
         throw intakeError("proposed_owner_unavailable", "Current proposed source-owner authority is unavailable; no target source effect is authorized.", 503);
       }
     },
+    async verificationSourceOwner({ target, custodyResult }) {
+      const custody = repositoryCustodyIntakeAuthority({ result: custodyResult, target });
+      const revision = await provider.mainRevision();
+      return sandbox(revision, async ({ directory, source }) => {
+        const result = await ownerCommand("active-verification-owner", source, directory, { target, expected_provider_repository: custody.binding });
+        if (await git(source, "status", "--short") || await provider.mainRevision() !== revision) {
+          throw intakeError("authority_stale", "Active verification owner authority changed during its read.");
+        }
+        return { ...result, authority_revision: revision, custody_receipt_digest: custody.digest, custody_evidence_refs: custody.evidence_refs };
+      });
+    },
     async state(target) {
       let revision;
       try {

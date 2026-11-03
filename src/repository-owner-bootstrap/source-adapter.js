@@ -8,7 +8,7 @@ import { createDeliveryArtWorkSessionSourceAdapter, createConfiguredAgentSourceI
 import { createPrivateFileTransactions } from "../persistence/private-file-transactions.js";
 import { bootstrapCredentialProjection } from "./credentials.js";
 import { assertBootstrapSourceSession, bootstrapSourceChangeSet, bootstrapWorktreeRelativePath } from "./session.js";
-import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, trustedSourceOwnerValidationFiles } from "./scaffold.js";
+import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, trustedSourceOwnerValidationFiles, planSourceOwnerVerification } from "./scaffold.js";
 import { createCanonicalProposedSourceOwnerReader } from "./authority-reader.js";
 import { createPublicBootstrapSourceReader } from "./source-reader.js";
 
@@ -44,21 +44,21 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
     if (input.owner_repo !== session.owner_repo) fail("subject_mismatch", "Bootstrap source belongs to another repository.");
     bootstrapSourceChangeSet(input.plan, session);
     const authority = readAuthority({ ownerRepo: session.owner_repo, providerRepository: input.plan.provider_repository,
-      intakeEntryRef: session.subject.intake_entry_ref });
+      intakeEntryRef: session.subject.intake_entry_ref, inventoryEntryRef: session.subject.inventory_entry_ref ?? null, operation: session.subject.operation ?? "bootstrap" });
     const root = path.join(workspaceRoot, session.owner_repo);
     function assertDirectory() {
       regularCheckoutDirectory(root, input.plan.provider_repository);
     }
     function assertPlan(repoRoot) {
       const observedFiles = {};
-      for (const file of input.plan.files) {
+      for (const file of (input.plan.operation === "configure-verification" ? sourceOwnerBootstrapPaths(false).map(path => ({ path })) : input.plan.files)) {
         const row = git(repoRoot, "ls-tree", session.landing_unit.base_commit, "--", file.path).trim();
         if (!row) { observedFiles[file.path] = null; continue; }
         if (!row.startsWith("100644 blob ")) fail("source_mode_invalid", "The fetched base has a nonregular bootstrap target.");
         observedFiles[file.path] = git(repoRoot, "show", `${session.landing_unit.base_commit}:${file.path}`);
       }
       const profile = JSON.parse(input.plan.files.find(file => file.path === PROFILE).content);
-      const rendered = planSourceOwnerBootstrap({ authority, fetchedBase: session.landing_unit.base_commit, profile,
+      const rendered = (input.plan.operation === "configure-verification" ? planSourceOwnerVerification : planSourceOwnerBootstrap)({ authority, fetchedBase: session.landing_unit.base_commit, profile,
         applicationMarkers: input.plan.application_markers, withCi: input.plan.ci_selected, observedFiles });
       if (canonicalDigest(rendered) !== canonicalDigest(input.plan)) fail("plan_changed", "Actual fetched source and trusted template do not reproduce this exact approved plan.");
     }

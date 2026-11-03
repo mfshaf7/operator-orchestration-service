@@ -41,10 +41,13 @@ the checkpoint or repin contract bundles to bypass a missing Platform refresh.
 
 1. Complete the existing canonical custody and proposed Intake decisions.
 2. `POST /v1/repository-owner-bootstrap/preparations` with the exact owner key,
-   custody request id, applicable owner evidence profile, actual project marker
+   custody request id, nullable owner evidence profile, optional project marker
    paths, explicit optional-CI choice and operator decision reference. The
    [OpenAPI contract](../api/openapi.json) defines the closed input fields.
-   Select real project tests/validations and required fidelity; do not copy
+   For new source, use `evidence_profile: null` and `application_markers: []`.
+   OOS derives real source controls and marks application verification
+   `unconfigured`; no test description or guessed command is required.
+   When supplying an existing application profile, select real commands; do not copy
    documentation examples or substitute bootstrap tests for application proof.
    Use `conformance_binding: none` for baseline tests/validations that must run
    for ordinary source work. `matching-fidelity` applies only when an accepted
@@ -60,7 +63,9 @@ the checkpoint or repin contract bundles to bypass a missing Platform refresh.
    to the qualified `main` branch at their actual before/head. It does not run
    on first pushes of review branches or tags, whose prior ref is absent.
    Control-only bootstrap is explicitly not application evidence; once the
-   selected application markers exist, the real owner profile must pass.
+   legacy selected application markers exist, the real owner profile must pass.
+   Explicit automated/mixed profiles run their actual commands without guessed
+   application markers; manual/unconfigured modes never emit an app pass.
 4. Explicitly create one request at `POST .../requests`, carrying a stable
    `request_id`, the same preparation input, exact reviewed preparation digest,
    request time and nullable workflow permission approval reference. OOS
@@ -166,3 +171,35 @@ base or profile requires fresh inspection, not a validation waiver. Preserve
 unknown effects and dirty/unique source; recover the original request. Risk
 acceptance or deferral must remain an explicit justified owner decision and
 cannot fabricate a passing receipt or silently grant broader source authority.
+
+## Configure application verification later
+
+In Repository Control, select an active source-only repository and choose
+**Application verification**. Load its actual current plan. Choose manual
+checks, existing automated tests, or both. Review the exact change and continue
+the retained source request through authorization, source inspection, acceptance,
+publication, human review, merge and close. Use the original pending request
+after an interruption. Saving instructions records no completed test result.
+
+This reuses `POST .../preparations` with explicit
+`operation: configure-verification`. A null profile is read-only inspection;
+a changed profile produces a finite reviewed source plan. The authoritative
+reference is the exact active Inventory entry, never an invented Proposed
+Intake entry. Suspended, retired, shared/control and Security-bound owners
+are excluded from this source-only adapter. Independent source-validation
+commands, guidance, CI, application files and historical receipts are preserved.
+Only the profile, its schema, bootstrap profile digest and an exact known
+legacy validator can change. Unknown custom validators block migration rather
+than being overwritten. No workflow-write permission is granted.
+
+Source landing may use source-validation evidence alone when the reviewed
+profile explicitly declares application verification unconfigured or manual.
+Legacy profiles retain their prior tests and validations. Explicit conformance
+cases remain required; a matching source-control fidelity cannot cover an
+application case. Operating acceptance still needs its actual test/behavior
+evidence, including real operator-observed manual results where applicable.
+Use the existing Delivery completion evidence/review or prototype acceptance
+path; do not turn a checklist, a passing source validator, a missing suite or
+a skipped command into application acceptance or a not-applicable result.
+Supported Platform release tiers and security gates remain independently
+required. Portfolio publication remains separate from production approval.

@@ -59,7 +59,10 @@ HTTP `201`. Reusing an ID for different content is rejected.
 ## Resolve A Pending Repository Gate
 
 Repository Control reads the current canonical Proposal and retained successful
-Repository custody requests. The operator selects a successful request and
+Repository custody requests created or explicitly attached for this exact
+requirement. Existing work repository reuse belongs to the earlier Disposition
+choice; a manually created repository for new work may be attached from the
+request. The operator reviews the matching successful create or link result and
 reviews its exact provider identity and receipt before submitting
 `POST /v1/proposals/{proposal_id}/repository-resolution`. Only the authenticated
 Console caller is admitted; caller/operator binding and the current accepted

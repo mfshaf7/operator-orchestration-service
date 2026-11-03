@@ -63,7 +63,7 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
           : ["applying", "apply-unknown"].includes(attempt?.state) ? "owner-bootstrap-recovery-required"
             : !record.resources ? "owner-bootstrap-authorization-and-start-required" : "owner-bootstrap-draft-acceptance-required";
     return { schema_version: 1, workflow_id: "repository-owner-bootstrap", request_id: record.request.request_id,
-      owner_repo: record.binding.owner_repo, state: record.state, revision: record.updated_at,
+      owner_repo: record.binding.owner_repo, ...(record.request.preparation_input.operation === "configure-verification" ? { operation: "configure-verification" } : {}), state: record.state, revision: record.updated_at,
       created_at: record.created_at, updated_at: record.updated_at, session_id: record.session?.session_id ?? null,
       source_intent_ref: record.source_intent_ref ?? null, source_start_digest: record.binding.source_start_digest,
       next_action: { code: detailed ? code : "owner-bootstrap-inspect-original-request", authority: "operator-orchestration-service" },
@@ -94,6 +94,7 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
       if (store.pendingForOwner(request.preparation_input.owner_repo)) throw fail("owner_request_pending", "Recover the existing pending owner-bootstrap request before creating another.");
       const preparation = await preparationService.prepare({ callerId, operatorId, input: request.preparation_input });
       if (preparation.preparation_digest !== request.expected_preparation_digest) throw fail("preparation_stale", "Current proposed owner or provider source differs from the preparation reviewed by this operator.");
+      if (request.preparation_input.operation === "configure-verification" && !preparation.plan?.source_change_required) throw fail("verification_unchanged", "The verification plan is unchanged; inspect the current setup without creating a source request.");
       const session = preparation.plan ? bootstrapSourceSession({ requestDigest, requestId: request.request_id, callerId, operatorId,
         preparation, workflowApprovalRef: request.workflow_approval_ref }) : null;
       if (!session && request.workflow_approval_ref !== null) throw fail("request_invalid", "An existing-controls inspection cannot request an unused workflow credential.");
@@ -102,6 +103,7 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
         binding: { owner_repo: request.preparation_input.owner_repo }, preparation_ref: store.writeArtifact(request.request_id, preparation) };
       if (session) identityMetadata = await run(metadata, null, () => sourceExecutor.bootstrapSource.inspectSourceCredentialBinding({ owner_repo: session.owner_repo, session, plan: preparation.plan }));
       const binding = { owner_repo: request.preparation_input.owner_repo, provider_repository: preparation.owner_authority.provider_repository,
+        ...(preparation.operation === "configure-verification" ? { operation: preparation.operation, inventory_entry_ref: preparation.owner_authority.inventory_entry_ref } : {}),
         intake_entry_ref: preparation.owner_authority.intake_entry_ref, preparation_digest: preparation.preparation_digest,
         source_start_digest: canonicalDigest({ request_digest: requestDigest, preparation_digest: preparation.preparation_digest }),
         source_identity: identityMetadata };

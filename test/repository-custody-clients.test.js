@@ -289,3 +289,27 @@ test("provider client rejects unsupported and oversized provider responses", asy
     (error) => error.code === "repository_provider_response_too_large",
   );
 });
+
+test("repository coordinate lookup uses read identity and GET only without claiming custody",async()=>{
+ const calls=[];
+ const client=createGitHubRepositoryProviderClient({clock:TEST_CLOCK,readInstallationToken:"read-only-token",provisioningInstallationToken:"create-token",
+  fetchImpl:async(url,init)=>{calls.push({url,init});return Response.json({id:123456789,owner:{login:"example-org"},name:"manual-source",html_url:"https://github.com/example-org/manual-source",visibility:"private",archived:false});}});
+ const result=await client.lookup({owner:"example-org",name:"manual-source"});
+ assert.equal(result.provider_repository_id,"123456789");assert.equal(result.canonical_url,"https://github.com/example-org/manual-source");
+ assert.equal(calls.length,1);assert.equal(calls[0].init.method,"GET");assert.equal(calls[0].init.redirect,"error");
+ assert.equal(calls[0].init.headers.Authorization,"Bearer read-only-token");assert.doesNotMatch(JSON.stringify(result),/token|receipt|approved/);
+ for(const input of [{owner:"https://bad.test",name:"repo"},{owner:"org",name:"../repo"},{owner:"org",name:"repo.git"}])
+  await assert.rejects(client.lookup(input),{code:"repository_provider_lookup_invalid"});
+ assert.equal(calls.length,1);
+});
+for(const failure of ["foreign-id","redirected-owner","unsafe-url","oversized","denied","not-found"]){
+ test(`repository lookup rejects ${failure} metadata`,async()=>{
+  const body={id:123456789,owner:{login:"example-org"},name:"manual-source",html_url:"https://github.com/example-org/manual-source",visibility:"private"};
+  if(failure==="foreign-id")body.id="R_graphql";
+  if(failure==="redirected-owner")body.owner.login="other-org";
+  if(failure==="unsafe-url")body.html_url="https://other.test/repo";
+  const client=createGitHubRepositoryProviderClient({readInstallationToken:"read-only-token",fetchImpl:async()=>failure==="oversized"?
+    new Response("x",{headers:{"content-length":"262145"}}):Response.json(body,{status:failure==="denied"?403:failure==="not-found"?404:200})});
+  await assert.rejects(client.lookup({owner:"example-org",name:"manual-source"}));
+ });
+}

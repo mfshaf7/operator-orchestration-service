@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { validateDeliveryArtEvidenceProfile } from "../delivery-art/review-evidence-acquisition.js";
 import { HttpError } from "../errors.js";
+import { applicationVerificationState, sourceControlEvidenceProfile } from "../delivery-art/application-verification.js";
 
 const ROOT = new URL("../../templates/source-owner-bootstrap/", import.meta.url);
 const PROFILE = "contracts/delivery-art-work-session/evidence-profile.json";
@@ -13,12 +14,14 @@ const ASSETS = Object.freeze({ "AGENTS.md": "AGENTS.md.template", "README.md": "
   Makefile: "Makefile.template", ".gitignore": "gitignore.template", "scripts/validate_owner.py": "validate_owner.py.template",
   "tests/test_owner_bootstrap.py": "test_owner_bootstrap.py.template", [CI]: "validate.yaml.template",
   ".github/CODEOWNERS": "CODEOWNERS.template", ".github/pull_request_template.md": "pull_request_template.md.template" });
+const legacyValidator = readFileSync(new URL("validate_owner.legacy.py.template", ROOT), "utf8");
 const reviewGuidelines = readFileSync(new URL("review-guidelines.md.template", ROOT), "utf8");
 const schemaText = readFileSync(new URL(`../../${SCHEMA}`, import.meta.url), "utf8");
 const assets = Object.fromEntries(Object.entries(ASSETS).map(([target, asset]) => [target, readFileSync(new URL(asset, ROOT), "utf8")]));
 export const SOURCE_OWNER_BOOTSTRAP_TEMPLATE = Object.freeze({ id: "source-owner-bootstrap-v1", owner_repo: "operator-orchestration-service",
-  digest: canonicalDigest({ id: "source-owner-bootstrap-v1", assets, review_guidelines: reviewGuidelines, evidence_profile_schema: schemaText,
+  digest: canonicalDigest({ id: "source-owner-bootstrap-v1", assets, legacy_validator: legacyValidator, review_guidelines: reviewGuidelines, evidence_profile_schema: schemaText,
     engine: readFileSync(new URL("./scaffold.js", import.meta.url), "utf8") }) });
+export const SOURCE_OWNER_VERIFICATION_PATHS = Object.freeze([PROFILE, SCHEMA, METADATA, "scripts/validate_owner.py"].sort());
 export const SOURCE_OWNER_BOOTSTRAP_PATHS = Object.freeze([...Object.keys(ASSETS), PROFILE, SCHEMA, METADATA].sort());
 const SHA = /^[0-9a-f]{40}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -26,9 +29,9 @@ const fail = message => { throw new HttpError(409, "repository_owner_bootstrap_p
 const byteDigest = value => `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 
 function ownerProfile(value, owner) {
-  const profile = validateDeliveryArtEvidenceProfile(value, owner);
+  const profile = validateDeliveryArtEvidenceProfile(value ?? sourceControlEvidenceProfile(owner), owner);
   const kinds = new Set(profile.commands.map(command => command.kind));
-  if (!kinds.has("tests") || !kinds.has("validations")) {
+  if (applicationVerificationState(profile).mode === "legacy" && (!kinds.has("tests") || !kinds.has("validations"))) {
     fail("Select real owner tests and validations with the applicable evidence fidelity; bootstrap checks are not app evidence.");
   }
   return profile;
@@ -116,6 +119,76 @@ export function assertProposedSourceOwnerAuthority(authority) {
   return structuredClone(authority);
 }
 
+export function assertVerificationSourceOwnerAuthority(authority) {
+  const owner = authority?.owner_repo, entry = authority?.inventory_entry_ref, binding = authority?.provider_repository;
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(owner ?? "") || authority.schema_version !== 1 || authority.classification !== "active" ||
+      authority.inventory_posture !== "active" || authority.intake_entry_ref !== null || authority.source_bootstrap_eligible !== false ||
+      authority.verification_setup_eligible !== true || authority.ordinary_source_eligible !== true || authority.model_writes_allowed !== false ||
+      authority.canonical_mutation !== false || authority.runtime_activation !== false || entry?.id !== `repo:${owner}` ||
+      !Number.isSafeInteger(entry?.version) || entry.version < 1 || !DIGEST.test(entry?.digest ?? "") ||
+      !binding || Object.keys(binding).sort().join(",") !== "full_name,provider,provider_repository_id" || binding.provider !== "github" ||
+      !/^[1-9][0-9]*$/.test(binding.provider_repository_id ?? "") || !Number.isSafeInteger(Number(binding.provider_repository_id)) ||
+      !/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(binding.full_name ?? "")) {
+    fail("Verification changes require exact current active source-only Inventory authority, never a fabricated Proposed identity.");
+  }
+  return authority;
+}
+
+export function assertOwnerSetupAuthority(authority, operation = "bootstrap") {
+  if (operation === "configure-verification") return assertVerificationSourceOwnerAuthority(authority);
+  if (operation !== "bootstrap") fail("Unknown owner setup operation.");
+  return assertProposedSourceOwnerAuthority(authority);
+}
+
+export function planSourceOwnerVerification({ authority, fetchedBase, profile, applicationMarkers, withCi, observedFiles }) {
+  assertVerificationSourceOwnerAuthority(authority);
+  if (!SHA.test(fetchedBase ?? "") || withCi !== false || !Array.isArray(applicationMarkers) || applicationMarkers.length > 48) fail("Verification setup cannot request workflow changes or an unknown provider base.");
+  const existing = inspectExistingSourceOwnerControls({ ownerRepo: authority.owner_repo, fetchedBase, observedFiles });
+  if (!existing || existing.source_change_required) fail("Active verification changes require existing reviewed owner controls.");
+  const selectedProfile = validateDeliveryArtEvidenceProfile(profile, authority.owner_repo);
+  if (applicationVerificationState(selectedProfile).mode === "legacy" || applicationVerificationState(selectedProfile).mode === "unconfigured") fail("Select an explicit manual, automated or mixed application verification plan.");
+  // This workflow edits verification, not independent source or review policy.
+  // Existing commands cannot disappear or change executable behavior silently.
+  for (const before of existing.evidence_profile.commands) {
+    if (before.kind === "tests" && before.scope !== "source-controls") continue;
+    const after = selectedProfile.commands.find(command => command.id === before.id);
+    const { scope: oldScope, ...oldBody } = before;
+    const { scope: newScope, ...newBody } = after ?? {};
+    if (!after || canonicalDigest(oldBody) !== canonicalDigest(newBody) || (oldScope === "source-controls" && newScope !== oldScope)) {
+      fail("Preserve existing owner commands; reviewed verification setup can add checks and classify existing validation, not silently remove or rewrite them.");
+    }
+  }
+  const replacements = { [PROFILE]: `${JSON.stringify(selectedProfile, null, 2)}\n`, [SCHEMA]: schemaText };
+  const validatorPath = "scripts/validate_owner.py";
+  const currentValidator = assets[validatorPath].replaceAll("@@OWNER@@", authority.owner_repo);
+  const knownLegacyValidator = legacyValidator.replaceAll("@@OWNER@@", authority.owner_repo);
+  if (observedFiles[validatorPath] === knownLegacyValidator) replacements[validatorPath] = currentValidator;
+  else if (applicationVerificationState(existing.evidence_profile).mode === "legacy" && applicationVerificationState(selectedProfile).mode === "manual" && observedFiles[validatorPath] !== currentValidator) {
+    fail("Independent owner policy must explicitly support manual verification; its custom validator is preserved.");
+  }
+  if (typeof observedFiles[METADATA] === "string") {
+    let metadata; try { metadata = JSON.parse(observedFiles[METADATA]); } catch { fail("Existing source-bootstrap metadata is invalid; preserve it for owner review."); }
+    if (metadata.owner_repo !== authority.owner_repo) fail("Existing bootstrap metadata belongs to another owner.");
+    replacements[METADATA] = `${JSON.stringify({ ...metadata, evidence_profile_digest: canonicalDigest(selectedProfile),
+      ...(applicationMarkers.length ? { application_markers: applicationMarkers.map(marker).sort() } : {}) }, null, 2)}\n`;
+  }
+  const files = sourceOwnerBootstrapPaths(false).filter(path => observedFiles[path] !== null || Object.hasOwn(replacements, path)).map(path => {
+    const before = observedFiles[path];
+    if (before !== null && (typeof before !== "string" || Buffer.byteLength(before) > 65_536)) fail("Owner verification source must be bounded regular UTF-8.");
+    const content = replacements[path] ?? before;
+    if (typeof content !== "string") fail("Active owner controls must be complete before configuring verification.");
+    return { path, action: before === content ? "unchanged" : before === null ? "create" : "replace", mode: "100644", content,
+      expected_digest: before === null ? null : byteDigest(before), content_digest: byteDigest(content) };
+  });
+  const body = { schema_version: 1, workflow_id: "repository-owner-bootstrap-plan", operation: "configure-verification", owner_repo: authority.owner_repo,
+    provider_repository: structuredClone(authority.provider_repository), intake_entry_ref: null, inventory_entry_ref: structuredClone(authority.inventory_entry_ref),
+    fetched_base: fetchedBase, template: SOURCE_OWNER_BOOTSTRAP_TEMPLATE, evidence_profile_digest: canonicalDigest(selectedProfile),
+    application_markers: [...applicationMarkers], ci_selected: false, requires_workflow_permission: false,
+    source_change_required: files.some(file => file.action !== "unchanged"), files,
+    model_invoked: false, app_import: false, canonical_mutation: false, runtime_activation: false };
+  return { ...body, plan_digest: canonicalDigest(body) };
+}
+
 export function planSourceOwnerBootstrap({ authority, fetchedBase, profile, applicationMarkers, withCi, observedFiles }) {
   assertProposedSourceOwnerAuthority(authority);
   const owner = authority.owner_repo;
@@ -124,7 +197,7 @@ export function planSourceOwnerBootstrap({ authority, fetchedBase, profile, appl
   const selectedProfile = ownerProfile(profile, owner);
   const existing = inspectExistingSourceOwnerControls({ ownerRepo: owner, fetchedBase, observedFiles });
   if (existing && canonicalDigest(existing.evidence_profile) !== canonicalDigest(selectedProfile)) fail("Preserve the actual existing owner evidence profile during control repair.");
-  if (!Array.isArray(applicationMarkers) || applicationMarkers.length < 1 || applicationMarkers.length > 48) fail("Select the real project's bounded application marker files.");
+  if (!Array.isArray(applicationMarkers) || applicationMarkers.length > 48 || (applicationVerificationState(selectedProfile).mode === "legacy" && applicationMarkers.length < 1)) fail("Select the real project's bounded application marker files.");
   const markers = applicationMarkers.map(marker).sort();
   if (new Set(markers).size !== markers.length) fail("Application markers must be unique.");
   const metadata = { schema_version: 1, owner_repo: owner, template: SOURCE_OWNER_BOOTSTRAP_TEMPLATE,

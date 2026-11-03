@@ -811,6 +811,13 @@ export function createProposalWorkflowService({
           !custody.provider_readback?.repository_identity) {
         throw new HttpError(409, "proposal_repository_custody_not_proven", "Resolution requires the exact successful Repository custody receipt and provider readback.");
       }
+      // Historical committed acknowledgements may recover their exact original inputs.
+      // New acknowledgements must fulfil this request, never adopt unrelated custody.
+      if (!replayed && (!["provision-new", "link-existing"].includes(custody.request.action) ||
+          custody.request.correlation?.correlation_id !== resolution.repository_request_ref)) {
+        throw new HttpError(409, "proposal_repository_creation_not_bound",
+          "Create or explicitly attach the repository from this request. An unrelated custody receipt cannot fulfil it.");
+      }
       const owner = custody.request.requested_custody.workspace_owner_ref;
       const repoRef = custody.provider_readback.canonical_url;
       const recordedAt = replayed ? state.repository_resolution.recorded_at : timestampAfter(state.updated_at);
