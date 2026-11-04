@@ -2,6 +2,7 @@
 security_evidence:
   review_areas: [identity, secrets, delivery, runtime]
   reviewed_artifacts:
+    - Dockerfile
     - src/workspace-intake/provider-client.js
     - src/workspace-intake/source-client.js
     - src/workspace-inventory/provider-client.js
@@ -96,6 +97,12 @@ private authority requires no anonymous project probe. Existing non-provider
 entrant classification remains unchanged.
 
 ## Artifact And Deployment Evidence
+
+The runtime image explicitly packages the native record schemas and the finite
+host source helper. The original hosted container smoke check exposed the missing
+schema copy: source tests passed but the API exited while importing its validators.
+The same unmodified API startup smoke is required after correcting packaging;
+the check is not bypassed or replaced by source-only evidence.
 
 The unpublished OOS adapter validates installation-bound WGCF record reads,
 preparation, original-outcome lookup and acceptance. The existing OOS service
