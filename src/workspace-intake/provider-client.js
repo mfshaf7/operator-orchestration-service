@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { intakeError } from "./contracts.js";
+import { assertRepositoryRecordPublication } from "../source-publication-privacy.js";
 
 const SHA = /^[0-9a-f]{40}$/;
 const BRANCH = /^intake\/[0-9a-f]{64}$/;
@@ -12,15 +13,20 @@ export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFi
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(owner) || !/^\d+$/.test(String(repositoryId))) throw intakeError("provider_identity_invalid", "Configure the exact authority repository identity.", 503);
   const prefix = `/repos/${owner}/workspace-governance`;
-  async function request(route, { method = "GET", body, absent = false } = {}) {
+  async function request(route, { method = "GET", body, absent = false, anonymous = false } = {}) {
+    if (anonymous && (method !== "GET" || !/^\/repositories\/[1-9][0-9]*$/.test(route))) {
+      throw intakeError("provider_scope_invalid", "Anonymous reads are confined to exact repository visibility metadata.");
+    }
     let token;
-    try { token = (await readFile(tokenFile, "utf8")).trim(); } catch { throw intakeError("credential_unavailable", "The Platform-issued intake credential is unavailable.", 503); }
-    if (!token.startsWith("ghs_")) throw intakeError("credential_invalid", "Intake requires a Platform-issued installation token.", 503);
+    if (!anonymous) {
+      try { token = (await readFile(tokenFile, "utf8")).trim(); } catch { throw intakeError("credential_unavailable", "The Platform-issued intake credential is unavailable.", 503); }
+      if (!token.startsWith("ghs_")) throw intakeError("credential_invalid", "Intake requires a Platform-issued installation token.", 503);
+    }
     let response;
     try {
       response = await fetchImpl(`${apiBaseUrl}${route}`, {
         method, redirect: "error", signal: AbortSignal.timeout(15000),
-        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
+        headers: { Accept: "application/vnd.github+json", ...(!anonymous ? { Authorization: `Bearer ${token}` } : {}), "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
     } catch { throw intakeError("provider_unavailable", "The intake source provider is unavailable.", 503); }
@@ -45,7 +51,12 @@ export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFi
     if (installation.total_count !== 1 || repositories?.length !== 1 || String(repositories[0].id) !== String(repositoryId) || repositories[0].full_name !== `${owner}/workspace-governance`) {
       throw intakeError("credential_scope_invalid", "The installation token must be restricted to the exact Workspace Governance repository.", 403);
     }
+    return repositories[0];
   }
+  const assertRecordPublication = sourceRepository => assertRepositoryRecordPublication({
+    sourceRepository, readAuthority: assertIdentity,
+    readPublicMetadata: id => request(`/repositories/${id}`, { anonymous: true }), error: intakeError,
+  });
   async function mainRevision() {
     await assertIdentity();
     const body = await request(`${prefix}/git/ref/heads/main`);
@@ -92,11 +103,13 @@ export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFi
     if (content.encoding !== "base64" || Buffer.from(content.content, "base64").toString("utf8") !== preparation.register_text) throw intakeError("branch_conflict", "Existing intake branch content differs from the approved preparation.");
   }
   return {
-    mainRevision, review, findReview,
+    mainRevision, review, findReview, assertRecordPublication,
     async verifyPreparedReview(preparation, value) { await checkPreparedHead(value.head_commit, preparation); },
-    async prepareReview(preparation, { requestId, binding }) {
+    async prepareReview(preparation, { requestId, binding, sourceRepository = null }) {
       if (!BRANCH.test(preparation.branch) || !SHA.test(preparation.base_commit)) throw intakeError("preparation_invalid", "Invalid source preparation.");
       await assertIdentity();
+      // Check before the first blob, tree, commit, branch or PR can publish data.
+      await assertRecordPublication(sourceRepository);
       const existing = await findReview(preparation.branch);
       if (existing) { await checkPreparedHead(existing.head_commit, preparation); return existing; }
       let branch = await request(`${prefix}/git/ref/heads/${preparation.branch}`, { absent: true });

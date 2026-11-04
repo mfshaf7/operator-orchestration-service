@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { instanceSourceProof } from "./fixtures/instance-source-authority.js";
+import { instanceSourceReference } from "../src/instance-records/source-proof.js";
 
 import {
   AgentSourceIdentityError,
@@ -618,4 +620,38 @@ test("Agent source rejects human-authored source and non-human merge authority",
   } finally {
     fixture.cleanup();
   }
+});
+
+
+test("native source registration authorizes real publication with its own reference and no synthetic Git Inventory", async t => {
+  const fixture = setup(); t.after(fixture.cleanup);
+  fixture.session.owner_repo = "canonical-project-key";
+  const repository = { full_name: "mfshaf7-workspace/different-physical-name", id: 123456789 };
+  fixture.writeCredential({ ...fixture.credential, repository: repository.full_name, repository_id: repository.id, installation_id: 172173010 });
+  const providerFixture = provider({ repositoryFullName: repository.full_name, repositoryId: repository.id });
+  let current = instanceSourceProof({ fullName: repository.full_name, repositoryId: String(repository.id) }).source_authority;
+  const reader = ({ ownerRepo }) => ({ owner_repo: ownerRepo, repository, source_authority: current,
+    instance_record: instanceSourceReference(current, "ordinary-source") });
+  let pushes = 0;
+  const adapter = testAdapter(fixture, providerFixture, { repositoryReader: reader, onPush: () => pushes++ });
+  const ready = await adapter.inspectRepositoryAdmission({ session: fixture.session });
+  assert.equal(ready.state, "ready");
+  assert.deepEqual(ready.authority.instance_record, instanceSourceReference(current, "ordinary-source"));
+  assert.equal(ready.authority.inventory_revision, undefined); assert.equal(ready.authority.inventory_digest, undefined);
+  await adapter.prepare({ repoRoot: fixture.repoRoot, session: fixture.session });
+  writeFileSync(path.join(fixture.repoRoot, "source.txt"), "Synthetic internal project source\n");
+  git(fixture.repoRoot, "add", "source.txt"); git(fixture.repoRoot, "commit", "-m", "Synthetic source");
+  providerFixture.setHead(git(fixture.repoRoot, "rev-parse", "HEAD"));
+  const published = await adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session });
+  assert.equal(published.state, "published"); assert.equal(pushes, 1); assert.equal(JSON.stringify(published).includes(TOKEN), false);
+  // Provider checks may outlive an operator's internal registration change.
+  const fetch = providerFixture.fetchImpl;
+  providerFixture.fetchImpl = async (...args) => {
+    const response = await fetch(...args);
+    current = instanceSourceProof({ fullName: repository.full_name, repositoryId: String(repository.id), version: 4 }).source_authority;
+    return response;
+  };
+  const changed = testAdapter(fixture, providerFixture, { repositoryReader: reader, onPush: () => pushes++ });
+  await assert.rejects(changed.publish({ repoRoot: fixture.repoRoot, session: fixture.session }), { code: "agent_source_repository_authority_unavailable" });
+  assert.equal(pushes, 1);
 });

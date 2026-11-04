@@ -1,3 +1,4 @@
+import { extendInstanceInventoryWorkflow, instanceInventoryPageSchema } from "./instance_inventory_openapi_tools.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
@@ -29,6 +30,12 @@ function project(value, name) {
         : project(entry, name),
     ]));
 }
+
+const nativeRequest = project(JSON.parse(readFileSync(new URL("contracts/instance-records/inventory-request.schema.json", root), "utf8")), "InstanceRepositoryInventoryRequest");
+source = upsertOpenApiComponent(source, "InstanceRepositoryInventoryRequest", nativeRequest);
+source = upsertOpenApiComponent(source, "InstanceOperationalRecordReceipt", project(JSON.parse(readFileSync(new URL("contracts/instance-records/receipt.schema.json", root), "utf8")), "InstanceOperationalRecordReceipt"));
+const registrySchema = project(JSON.parse(readFileSync(new URL("contracts/workspace-inventory/registry.schema.json", root), "utf8")), "WorkspaceInventoryRegistry");
+source = upsertOpenApiComponent(source, "InstanceRepositoryRegistryPage", instanceInventoryPageSchema(registrySchema.$defs.record, registrySchema.$defs.candidate));
 
 for (const kind of ["request", "readiness", "mutation", "readback", "receipt"]) {
   const name = `WorkspaceInventory${kind[0].toUpperCase()}${kind.slice(1)}`;
@@ -118,6 +125,7 @@ const schemas = {
     canonical_mutation: { type: "boolean" },
   }),
 };
+extendInstanceInventoryWorkflow(schemas, "WorkspaceInventory", nativeRequest);
 for (const [name, schema] of Object.entries(schemas)) source = upsertOpenApiComponent(source, name, schema);
 
 for (const [schemaName, workflowId, lifecycle] of [
@@ -211,6 +219,7 @@ const lifecycleSchemas = {
     canonical_mutation: { type: "boolean" },
   }),
 };
+extendInstanceInventoryWorkflow(lifecycleSchemas, "WorkspaceInventoryLifecycle", nativeRequest);
 for (const [name, schema] of Object.entries(lifecycleSchemas)) source = upsertOpenApiComponent(source, name, schema);
 
 const input = inputFixture();
@@ -246,7 +255,7 @@ const responses = (success = "200") => ({
 const common = {
   tags: ["Workspace Inventory"],
   security: [{ CallerIdHeader: [], CallerSecretHeader: [] }],
-  description: "Caller-bound active-inventory promotion. OOS prepares and coordinates; WGCF evaluates; only reviewed merged Workspace Governance source is canonical.",
+  description: "Caller-bound active-inventory coordination. Existing Git-backed requests retain reviewed source authority. Internal source-only repository decisions finish from their installation-bound durable record and receipt, with no Git mutation.",
   "x-oos-surface": "workspace-inventory",
   "x-oos-primary-caller": "governance-operations-console",
   "x-oos-owner": "operator-orchestration-service",
@@ -269,6 +278,34 @@ const preparationExample = {
   },
   canonical_mutation: false,
 };
+const statusBinding = object({ provider: { const: "github" }, provider_repository_id: { type: "string", pattern: "^[1-9][0-9]*$" }, full_name: text });
+const statusRow = { oneOf: [
+  object({ record_id: text, version: { type: "integer", minimum: 1 }, record_digest: digest, phase: { const: "intake" }, status: { enum: ["out-of-scope", "proposed", "admitted"] }, provider_repository: statusBinding }),
+  object({ record_id: text, version: { type: "integer", minimum: 1 }, record_digest: digest, phase: { const: "inventory" }, status: { enum: ["active", "suspended", "retired"] }, provider_repository: statusBinding }),
+] };
+source = upsertOpenApiComponent(source, "InstanceRepositoryStatus", { oneOf: [
+  object({ schema_version: { const: 1 }, mode: { const: "not-configured" }, projected_at: date }),
+  object({ schema_version: { const: 1 }, mode: { const: "current" }, authority: object({ kind: { const: "internal-instance-record" }, instance_id: text }),
+    record_ids: { type: "array", minItems: 1, maxItems: 25, uniqueItems: true, items: text },
+    records: { type: "array", maxItems: 25, items: statusRow }, projected_at: date, projection_digest: digest }),
+] });
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/repository-status", { get: { ...common,
+  operationId: "readInternalRepositoryStatuses", summary: "Read current registration for up to 25 selected repositories",
+  description: "Dedicated Console caller only. Exact ordered names are read through one installation-scoped indexed database query. No record-history fanout. Only explicit not-configured permits the retained Git-only view; failed reads never imply absent registrations.",
+  parameters: [{ name: "name", in: "query", required: true, style: "form", explode: true, schema: { type: "array", minItems: 1, maxItems: 25, uniqueItems: true, items: targetName } }],
+  responses: { "200": { description: "Bounded current registration metadata or explicit deployment configuration.", content: { "application/json": { schema: ref("InstanceRepositoryStatus"), example: { schema_version: 1, mode: "not-configured", projected_at: at } } } },
+    ...Object.fromEntries([400,401,403,502,503].map(status => [String(status), { description: "Invalid selector, denied reader or unavailable authority." }])) },
+} });
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/instance-records", { get: { ...common,
+  operationId: "readInternalRepositoryRegistryPage", summary: "Read one bounded page of installation-private repository records",
+  description: "Dedicated Console caller only. Names and project metadata remain inside the installation. Search and inventory/eligible scope run against the database, with explicit continuation and matching aggregate counts. Explicit not-configured is deployment configuration, not a replacement for unavailable authority; outages fail closed. Existing Git Registry remains a separate source.",
+  parameters: [{ name: "after", in: "query", required: false, schema: { type: "string", pattern: "^repo:[a-z0-9][a-z0-9._-]{0,185}$" } },
+    { name: "query", in: "query", required: false, schema: { type: "string", maxLength: 128 } },
+    { name: "scope", in: "query", required: false, schema: { enum: ["inventory", "eligible"], default: "inventory" } }],
+  responses: { "200": { description: "One verified private metadata page, or explicit installation configuration state.",
+    content: { "application/json": { schema: ref("InstanceRepositoryRegistryPage"), example: { schema_version: 1, mode: "not-configured", projected_at: at } } } },
+    ...Object.fromEntries([400,401,403,502,503].map(status => [String(status), { description: "Invalid selector, denied reader or unavailable internal authority." }])) },
+} });
 source = upsertOpenApiPath(source, "/v1/workspace-inventory/registry", { get: {
   ...common,
   operationId: "readWorkspaceInventoryRegistry",

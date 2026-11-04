@@ -3,10 +3,12 @@ import { HttpError } from "../errors.js";
 import { sourceControlEvidenceProfile } from "../delivery-art/application-verification.js";
 import { repositoryCustodyIntakeAuthority } from "../repository-custody/intake-source.js";
 import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, assertOwnerSetupAuthority, planSourceOwnerVerification } from "./scaffold.js";
+import { qualifiedOwnerSource, nativeSourceAuthorityRef } from "./private-source-reader.js";
 
 const fail = (message, status = 409) => { throw new HttpError(status, "repository_owner_bootstrap_preparation_invalid", message); };
 const fields = ["owner_repo", "custody_request_id", "evidence_profile", "application_markers", "with_ci", "decision_ref"];
 const selected = authority => ({
+  ...(authority.canonical_authority?.kind === "internal-instance-record" ? nativeSourceAuthorityRef(authority) : {}),
   ...(authority.inventory_entry_ref ? { inventory_entry_ref: authority.inventory_entry_ref, verification_setup_eligible: authority.verification_setup_eligible } : {}), owner_repo: authority.owner_repo, intake_entry_ref: authority.intake_entry_ref,
   provider_repository: authority.provider_repository, classification: authority.classification,
   inventory_posture: authority.inventory_posture, custody_receipt_digest: authority.custody_receipt_digest,
@@ -16,8 +18,9 @@ const selected = authority => ({
 
 // Stateless preparation, not an accepted source request or permission to mint.
 // Actual source effects will consume a separately approved, retained immutable
-// plan through the existing source executor/credential authority. No model,
-// target checkout, credential, journal write or admission occurs here.
+// plan through the existing source executor/credential authority. Private
+// inspection may use a revoked read token, never a reusable write credential.
+// No model, target checkout, journal write or admission occurs here.
 export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindings, custodySourceReader, intakeSourceClient, sourceReader }) {
   if (typeof custodySourceReader !== "function" || typeof intakeSourceClient?.proposedSourceOwner !== "function" ||
       typeof sourceReader?.inspect !== "function") throw new TypeError("Bootstrap requires canonical custody, proposed Intake and exact provider source readers.");
@@ -37,6 +40,11 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
     return proposed;
   }
   return {
+    async sourceAuthority({ callerId, operatorId, ownerRepo, custodyRequestId, operation = "bootstrap" }) {
+      identity(callerId, operatorId);
+      if (!["bootstrap", "configure-verification"].includes(operation)) fail("Select one supported source inspection operation.", 400);
+      return authorityFor(callerId, ownerRepo, custodyRequestId, operation);
+    },
     async verify({ callerId, operatorId, preparation }) {
       identity(callerId, operatorId);
       const { preparation_digest: digest, ...body } = preparation ?? {};
@@ -62,8 +70,9 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
       // missing, mismatched, active/retired, out of scope or privileged.
       const before = assertOwnerSetupAuthority(await authority(), operation);
       if (before.owner_repo !== input.owner_repo || !/^sha256:[0-9a-f]{64}$/.test(before.custody_receipt_digest ?? "")) fail("The proposed authority does not bind this exact selected custody owner.");
-      const source = await sourceReader.inspect({ providerRepository: before.provider_repository, paths: sourceOwnerBootstrapPaths(input.with_ci) });
-      if (source.visibility !== "public" || source.default_branch !== "main") fail("This adapter qualifies only public synthetic source on main; private/client operation is not qualified.");
+      const source = await sourceReader.inspect({ providerRepository: before.provider_repository, paths: sourceOwnerBootstrapPaths(input.with_ci),
+        ownerAuthority: before, callerId, operatorId, operation });
+      if (!qualifiedOwnerSource(source, before)) fail("Source inspection requires the exact main branch and a verified private-access connection where applicable.");
       const existing = inspectExistingSourceOwnerControls({ ownerRepo: input.owner_repo, fetchedBase: source.fetched_base, observedFiles: source.observed_files });
       if (operation === "configure-verification" && (!existing || existing.source_change_required || input.with_ci !== false)) fail("Active verification requires existing reviewed owner controls and cannot request CI changes.");
       const selectedProfile = input.evidence_profile ?? existing?.evidence_profile ?? sourceControlEvidenceProfile(input.owner_repo);
@@ -83,7 +92,8 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
         owner_authority: selected(before),
         plan, ...(existing && !plan ? { existing_owner_controls: existing,
           next_action: operation === "configure-verification" ? "configure-application-verification" : "admit-existing-owner-controls-no-bootstrap-review" } : {}),
-        authorization: "preparation-only", credential_issued: false, checkout_created: false,
+        authorization: "preparation-only", credential_issued: source.read_credential_issued === true,
+        ...(source.read_credential_issued === true ? { read_authorization: { scope: "trusted-owner-controls", credential_revoked: true } } : {}), checkout_created: false,
         canonical_mutation: false, runtime_activation: false };
       return { ...body, preparation_digest: canonicalDigest(body) };
     },

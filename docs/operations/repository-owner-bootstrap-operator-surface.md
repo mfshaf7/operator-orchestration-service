@@ -1,5 +1,33 @@
 # Repository Owner Bootstrap
 
+## Private repository protection — unpublished maintenance
+
+Operator-approved private-source maintenance is being prepared in an isolated
+owner worktree. Landing Unit `maintenance-private-repository-access`, decision
+`feature_single_landing_unit`. No live activation, visibility change, permission
+grant or source publication is implied by this source preparation.
+
+The current Workspace Governance source repository is public. A custody-backed
+repository's private or unverified provider metadata must not enter its public
+Intake or Inventory blob, commit, branch or PR. The source writers check the exact authority
+visibility and immutable project provider identity before the first publication
+effect, using one shared guard for Intake, Inventory promotion and record updates. Public-source visibility reads carry no authority token. Private or
+unverified source blocks publication and preserves the pending original request.
+Non-provider entrant classification retains its existing route.
+
+Private create/link records can remain visible through the existing protected
+custody store. Full private registration/setup still requires a private canonical
+instance-record destination and separately scoped content-read access. The
+operator-approved private-access goal is not completed by this protective guard.
+The operator chose installation-private operational storage for records of both
+public and private projects, reusing OOS and the existing WGCF database under
+Governance policy. No separate records Git repository or installer is required.
+Legacy source-backed records and pending reviews retain their recorded authority
+until explicit migration; internal receipts must never fabricate a Git merge.
+This route is not yet qualified or activated. No private metadata may be placed
+in public Governance, Console or Studio sources as a workaround. Fresh Security
+review and eventual accepted composition are required before activation.
+
 ## Availability and boundary
 
 This is staged implementation for the existing local `dev-integration`
@@ -22,9 +50,36 @@ authenticated API, not private caller-owned historical state. Bootstrap must
 verify its successful receipt, exact provider identity and selected owner;
 it does not adopt, reopen or mutate the terminal custody request.
 
-The current source adapter qualifies only public synthetic repositories on
-`main`. Private/client source is explicitly unqualified; no visibility change
-or ambient credential fallback occurs. Current proposed or admitted source-only Intake
+The accepted live source adapter qualifies only public synthetic repositories
+on `main`. The unpublished private-source extension reads finite owner controls
+through Platform's protected Source App reader. It verifies the full App
+installation, scopes the temporary read token to one repository and revokes it
+before returning contents. Native preparations honestly report that read-token
+use and successful revocation; they do not imply a reusable source-write token.
+The new synchronous host admission bridge reuses the existing protected
+OOS-to-Platform connection, reads only current source eligibility, and compares
+the exact internal namespace/version against the current accepted Governance
+policy bytes. Only positive legacy proof permits the retained Git reader.
+Ordinary authoring carries an internal record reference rather than a fictitious
+Git revision and rechecks it before push. The unpublished checkout transport
+supports only clone, fetch and exact branch-reference reads. Platform derives
+the repository URL and installation-private managed destination, scopes and
+revokes its read token, and verifies unchanged source/registration. OOS retains
+pre-effect provenance and preserves dirty, branched or unique source. Native
+canonical checkouts and worktrees remain beneath an installation namespace in
+`.worktrees/instance-sources/`; public root owner indexes are unchanged. Isolated
+real-Git tests cover recovery, review, merge and cleanup. These tests do not
+activate the complete operating route.
+No visibility change or ambient credential fallback occurs.
+
+Delivery repository readiness also consumes current active native source
+admission. It sends the exact internal record/version/policy binding to WGCF
+and checks it again before linking. Foreign/stale evidence, suspended admission
+and failed reads block the operation without choosing public Git. This reuses
+the existing receipt and Catalog reference; Catalog record storage and private
+Studio import are outside this first source-only qualification.
+
+Current proposed or admitted source-only Intake
 and absence from active/retired Inventory are mandatory before checkout or
 credential issuance. Ordinary Delivery/Prototype credentials still deny this
 state. Control-plane or Security-bound registration needs its real review,
@@ -57,7 +112,9 @@ the checkpoint or repin contract bundles to bypass a missing Platform refresh.
    normal source preflight still enforces exact applicable case/kind/fidelity
    coverage. Owner-control success is not evidence that an application exists.
 3. Inspect the finite plan and `preparation_digest`. This read-only preparation
-   creates no request journal, checkout, token, admission or runtime. Existing
+   creates no request journal, checkout, admission or runtime. Legacy public
+   inspection issues no token; native private inspection truthfully records its
+   scoped read token and successful revocation. Existing
    README bytes are preserved; independent controls are not overwritten.
    The optional CI validates pull requests at their exact base/head and pushes
    to the qualified `main` branch at their actual before/head. It does not run
@@ -203,3 +260,10 @@ path; do not turn a checklist, a passing source validator, a missing suite or
 a skipped command into application acceptance or a not-applicable result.
 Supported Platform release tiers and security gates remain independently
 required. Portfolio publication remains separate from production approval.
+
+
+Current internal registration status is read in bounded exact-name batches by
+Repo Control and the primary attention queue. This does not change the first
+standalone source-only proof into private Proposal/Studio/Catalog operation.
+Those workflows retain their actual authority until separately migrated;
+private project files must not be copied into public Studio records.

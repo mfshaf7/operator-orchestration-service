@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { inventoryError } from "./contracts.js";
+import { assertRepositoryRecordPublication } from "../source-publication-privacy.js";
 import { inventorySourceFiles, inventorySourceDigest } from "./source-files.js";
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -29,14 +30,14 @@ export function createWorkspaceInventoryGitHubClient({
   }
   const prefix = `/repos/${owner}/workspace-governance`;
 
-  async function request(route, { method = "GET", body, absent = false } = {}) {
+  async function request(route, { method = "GET", body, absent = false, anonymous = false } = {}) {
+    if (anonymous && (method !== "GET" || !/^\/repositories\/[1-9][0-9]*$/.test(route))) throw inventoryError("provider_scope_invalid", "Anonymous reads are confined to exact repository visibility metadata.");
     let token;
-    try {
-      token = (await readFile(tokenFile, "utf8")).trim();
-    } catch {
-      throw inventoryError("credential_unavailable", "The Platform-issued inventory credential is unavailable.", 503);
+    if (!anonymous) {
+      try { token = (await readFile(tokenFile, "utf8")).trim(); }
+      catch { throw inventoryError("credential_unavailable", "The Platform-issued inventory credential is unavailable.", 503); }
+      if (!token.startsWith("ghs_")) throw inventoryError("credential_invalid", "Inventory promotion requires a Platform-issued installation token.", 503);
     }
-    if (!token.startsWith("ghs_")) throw inventoryError("credential_invalid", "Inventory promotion requires a Platform-issued installation token.", 503);
     let response;
     try {
       response = await fetchImpl(`${apiBaseUrl}${route}`, {
@@ -45,7 +46,7 @@ export function createWorkspaceInventoryGitHubClient({
         signal: AbortSignal.timeout(15000),
         headers: {
           Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
+          ...(!anonymous ? { Authorization: `Bearer ${token}` } : {}),
           "X-GitHub-Api-Version": "2022-11-28",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
@@ -87,7 +88,13 @@ export function createWorkspaceInventoryGitHubClient({
         repositories[0].full_name !== `${owner}/workspace-governance`) {
       throw inventoryError("credential_scope_invalid", "The installation token must be restricted to the exact Workspace Governance repository.", 403);
     }
+    return repositories[0];
   }
+
+  const assertRecordPublication = sourceRepository => assertRepositoryRecordPublication({
+    sourceRepository, readAuthority: assertIdentity,
+    readPublicMetadata: id => request(`/repositories/${id}`, { anonymous: true }), error: inventoryError,
+  });
 
   async function mainRevision() {
     await assertIdentity();
@@ -185,7 +192,8 @@ export function createWorkspaceInventoryGitHubClient({
     }
   }
 
-  async function prepareSourceReview(preparation, { requestId, binding, target, action = null }) {
+  async function prepareSourceReview(preparation, { requestId, binding, target, action = null, sourceRepository = null }) {
+    await assertRecordPublication(sourceRepository);
     const lifecycle = action !== null;
     const expectedPrefix = lifecycle ? "inventory-lifecycle/" : "inventory/";
     if (!BRANCH.test(preparation.branch) || !preparation.branch.startsWith(expectedPrefix) ||
@@ -285,16 +293,17 @@ export function createWorkspaceInventoryGitHubClient({
 
   return {
     mainRevision,
+    assertRecordPublication,
     review,
     findReview,
     async verifyPreparedReview(preparation, value) {
       await checkPreparedHead(value.head_commit, preparation);
     },
-    async prepareReview(preparation, { requestId, binding, target }) {
-      return prepareSourceReview(preparation, { requestId, binding, target });
+    async prepareReview(preparation, { requestId, binding, target, sourceRepository = null }) {
+      return prepareSourceReview(preparation, { requestId, binding, target, sourceRepository });
     },
-    async prepareLifecycleReview(preparation, { requestId, binding, target, action }) {
-      return prepareSourceReview(preparation, { requestId, binding, target, action });
+    async prepareLifecycleReview(preparation, { requestId, binding, target, action, sourceRepository = null }) {
+      return prepareSourceReview(preparation, { requestId, binding, target, action, sourceRepository });
     },
     async readMergedFiles(value, inventoryPath, preparation) {
       const result = await readMergedSourceFiles(value, inventoryPath, INTAKE_REGISTER, preparation);

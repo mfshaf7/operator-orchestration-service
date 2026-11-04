@@ -50,10 +50,10 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
       return readCustody(await custody.project(id));
     },
     intakeSourceClient: intakeReader,
-    sourceReader: { inspect: async ({ providerRepository, paths }) => {
+    sourceReader: { inspect: async ({ providerRepository, paths, ownerAuthority }) => {
       calls.push("source"); assert.deepEqual(providerRepository, actualCustody.binding);
       return inspectSource({ fetched_base: "1".repeat(40), visibility: "public", default_branch: "main",
-        observed_files: Object.fromEntries(paths.map(name => [name, name === "README.md" ? "# Actual owner documentation\n" : null])) });
+        observed_files: Object.fromEntries(paths.map(name => [name, name === "README.md" ? "# Actual owner documentation\n" : null])) }, ownerAuthority);
     } },
   });
   const input = { owner_repo: owner, custody_request_id: request.request_id, with_ci: false,
@@ -120,7 +120,25 @@ test("selected Intake changes during provider inspection and unqualified private
   const h = await harness(t, { changeAuthority: (value, count) => { value.intake_entry_ref.version = count; } });
   await assert.rejects(h.service.prepare({ callerId, operatorId, input: h.input }), /changed during preparation/);
   const privateSource = await harness(t, { inspectSource: value => ({ ...value, visibility: "private" }) });
-  await assert.rejects(privateSource.service.prepare({ callerId, operatorId, input: privateSource.input }), /private\/client operation is not qualified/);
+  await assert.rejects(privateSource.service.prepare({ callerId, operatorId, input: privateSource.input }), /verified private-access connection/);
+});
+
+test("native private preparation binds its installation and truthfully records the revoked inspection credential", async t => {
+  const h = await harness(t, { changeAuthority(value) {
+    value.canonical_authority = { kind: "internal-instance-record", instance_id: "synthetic-installation", record_id: value.intake_entry_ref.id };
+    value.record_ref = { version: value.intake_entry_ref.version, digest: value.intake_entry_ref.digest };
+    value.policy_ref = { repo: "workspace-governance", revision: "b".repeat(40), contract_digest: `sha256:${"c".repeat(64)}` };
+  }, inspectSource(value, authority) {
+    return { ...value, visibility: "private", read_scope: "trusted-owner-controls", read_credential_issued: true, read_credential_revoked: true,
+      authority_ref: { canonical_authority: authority.canonical_authority, record_ref: authority.record_ref, policy_ref: authority.policy_ref } };
+  } });
+  const prepared = await h.service.prepare({ callerId, operatorId, input: h.input });
+  assert.equal(prepared.owner_authority.canonical_authority.instance_id, "synthetic-installation");
+  assert.equal(prepared.credential_issued, true);
+  assert.deepEqual(prepared.read_authorization, { scope: "trusted-owner-controls", credential_revoked: true });
+  assert.equal(prepared.checkout_created, false);
+  assert.equal(prepared.canonical_mutation, false);
+  await h.service.verify({ callerId, operatorId, preparation: prepared });
 });
 
 test("active verification loads the actual current plan and requires an exact reviewed change, not re-registration", async t => {

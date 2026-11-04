@@ -287,6 +287,11 @@ export function createPlatformOperationService({
   }
   return {
     catalog, control, get, list, history, submit,
+    async inspectOwnerControls({ callerId, operatorId, input }) {
+      assertOperator(operatorBindings, callerId, operatorId);
+      if (typeof providerClient.inspectOwnerControls !== "function") throw new HttpError(503, "platform_private_source_unavailable", "The protected source reader is not commissioned.");
+      return providerClient.inspectOwnerControls(input);
+    },
     ensureSourceCredential,
     async withSourceLease({ callerId, operatorId, ...scope }) {
       assertOperator(operatorBindings, callerId, operatorId);

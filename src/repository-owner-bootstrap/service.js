@@ -1,4 +1,5 @@
 import { HttpError } from "../errors.js";
+import { qualifiedOwnerSource } from "./private-source-reader.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "../source-authoring/bounded-actions.js";
 import { assertSourceCredentialTimestamp, SOURCE_INTENT_REFERENCE } from "../platform-operation/source-credentials.js";
@@ -274,8 +275,12 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
             : native.source_request_id !== completed.request.request_id) ||
           native.evidence_profile_digest !== (completed.session ? prepared(completed).plan.evidence_profile_digest
             : prepared(completed).existing_owner_controls.evidence_profile_digest)) throw fail("owner_readiness_unproven", "The completed request does not carry its actual canonical owner-controls readback.");
-      const inspected = await sourceReader.inspect({ providerRepository, paths: sourceOwnerBootstrapPaths(true) });
-      if (inspected.visibility !== "public" || inspected.default_branch !== "main") throw fail("owner_readiness_unqualified", "Private/client source readiness is not qualified by the current public route.");
+      const operation = completed.request.preparation_input.operation ?? "bootstrap";
+      const authority = sourceReader.requiresOwnerAuthority ? await preparationService.sourceAuthority({ callerId, operatorId, ownerRepo,
+        custodyRequestId: completed.request.preparation_input.custody_request_id, operation }) : null;
+      const inspected = await sourceReader.inspect({ providerRepository, paths: sourceOwnerBootstrapPaths(true), ownerAuthority: authority,
+        callerId, operatorId, operation });
+      if (!qualifiedOwnerSource(inspected, authority)) throw fail("owner_readiness_unqualified", "Current source readiness requires an exact verified main-branch inspection.");
       const controls = inspectExistingSourceOwnerControls({ ownerRepo, fetchedBase: inspected.fetched_base, observedFiles: inspected.observed_files });
       if (!controls || controls.source_change_required || controls.evidence_profile_digest !== native.evidence_profile_digest) throw fail("owner_controls_changed", "Current actual owner controls differ from the completed proof; reinspect the existing owner for bounded control repair before admission.");
       const body = { schema_version: 1, scope: "source-owner-controls-readiness", owner_repo: ownerRepo,

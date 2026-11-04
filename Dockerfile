@@ -32,6 +32,7 @@ COPY --chown=node:node contracts/delivery-art-lifecycle ./contracts/delivery-art
 COPY --chown=node:node contracts/delivery-art-work-session ./contracts/delivery-art-work-session
 COPY --chown=node:node contracts/delivery-ingress ./contracts/delivery-ingress
 COPY --chown=node:node contracts/governed-ai ./contracts/governed-ai
+COPY --chown=node:node contracts/instance-records ./contracts/instance-records
 COPY --chown=node:node contracts/lifecycle-transition ./contracts/lifecycle-transition
 COPY --chown=node:node contracts/model-profile-request ./contracts/model-profile-request
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration
@@ -52,6 +53,7 @@ COPY --chown=node:node contracts/workspace-inventory ./contracts/workspace-inven
 COPY --chown=node:node contracts/workflow-activity ./contracts/workflow-activity
 COPY --chown=node:node scripts/workspace_intake_source.py ./scripts/workspace_intake_source.py
 COPY --chown=node:node scripts/workspace_inventory_source.py ./scripts/workspace_inventory_source.py
+COPY --chown=node:node scripts/read_instance_source_authority.mjs ./scripts/read_instance_source_authority.mjs
 COPY --chown=node:node src ./src
 COPY --chown=node:node templates/source-owner-bootstrap ./templates/source-owner-bootstrap
 

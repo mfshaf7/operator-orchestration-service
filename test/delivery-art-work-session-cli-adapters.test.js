@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,6 +9,8 @@ import test from "node:test";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { validateDeliveryArtWorkSessionArchitectureSupersessionReceipt } from "../src/delivery-art/work-session.js";
+import { instanceSourceLocation } from "../src/instance-records/source-location.js";
+import { instanceSourceProof } from "./fixtures/instance-source-authority.js";
 
 function git(cwd, args) {
   return String(execFileSync("git", args, {
@@ -22,11 +24,15 @@ function digest(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-test("source realization captures bounded context and commits an exact Agent Gary change set", async () => {
+for (const internal of [false, true]) test(`${internal ? "internally registered" : "legacy"} source realization captures bounded context and commits an exact Agent Gary change set`, async t => {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-source-realization-"));
+  t.after(() => rm(workspaceRoot, { recursive: true, force: true }));
   const remoteRoot = path.join(workspaceRoot, "remote.git");
-  const repoRoot = path.join(workspaceRoot, "owner-repo");
+  const proof = instanceSourceProof({ ownerRepo: "owner-repo" }).source_authority;
+  const location = internal ? instanceSourceLocation(workspaceRoot, proof) : null;
+  const repoRoot = location?.root ?? path.join(workspaceRoot, "owner-repo");
   await mkdir(remoteRoot, { recursive: true });
+  await mkdir(path.dirname(repoRoot), { recursive: true });
   git(remoteRoot, ["init", "--bare"]);
   git(workspaceRoot, ["clone", remoteRoot, repoRoot]);
   git(repoRoot, ["config", "user.email", "operator@example.invalid"]);
@@ -37,8 +43,24 @@ test("source realization captures bounded context and commits an exact Agent Gar
   git(repoRoot, ["branch", "-M", "main"]);
   git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
   const baseCommit = git(repoRoot, ["rev-parse", "HEAD"]);
+  const reads = [];
   const adapter = createDeliveryArtWorkSessionSourceAdapter({
     workspaceRoot,
+    ...(internal ? {
+      sourceLocation: owner => { assert.equal(owner, "owner-repo"); return { ...location, authority: proof }; },
+      sourceGitReader: request => {
+        reads.push(request);
+        assert.equal(request.ownerRepo, "owner-repo");
+        if (request.action === "fetch") { git(repoRoot, ["fetch", "origin", request.branch]); return {}; }
+        assert.equal(request.action, "ref");
+        const output = git(repoRoot, ["ls-remote", "--heads", "origin", `refs/heads/${request.branch}`]);
+        return { remote_commit: output ? output.split(/\s+/)[0] : null };
+      },
+      execFileSyncImpl(command, args, options) {
+        if (command === "git") assert.ok(!args.includes("fetch") && !args.includes("ls-remote"), "native remote reads must use the protected connection");
+        return execFileSync(command, args, options);
+      },
+    } : {}),
     agentSourceIdentity: {
       async prepare({ repoRoot: worktree }) {
         git(worktree, ["config", "user.name", "Agent Gary"]);
@@ -59,6 +81,8 @@ test("source realization captures bounded context and commits an exact Agent Gar
       branch: "feature/1285-source-realization",
     },
   };
+
+  assert.equal((await adapter.resolveBase({ baseRef: "origin/main", ownerRepo: "owner-repo" })).commit, baseCommit);
 
   const beforeCapture = git(repoRoot, ["worktree", "list", "--porcelain"]);
   await assert.rejects(adapter.captureRealizationContext(session), { code: "delivery_art_source_realization_worktree_missing" });
@@ -98,6 +122,11 @@ test("source realization captures bounded context and commits an exact Agent Gar
     /diff --check failed/,
   );
   const worktree = await adapter.resolveWorktree(session);
+  if (internal) {
+    assert.ok(worktree.startsWith(path.join(workspaceRoot, location.worktreePrefix)));
+    assert.ok(reads.some(read => read.action === "fetch" && read.branch === "main"));
+    assert.ok(reads.some(read => read.action === "ref" && read.branch === session.landing_unit.branch));
+  }
   assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "base\n");
   assert.equal(git(worktree, ["status", "--porcelain"]), "");
 

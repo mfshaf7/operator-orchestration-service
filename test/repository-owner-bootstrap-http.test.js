@@ -71,12 +71,15 @@ test("bootstrap OpenAPI DTOs retain strict inputs and separate source-only prepa
     const ajv = new Ajv2020({ strict: false, allErrors: true }); addFormats(ajv);
     return ajv.compile({ $ref: `#/components/schemas/${name}`, components: { schemas: ownerBootstrapSchemas } });
   };
-  for (const [name, example] of [["OwnerBootstrapPreparationInput", ownerBootstrapExamples.input], ["OwnerBootstrapPreparation", ownerBootstrapExamples.preparation],
+  for (const [name, example] of [["OwnerBootstrapPreparationInput", ownerBootstrapExamples.input], ["OwnerBootstrapPreparation", ownerBootstrapExamples.preparation], ["OwnerBootstrapPreparation", ownerBootstrapExamples.nativePreparation],
     ["OwnerBootstrapRequest", ownerBootstrapExamples.request], ["OwnerBootstrapProjection", ownerBootstrapExamples.projection]]) {
     const validator = compile(name);
     assert.equal(validator(example), true, JSON.stringify(validator.errors));
   }
   const input = compile("OwnerBootstrapPreparationInput");
+  const native = structuredClone(ownerBootstrapExamples.nativePreparation);
+  native.read_authorization.credential_revoked = false;
+  assert.equal(compile("OwnerBootstrapPreparation")(native), false);
   assert.equal(input({ ...ownerBootstrapExamples.input, provider_repository: { full_name: "untrusted/substitution" } }), false);
   assert.equal(input({ ...ownerBootstrapExamples.input, token: "not-accepted" }), false);
   const projection = compile("OwnerBootstrapProjection");

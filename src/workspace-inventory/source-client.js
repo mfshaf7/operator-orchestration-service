@@ -253,6 +253,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         requestId: record.request.request_id,
         binding: record.binding_digest,
         target: record.request.target,
+        sourceRepository: record.request.target.kind === "repo" ? record.request.active_record.value.provider_repository ?? null : null,
       });
     },
     async observe(record, assertHeld) {
@@ -310,6 +311,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         binding: record.binding_digest,
         target: record.request.target,
         action: record.request.action,
+        sourceRepository: record.request.target.kind === "repo" && record.request.action === "update" ? record.request.requested_value?.provider_repository ?? null : null,
       });
     },
     async observeLifecycle(record, assertHeld) {

@@ -1,3 +1,5 @@
+import { createInstanceRecordReader } from "../instance-records/client.js";
+import { createInstanceSourceOwnerClient } from "../instance-records/source-authority.js";
 import path from "node:path";
 import { deliveryArtWorkStateRoot } from "../delivery-art/work-session-store.js";
 import { createDeliveryArtSourceExecutorClient } from "../delivery-art/source-executor.js";
@@ -7,6 +9,7 @@ import { intakeManifest } from "../workspace-intake/contracts.js";
 import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 import { HttpError } from "../errors.js";
 import { createPublicBootstrapSourceReader } from "./source-reader.js";
+import { createBootstrapSourceReader } from "./private-source-reader.js";
 import { createRepositoryOwnerBootstrapPreparation } from "./preparation.js";
 import { createRepositoryOwnerBootstrapStore } from "./store.js";
 import { createRepositoryOwnerBootstrapService } from "./service.js";
@@ -34,12 +37,18 @@ export function createRepositoryOwnerBootstrapRuntime({ sourceConfig, intakeConf
       !Object.keys(sourceConfig.callerOperatorBindings ?? {}).length || !intakeConfig?.enabled || typeof custodySourceReader !== "function" ||
       !isWorkspaceOperationRuntimeEnabled(intakeManifest, intakeConfig.profile)) return null;
   if (intakeConfig.profile !== "dev-integration") throw new HttpError(503, "repository_owner_bootstrap_profile_not_admitted", "Bootstrap is confined to the reviewed local dev-integration composition.");
-  const sourceClient = createWorkspaceIntakeSourceClient({ authorityRoot: intakeConfig.authorityRoot, python: intakeConfig.python,
+  const legacySource = createWorkspaceIntakeSourceClient({ authorityRoot: intakeConfig.authorityRoot, python: intakeConfig.python,
     provider: createWorkspaceIntakeGitHubClient({ owner: intakeConfig.owner, repositoryId: intakeConfig.repositoryId, tokenFile: intakeConfig.tokenFile, fetchImpl }) });
+  const instance = intakeConfig.instanceRecords;
+  const sourceClient = instance?.instanceId ? createInstanceSourceOwnerClient({ enabled: instance.enabled, legacy: legacySource,
+    reader: createInstanceRecordReader({ baseUrl: instance.baseUrl, instanceId: instance.instanceId,
+      callerId: intakeConfig.wgcfCallerId, callerSecret: intakeConfig.wgcfCallerSecret, fetchImpl }) }) : legacySource;
+  const publicReader = createPublicBootstrapSourceReader({ fetchImpl });
+  const sourceReader = instance?.instanceId ? createBootstrapSourceReader({ publicReader, platformOperations }) : publicReader;
   const preparations = createRepositoryOwnerBootstrapPreparation({ callerOperatorBindings: sourceConfig.callerOperatorBindings,
-    custodySourceReader, intakeSourceClient: sourceClient, sourceReader: createPublicBootstrapSourceReader({ fetchImpl }) });
+    custodySourceReader, intakeSourceClient: sourceClient, sourceReader });
   const service = createRepositoryOwnerBootstrapService({ callerOperatorBindings: sourceConfig.callerOperatorBindings, preparationService: preparations,
-    sourceReader: createPublicBootstrapSourceReader({ fetchImpl }),
+    sourceReader,
     sourceExecutor: createDeliveryArtSourceExecutorClient({ executorId: sourceConfig.executorId, secret: sourceConfig.executorSecret,
       socketPath: sourceConfig.executorSocketPath, requireSourceLease: true }), platformOperations, enabled: true,
     store: createRepositoryOwnerBootstrapStore({ root: path.join(deliveryArtWorkStateRoot(env), "repository-owner-bootstrap") }) });

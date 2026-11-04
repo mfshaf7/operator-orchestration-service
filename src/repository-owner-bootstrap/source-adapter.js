@@ -11,6 +11,9 @@ import { assertBootstrapSourceSession, bootstrapSourceChangeSet, bootstrapWorktr
 import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, trustedSourceOwnerValidationFiles, planSourceOwnerVerification } from "./scaffold.js";
 import { createCanonicalProposedSourceOwnerReader } from "./authority-reader.js";
 import { createPublicBootstrapSourceReader } from "./source-reader.js";
+import { createConfiguredHostInstanceSourceReader } from "../instance-records/host-source-reader.js";
+import { instanceSourceLocation, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
+import { createHostSourceGitReader } from "../instance-records/host-source-git.js";
 
 const fail = (code, message) => { throw new HttpError(409, `repository_owner_bootstrap_${code}`, message); };
 const environment = { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
@@ -20,14 +23,16 @@ const PROFILE = "contracts/delivery-art-work-session/evidence-profile.json";
 // Only finite trusted controls are executed, in an isolated control snapshot.
 // Existing project files and app commands are never executed by bootstrap.
 export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, stateRoot, env = process.env, execute = execFileSync,
-  authorityReader = null, publicSourceReader = createPublicBootstrapSourceReader(),
+  authorityReader = null, publicSourceReader = createPublicBootstrapSourceReader(), privateGitReader = null,
   identityFactory = options => createConfiguredAgentSourceIdentityAdapter({ env, ...options }) }) {
   if (!path.isAbsolute(workspaceRoot ?? "") || !path.isAbsolute(stateRoot ?? "") || realpathSync(workspaceRoot) !== workspaceRoot) {
     throw new TypeError("Bootstrap requires commissioned real absolute workspace and private executor state paths.");
   }
   const files = createPrivateFileTransactions({ root: stateRoot, failure: (code, message) => new HttpError(409, `repository_owner_bootstrap_${code}`, message) });
   const readAuthority = authorityReader ?? createCanonicalProposedSourceOwnerReader({
-    authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim() || path.join(workspaceRoot, "workspace-governance") });
+    authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim() || path.join(workspaceRoot, "workspace-governance"),
+    instanceReader: createConfiguredHostInstanceSourceReader({ env, execute }) });
+  const privateGit = privateGitReader ?? createHostSourceGitReader({ workspaceRoot, env, execute });
   const git = (root, ...args) => String(execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
     env: environment, encoding: "utf8", timeout: 60_000, maxBuffer: 2_097_152, stdio: ["ignore", "pipe", "pipe"],
   }));
@@ -45,7 +50,8 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
     bootstrapSourceChangeSet(input.plan, session);
     const authority = readAuthority({ ownerRepo: session.owner_repo, providerRepository: input.plan.provider_repository,
       intakeEntryRef: session.subject.intake_entry_ref, inventoryEntryRef: session.subject.inventory_entry_ref ?? null, operation: session.subject.operation ?? "bootstrap" });
-    const root = path.join(workspaceRoot, session.owner_repo);
+    const location = authority.canonical_authority?.kind === "internal-instance-record" ? instanceSourceLocation(workspaceRoot, authority) : null;
+    const root = location?.root ?? path.join(workspaceRoot, session.owner_repo);
     function assertDirectory() {
       regularCheckoutDirectory(root, input.plan.provider_repository);
     }
@@ -81,14 +87,26 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
     const identity = identityFactory({ credentialPurpose: bootstrapCredentialProjection(session.subject),
       bootstrapBoundary: { session, plan: input.plan, readAuthority, assertCommittedSource } });
     const source = createDeliveryArtWorkSessionSourceAdapter({ workspaceRoot, agentSourceIdentity: identity,
-      execFileSyncImpl: execute, worktreeRelativePath: bootstrapWorktreeRelativePath });
+      execFileSyncImpl: execute, worktreeRelativePath: bootstrapWorktreeRelativePath,
+      sourceLocation: owner => owner === session.owner_repo ? location : null,
+      sourceGitReader: ({ action, branch }) => privateGit({ authority: readAuthority({ ownerRepo: session.owner_repo,
+        providerRepository: input.plan.provider_repository, intakeEntryRef: session.subject.intake_entry_ref,
+        inventoryEntryRef: session.subject.inventory_entry_ref ?? null, operation: session.subject.operation ?? "bootstrap" }),
+        operation: session.subject.operation ?? "bootstrap", action, branch }) });
     return { session, root, identity, source, assertDirectory, assertPlan, assertCommittedSource,
+      authority, worktreeRelativePath: sourceWorktreeRelativePath(bootstrapWorktreeRelativePath(session), location),
       ownerRepo: session.owner_repo, sourceRequestId: session.source_request_id,
-      assertAuthority: () => identity.sourceIntentBinding({ session }) };
+      assertAuthority: () => {
+        const current = readAuthority({ ownerRepo: session.owner_repo, providerRepository: input.plan.provider_repository,
+          intakeEntryRef: session.subject.intake_entry_ref, inventoryEntryRef: session.subject.inventory_entry_ref ?? null, operation: session.subject.operation ?? "bootstrap" });
+        identity.sourceIntentBinding({ session }); return current;
+      } };
   }
   async function ensureCheckout({ providerRepository, fetchedBase, paths }, binding) {
     return files.withLock(`canonical-checkout:${binding.ownerRepo}`, async () => {
-      const slot = path.join(stateRoot, `${canonicalDigest({ owner: binding.ownerRepo }).slice(7)}.json`);
+      const native = binding.authority?.canonical_authority?.kind === "internal-instance-record";
+      const slot = path.join(stateRoot, `${canonicalDigest({ owner: binding.ownerRepo,
+        ...(native ? { canonical_authority: binding.authority.canonical_authority } : {}) }).slice(7)}.json`);
       const ownerBinding = { owner_repo: binding.ownerRepo, provider_repository: providerRepository,
         base_commit: fetchedBase, source_request_id: binding.sourceRequestId };
       let record = files.read(slot, "Bootstrap canonical checkout", { maxBytes: 16_384 });
@@ -97,6 +115,38 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
         canonicalDigest(record.binding.provider_repository) === canonicalDigest(providerRepository) && existsSync(binding.root);
       if (record && !sameBinding && !reusable) {
         fail("checkout_request_pending", "Reconcile the original owned checkout request; do not replace its retained identity.");
+      }
+      if (native) {
+        const current = binding.assertAuthority();
+        const operation = binding.session?.subject.operation ?? "bootstrap";
+        const sourceRead = action => privateGit({ authority: current, operation, action, branch: "main", expectedBase: fetchedBase });
+        if ((!record && existsSync(binding.root)) || reusable && !sameBinding) {
+          binding.assertDirectory();
+          if (git(binding.root, "branch", "--show-current").trim() !== "main" || git(binding.root, "status", "--porcelain", "--untracked-files=all").trim()) fail("checkout_source_changed", "Preserve existing owner branches and dirty source.");
+          sourceRead("fetch"); binding.assertAuthority();
+          git(binding.root, "merge", "--ff-only", "origin/main"); binding.assertPlan(binding.root);
+          return;
+        }
+        if (!record) {
+          files.write(slot, { binding: ownerBinding, phase: "reserved", destination_was_absent: true });
+          record = { binding: ownerBinding, phase: "reserved", destination_was_absent: true };
+        }
+        const absent = !existsSync(binding.root) || !lstatSync(binding.root).isSymbolicLink() && readdirSync(binding.root).length === 0;
+        if (absent) sourceRead("clone");
+        else {
+          // Resume only the retained original checkout, preserving all source.
+          const rootInfo = lstatSync(binding.root);
+          if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || rootInfo.uid !== process.getuid()) fail("checkout_collision", "Preserve the changed managed source path.");
+          if (git(binding.root, "branch", "--show-current").trim() !== "main" || git(binding.root, "status", "--porcelain", "--untracked-files=all").trim()) fail("checkout_source_changed", "Preserve dirty, branched or interrupted private source.");
+          sourceRead("fetch");
+          git(binding.root, "remote", "set-url", "origin", `git@github.com:${providerRepository.full_name}.git`);
+        }
+        binding.assertDirectory(); binding.assertAuthority();
+        if (git(binding.root, "rev-parse", "origin/main").trim() !== fetchedBase ||
+            git(binding.root, "status", "--porcelain", "--untracked-files=all").trim()) fail("checkout_source_changed", "The exact private checkout is no longer clean at its selected base.");
+        binding.assertPlan(binding.root);
+        files.write(slot, { binding: ownerBinding, phase: "ready", destination_was_absent: true });
+        return;
       }
       const observed = await publicSourceReader.inspect({ providerRepository: providerRepository, paths });
       if (observed.fetched_base !== fetchedBase || observed.visibility !== "public" || observed.default_branch !== "main") {
@@ -187,9 +237,8 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       if (canonicalDigest(body) !== digest || preparation?.workflow_id !== "repository-owner-bootstrap-preparation" || preparation.plan !== null ||
           !existing || existing.status !== "existing-owner-controls" || existing.source_change_required !== false ||
           input.owner_repo !== existing.owner_repo || !/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/.test(input.bootstrap_request_id ?? "") ||
-          preparation.owner_authority?.owner_repo !== input.owner_repo) fail("existing_controls_invalid", "Use the exact retained non-source existing-owner preparation; no bootstrap PR or credential is needed.");
+          preparation.owner_authority?.owner_repo !== input.owner_repo) fail("existing_controls_invalid", "Use the exact retained existing-owner preparation; no setup commit or source-write session is needed.");
       const providerRepository = preparation.owner_authority.provider_repository, fetchedBase = existing.fetched_base;
-      const root = path.join(workspaceRoot, input.owner_repo);
       const assertAuthority = () => {
         const current = assertProposedSourceOwnerAuthority(readAuthority({ ownerRepo: input.owner_repo, providerRepository,
           intakeEntryRef: preparation.owner_authority.intake_entry_ref }));
@@ -197,7 +246,8 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
             canonicalDigest(current.intake_entry_ref) !== canonicalDigest(preparation.owner_authority.intake_entry_ref)) fail("existing_controls_changed", "Current proposed authority differs from this exact existing-owner preparation.");
         return current;
       };
-      assertAuthority();
+      const authority = assertAuthority();
+      const root = authority.canonical_authority?.kind === "internal-instance-record" ? instanceSourceLocation(workspaceRoot, authority).root : path.join(workspaceRoot, input.owner_repo);
       const assertPlan = repoRoot => {
         const observedFiles = {};
         for (const name of sourceOwnerBootstrapPaths(true)) {
@@ -209,13 +259,14 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
         if (!ready || ready.source_change_required || ready.evidence_profile_digest !== existing.evidence_profile_digest) fail("existing_controls_changed", "The actual existing owner controls changed after operator preparation.");
       };
       await ensureCheckout({ providerRepository, fetchedBase, paths: sourceOwnerBootstrapPaths(true) }, {
-        root, ownerRepo: input.owner_repo, sourceRequestId: input.bootstrap_request_id,
+        root, authority, ownerRepo: input.owner_repo, sourceRequestId: input.bootstrap_request_id,
         assertAuthority, assertDirectory: () => regularCheckoutDirectory(root, providerRepository), assertPlan,
       });
       const receipt = { schema_version: 1, scope: "existing-owner-checkout-only", owner_repo: input.owner_repo,
         source_request_id: input.bootstrap_request_id, provider_repository: structuredClone(providerRepository),
         canonical_commit: fetchedBase, evidence_profile_digest: existing.evidence_profile_digest,
-        source_changed: false, credential_issued: false, review_required: false,
+        source_changed: false, credential_issued: authority.canonical_authority?.kind === "internal-instance-record", review_required: false,
+        ...(authority.canonical_authority?.kind === "internal-instance-record" ? { read_authorization: { scope: "repository-checkout", credential_revoked: true } } : {}),
         app_acceptance: false, inventory_admission: false, runtime_activation: false };
       return { ...receipt, receipt_digest: canonicalDigest(receipt) };
     },
@@ -227,7 +278,7 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       return files.withLock(`owned-worktree:${b.session.session_id}`, async () => {
         const slot = path.join(stateRoot, `worktree-${canonicalDigest(b.session.session_id).slice(7)}.json`);
         const binding = { session_digest: canonicalDigest(b.session), plan_digest: input.plan.plan_digest };
-        const target = path.join(workspaceRoot, bootstrapWorktreeRelativePath(b.session));
+        const target = path.join(workspaceRoot, b.worktreeRelativePath);
         let record = files.read(slot, "Bootstrap source ownership", { maxBytes: 32_768 });
         if (record && canonicalDigest(record.binding) !== canonicalDigest(binding)) fail("resource_binding_invalid", "Retained source ownership belongs to another immutable bootstrap request.");
         if (record?.phase === "retired") fail("resource_closed", "Retired bootstrap source resources cannot be recreated by the old request.");
@@ -292,7 +343,7 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       let resources = input.resources ?? record?.owned?.resources ?? null;
       if (!resources && record?.phase === "creating" && record.original_resources_absent === true) {
         const observed = await b.source.inspectResourceOwnership(b.session);
-        if (observed.path !== null && observed.path !== path.join(workspaceRoot, bootstrapWorktreeRelativePath(b.session))) fail("resource_binding_invalid", "Preserve a worktree outside the exact originally absent destination.");
+        if (observed.path !== null && observed.path !== path.join(workspaceRoot, b.worktreeRelativePath)) fail("resource_binding_invalid", "Preserve a worktree outside the exact originally absent destination.");
         resources = observed.resources.map(resource => ({ ...resource, ownership_provenance: "session-created", retention_class: "retire-on-terminal-close" }));
       }
       const proof = await b.source.inspectPristineSession(b.session);
@@ -303,7 +354,7 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
           resources.some(resource => !["git-worktree", "git-local-branch", "git-remote-branch"].includes(resource.resource_type) ||
             resource.ownership_provenance !== "session-created" || resource.locator?.repo !== b.session.owner_repo ||
             resource.locator?.ownership_marker !== b.session.session_id ||
-            (resource.resource_type === "git-worktree" ? resource.locator.workspace_relative_path !== bootstrapWorktreeRelativePath(b.session)
+            (resource.resource_type === "git-worktree" ? resource.locator.workspace_relative_path !== b.worktreeRelativePath
               : resource.locator.branch !== b.session.landing_unit.branch))) fail("resource_binding_invalid", "Cancellation requires the exact proven source resource set.");
       const result = await b.source.retirePristineSession({ resources, session: b.session });
       const complete = result.outcomes.every(outcome => ["removed", "absent"].includes(outcome.outcome));
@@ -321,12 +372,14 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
           new Set(input.resources.map(resource => resource.resource_type)).size !== 3 ||
           input.resources.some(resource => !types.includes(resource.resource_type) || resource.locator?.repo !== b.session.owner_repo ||
             resource.locator?.ownership_marker !== b.session.session_id ||
-            (resource.resource_type === "git-worktree" ? resource.locator.workspace_relative_path !== bootstrapWorktreeRelativePath(b.session)
+            (resource.resource_type === "git-worktree" ? resource.locator.workspace_relative_path !== b.worktreeRelativePath
               : resource.locator.branch !== b.session.landing_unit.branch) ||
             (resource.resource_type === "git-remote-branch" && resource.locator.remote !== "origin"))) {
         fail("resource_binding_invalid", "Retire only the retained resources of this exact bootstrap session; preserve the durable owner checkout.");
       }
-      git(b.root, "fetch", "origin", "main");
+      if (b.authority.canonical_authority?.kind === "internal-instance-record") privateGit({ authority: b.assertAuthority(),
+        operation: b.session.subject.operation ?? "bootstrap", action: "fetch", branch: "main", expectedBase: merged.merge_commit });
+      else git(b.root, "fetch", "origin", "main");
       if (git(b.root, "rev-parse", "origin/main").trim() !== merged.merge_commit ||
           git(b.root, "branch", "--show-current").trim() !== "main" || git(b.root, "status", "--porcelain", "--untracked-files=all").trim()) {
         fail("canonical_source_changed", "Canonical owner main is not clean at the exact provider merge; preserve source and reconcile this same request.");

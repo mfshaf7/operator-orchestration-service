@@ -3743,6 +3743,33 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
   if (!workspaceInventoryService) {
     throw new HttpError(503, "workspace_inventory_not_active", "Workspace Inventory promotion is not activated.");
   }
+  if (action === "instance-status") {
+    if (caller.id !== "governance-operations-console") throw new HttpError(403, "instance_registry_reader_forbidden", "Private registration status requires the dedicated Console caller.");
+    if (typeof workspaceInventoryService.instanceStatus !== "function") throw new HttpError(503, "instance_registry_unavailable", "The internal registration status protocol is unavailable.");
+    const parameters = new URL(request.url, "http://localhost").searchParams;
+    const names = parameters.getAll("name");
+    if ([...parameters.keys()].some(key => key !== "name") || names.length < 1 || names.length > 25 || names.some(name => !/^[a-z0-9][a-z0-9._-]{0,185}$/.test(name)) ||
+        [...new Set(names)].sort().join("\0") !== names.join("\0")) throw new HttpError(400, "instance_registry_query_invalid", "Select at most 25 exact ordered repository names.");
+    const result = await workspaceInventoryService.instanceStatus({ callerId: caller.id, input: { names } });
+    sendSourceProjection(response, request, result, () => ({ recordRef: `oos://workspace-inventory/repository-status?${parameters}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at }));
+    return;
+  }
+  if (action === "instance-registry") {
+    if (caller.id !== "governance-operations-console") throw new HttpError(403, "instance_registry_reader_forbidden", "Installation-private registry metadata requires the dedicated Console caller.");
+    if (typeof workspaceInventoryService.instanceRegistry !== "function") throw new HttpError(503, "instance_registry_unavailable", "The internal registry protocol is unavailable.");
+    const parameters = new URL(request.url, "http://localhost").searchParams;
+    const keys = [...parameters.keys()];
+    if (new Set(keys).size !== keys.length || keys.some(key => !["after", "query", "scope"].includes(key))) {
+      throw new HttpError(400, "instance_registry_query_invalid", "Select one bounded internal registry page.");
+    }
+    const result = await workspaceInventoryService.instanceRegistry({ callerId: caller.id, input: Object.fromEntries(parameters) });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: `oos://workspace-inventory/instance-records?${parameters.toString()}`,
+      sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result), sourceTimestamp: result.projected_at,
+    }));
+    return;
+  }
   if (action === "registry") {
     const result = await workspaceInventoryService.registry({ callerId: caller.id });
     sendSourceProjection(response, request, result, () => ({
@@ -6208,6 +6235,14 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/repository-status") {
+        await handleWorkspaceInventory({ action: "instance-status", config, workspaceInventoryService, request, response });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/instance-records") {
+        await handleWorkspaceInventory({ action: "instance-registry", config, workspaceInventoryService, request, response });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/registry") {
         await handleWorkspaceInventory({ action: "registry", config, workspaceInventoryService, request, response });
         return;

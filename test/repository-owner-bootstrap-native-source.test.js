@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import path from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
+import { instanceSourceLocation } from "../src/instance-records/source-location.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "../src/delivery-art/agent-source-identity.js";
 import { createRepositoryOwnerBootstrapSourceAdapter } from "../src/repository-owner-bootstrap/source-adapter.js";
@@ -18,7 +19,7 @@ const repository = `mfshaf7-workspace/${owner}`;
 const nativeGit = (root, ...args) => String(execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args],
   { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 })).trim();
 
-function harness(t, { existingControls = false, repairControls = false } = {}) {
+function harness(t, { existingControls = false, repairControls = false, privateRegistration = false } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-native-owner-bootstrap-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const workspaceRoot = path.join(root, "workspace"); mkdirSync(workspaceRoot);
@@ -38,6 +39,12 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
     provider_repository: { provider: "github", provider_repository_id: "123456789", full_name: repository },
     owner_purpose: "Synthetic source-only project; no control or runtime authority.",
     source_bootstrap_eligible: true, ordinary_source_eligible: false, model_writes_allowed: false, canonical_mutation: false, runtime_activation: false };
+  if (privateRegistration) Object.assign(authority, {
+    canonical_authority: { kind: "internal-instance-record", instance_id: "synthetic-installation", record_id: `repo:${owner}` },
+    record_ref: { version: authority.intake_entry_ref.version, digest: authority.intake_entry_ref.digest },
+    policy_ref: { repo: "workspace-governance", revision: "b".repeat(40), contract_digest: `sha256:${"c".repeat(64)}` },
+    validation_behavior: { posture: "covered-by-owner-repo", wgcf_graph_role: "product-runtime-source" },
+  });
   const profile = { schema_version: 1, owner_repo: owner, profile_id: "native-bootstrap-selected-profile-v1", commands: [
     { id: "tests", kind: "tests", name: "Actual selected app tests", executable: "node", args: ["app/test.mjs"], fidelity: "pure-unit", conformance_binding: "matching-fidelity", timeout_seconds: 30 },
     { id: "validations", kind: "validations", name: "Actual diff validation", executable: "git", args: ["diff", "--check"], fidelity: "real-git", conformance_binding: "none", timeout_seconds: 30 },
@@ -53,7 +60,7 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
     writeFileSync(path.join(providerRoot, "AGENTS.md"), repairControls ? "Independent existing owner controls; preserve these.\n"
       : seed.files.find(file => file.path === "AGENTS.md").content.replace(/^# .* owner guidance/, "# Independent existing owner guidance"));
     writeFileSync(path.join(providerRoot, "Makefile"), "validate:\n\t@false # Independent project commands must never run during host bootstrap proof\n");
-    if (repairControls) { authority.classification = "admitted"; authority.intake_entry_ref.version = 2; }
+    if (repairControls) { authority.classification = "admitted"; authority.intake_entry_ref.version = 2; if (privateRegistration) authority.record_ref.version = 2; }
     nativeGit(providerRoot, "add", "."); nativeGit(providerRoot, "commit", "-m", "fixture: independent existing owner controls");
     base = nativeGit(providerRoot, "rev-parse", "HEAD");
   }
@@ -63,7 +70,9 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
   const body = { schema_version: 1, workflow_id: "repository-owner-bootstrap-preparation", caller_id: "console", operator_id: "operator:fixture",
     decision_ref: "operator:fixture-bootstrap", custody_request_id: "custody:fixture", custody_receipt_digest: `sha256:${"b".repeat(64)}`,
     plan, owner_authority: authority, ...(existingControls ? { existing_owner_controls: inspectExistingSourceOwnerControls({ ownerRepo: owner, fetchedBase: base, observedFiles }) } : {}),
-    authorization: "preparation-only", credential_issued: false, checkout_created: false, canonical_mutation: false, runtime_activation: false };
+    authorization: "preparation-only", credential_issued: privateRegistration,
+    ...(privateRegistration ? { read_authorization: { scope: "trusted-owner-controls", credential_revoked: true } } : {}),
+    checkout_created: false, canonical_mutation: false, runtime_activation: false };
   const preparation = { ...body, preparation_digest: canonicalDigest(body) };
   const session = existingControls ? null : bootstrapSourceSession({ requestDigest: `sha256:${"c".repeat(64)}`, requestId: "bootstrap-request:native-fixture",
     callerId: "console", operatorId: "operator:fixture", preparation });
@@ -80,7 +89,7 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
     token: "synthetic-private-bootstrap-token", token_expires_at: new Date(Date.now() + 3600000).toISOString() };
     writeFileSync(path.join(slot, "credential.json"), JSON.stringify(credential), { mode: 0o600 });
   }
-  const calls = { clones: 0, pushes: 0, providerWrites: 0, authority: 0, identityFactories: 0 };
+  const calls = { clones: 0, privateReads: 0, pushes: 0, providerWrites: 0, authority: 0, identityFactories: 0 };
   let loseWorktreeAck = false;
   let pullRequest = null, approvedHead = null, humanReviewer = contract.identity.human_reviewer_id;
   const execute = (executable, argv, options) => {
@@ -149,7 +158,20 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
     if (route === `/repos/${repository}/pulls/1/requested_reviewers`) { calls.providerWrites++; return response({}); }
     assert.fail(`Unexpected provider route ${route}`);
   };
-  const adapter = createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, stateRoot: path.join(root, "private-checkout-state"), execute,
+  const canonicalRoot = privateRegistration ? instanceSourceLocation(workspaceRoot, authority).root : path.join(workspaceRoot, owner);
+  const privateGitReader = privateRegistration ? ({ authority: current, action, branch, expectedBase }) => {
+    assert.deepEqual(current.canonical_authority, authority.canonical_authority);
+    calls.privateReads++;
+    if (action === "clone") {
+      mkdirSync(path.dirname(canonicalRoot), { recursive: true, mode: 0o700 });
+      execute("git", ["clone", "--template=", "--single-branch", "--branch", "main", "--", providerRoot, canonicalRoot], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      nativeGit(canonicalRoot, "remote", "set-url", "origin", `git@github.com:${repository}.git`);
+    } else if (action === "fetch") nativeGit(canonicalRoot, "fetch", providerRoot, `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
+    const remote = nativeGit(providerRoot, "ls-remote", providerRoot, `refs/heads/${branch}`).split(/\s+/)[0] || null;
+    if (expectedBase) assert.equal(remote, expectedBase);
+    return { remote_commit: remote, read_credential_issued: true, read_credential_revoked: true };
+  } : null;
+  const adapter = createRepositoryOwnerBootstrapSourceAdapter({ privateGitReader, workspaceRoot, stateRoot: path.join(root, "private-checkout-state"), execute,
     authorityReader: readAuthority,
     publicSourceReader: { async inspect() { providerReadHook?.(); return { fetched_base: base, visibility: "public", default_branch: "main", observed_files: observedFiles }; } },
     identityFactory: options => {
@@ -158,7 +180,7 @@ function harness(t, { existingControls = false, repairControls = false } = {}) {
       return createAgentSourceIdentityAdapter({ ...options, enabled: true, credentialRoot, execFileSyncImpl: execute, fetchImpl });
     },
   });
-  return { adapter, input, calls, workspaceRoot, providerRoot, session, plan, readAuthority,
+  return { adapter, input, calls, workspaceRoot, providerRoot, session, plan, readAuthority, canonicalRoot,
     setEligible(value) { eligible = value; }, setProviderReadHook(value) { providerReadHook = value; },
     setHumanReviewer(value) { humanReviewer = value; }, setApprovedHead(value) { approvedHead = value; },
     loseWorktreeAcknowledgement() { loseWorktreeAck = true; } };
@@ -289,4 +311,41 @@ test("cancelling after a lost worktree acknowledgement retires only the original
   const result = await h.adapter.retirePristineResources({ ...h.input, resources: null });
   assert.equal(result.complete, true); assert.equal(h.calls.clones, 1);
   assert.equal(nativeGit(path.join(h.workspaceRoot, owner), "branch", "--format=%(refname:short)"), "main");
+});
+
+
+test("internal private bootstrap uses managed source, recovers its worktree, and completes Gary review/merge/cleanup without a public root owner", async t => {
+  const h = harness(t, { privateRegistration: true });
+  h.loseWorktreeAcknowledgement();
+  await assert.rejects(h.adapter.ensureOwnedWorktree(h.input), /Synthetic process loss/);
+  const owned = await h.adapter.ensureOwnedWorktree(h.input);
+  assert.equal(h.calls.clones, 1);
+  assert.ok(owned.path.includes("/.worktrees/instance-sources/"));
+  assert.equal(existsSync(path.join(h.workspaceRoot, owner)), false);
+  const source = await h.adapter.applySourceRealization({ ...h.input, change_set: bootstrapSourceChangeSet(h.plan, h.session) });
+  assert.match(source.author, /^Agent Gary </);
+  const published = await h.adapter.publishAgentSource(h.input);
+  const bound = { ...h.input, resources: owned.resources, expected_pull_request: { url: published.pull_request.url, head_commit: source.head_commit } };
+  await h.adapter.approvePullRequest(bound);
+  const merged = await h.adapter.mergePullRequest(bound);
+  const closed = await h.adapter.retireSourceResources(bound);
+  assert.equal(closed.complete, true);
+  assert.equal(nativeGit(h.canonicalRoot, "rev-parse", "HEAD"), merged.merge_commit);
+  assert.equal(existsSync(owned.path), false);
+  assert.ok(h.calls.privateReads > 2);
+  assert.equal(existsSync(path.join(h.workspaceRoot, owner)), false);
+});
+
+test("internal existing-owner checkout reports revoked read access and requires no source-write session", async t => {
+  const h = harness(t, { privateRegistration: true, existingControls: true });
+  const receipt = await h.adapter.materializeExistingOwner(h.input);
+  assert.equal(receipt.credential_issued, true);
+  assert.deepEqual(receipt.read_authorization, { scope: "repository-checkout", credential_revoked: true });
+  assert.equal(receipt.source_changed, false); assert.equal(h.calls.identityFactories, 0); assert.equal(h.calls.pushes, 0);
+  assert.equal(existsSync(path.join(h.workspaceRoot, owner)), false);
+  assert.equal(nativeGit(h.canonicalRoot, "rev-parse", "HEAD"), receipt.canonical_commit);
+  assert.deepEqual(await h.adapter.materializeExistingOwner(h.input), receipt);
+  writeFileSync(path.join(h.canonicalRoot, "unique.txt"), "Preserve unique local source\n");
+  await assert.rejects(h.adapter.materializeExistingOwner(h.input), /Preserve dirty/);
+  assert.equal(readFileSync(path.join(h.canonicalRoot, "unique.txt"), "utf8"), "Preserve unique local source\n");
 });
