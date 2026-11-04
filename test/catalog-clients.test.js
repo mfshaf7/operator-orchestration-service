@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { createCatalogBackendClient } from "../src/catalog/http-client.js";
 import { createWgcfRepositoryReadinessClient } from "../src/catalog/wgcf-readiness-client.js";
+import { instanceSourceProof } from "./fixtures/instance-source-authority.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const token = "1234567890abcdef12345678";
@@ -136,6 +137,55 @@ test("WGCF repository readiness is reread and reevaluated before linking", async
   const reevaluation = JSON.parse(calls[1].init.body);
   assert.equal(reevaluation.expected_authority_digest, `sha256:${"c".repeat(64)}`);
   assert.equal(reevaluation.policy_scope, "delivery-catalog-owner-repo");
+});
+
+test("internal registration readiness retains the exact installation and version through issue and fresh linking", async () => {
+  const proof = instanceSourceProof({ ownerRepo: authority().repo_name }).source_authority;
+  const internal = Object.fromEntries(["canonical_authority", "record_ref", "policy_ref"].map(key => [key, proof[key]]));
+  const input = { ...authority(), expected_authority_digest: proof.record_ref.digest, expected_instance_record: internal };
+  const calls = [];
+  const client = createWgcfRepositoryReadinessClient({
+    baseUrl: "http://wgcf.test", callerSecret: "s".repeat(32),
+    async fetchImpl(url, init) {
+      calls.push({ url, init });
+      const body = readinessEnvelope();
+      body.receipt.authority = { record_digest: proof.record_ref.digest, record_ref: internal };
+      return Response.json(body);
+    },
+  });
+  assert.deepEqual(await client.issueCurrent(input), reference());
+  assert.deepEqual(await client.verifyCurrent(reference()), reference());
+  const writes = calls.filter(call => call.init.method === "POST");
+  assert.equal(writes.length, 2);
+  for (const call of writes) {
+    const request = JSON.parse(call.init.body);
+    assert.deepEqual(request.expected_instance_record, internal);
+    assert.equal(request.expected_authority_digest, proof.record_ref.digest);
+  }
+});
+
+test("internal readiness rejects missing, foreign or changed record evidence instead of accepting a legacy result", async () => {
+  const proof = instanceSourceProof({ ownerRepo: authority().repo_name }).source_authority;
+  const internal = Object.fromEntries(["canonical_authority", "record_ref", "policy_ref"].map(key => [key, proof[key]]));
+  for (const mutate of [
+    body => { delete body.receipt.authority.record_ref; },
+    body => { body.receipt.authority.record_ref.canonical_authority.instance_id = "other-installation"; },
+    body => { body.receipt.authority.record_ref.record_ref.version += 1; },
+  ]) {
+    const client = createWgcfRepositoryReadinessClient({
+      baseUrl: "http://wgcf.test", callerSecret: "s".repeat(32),
+      async fetchImpl(_url, init) {
+        const body = readinessEnvelope();
+        body.receipt.authority = { record_digest: proof.record_ref.digest, record_ref: structuredClone(internal) };
+        if (init.method === "POST") mutate(body);
+        return Response.json(body);
+      },
+    });
+    await assert.rejects(client.issueCurrent({ ...authority(), expected_authority_digest: proof.record_ref.digest, expected_instance_record: internal }),
+      error => error.code === "repository_readiness_stale" && error.statusCode === 409);
+    await assert.rejects(client.verifyCurrent(reference()),
+      error => error.code === "repository_readiness_stale" && error.statusCode === 409);
+  }
 });
 
 test("Catalog backend client is fail-closed until its privileged route is configured", async () => {

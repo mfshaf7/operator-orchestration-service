@@ -1,4 +1,5 @@
 import { assertGovernedProductProjection } from "./governed-product-contracts.js";
+import { isIP } from "node:net";
 import { HttpError } from "../errors.js";
 import { assertDevIntegrationProfileProjection } from "./dev-integration-contracts.js";
 import {
@@ -10,12 +11,13 @@ const MAX_RESPONSE_BYTES = 524_288;
 
 export function createPlatformOperationProviderClient({
   allowHttp = false,
+  allowPrivateHttp = false,
   baseUrl,
   callerId,
   callerSecret,
   fetchImpl = globalThis.fetch,
 }) {
-  const target = admittedTarget(baseUrl, allowHttp);
+  const target = admittedTarget(baseUrl, allowHttp, allowPrivateHttp);
   if (
     !target ||
     typeof fetchImpl !== "function" ||
@@ -31,7 +33,7 @@ export function createPlatformOperationProviderClient({
     );
   }
 
-  const request = async (path, { body, method = "GET" } = {}) => {
+  const request = async (path, { body, method = "GET", timeoutMs = 15000 } = {}) => {
     let response;
     try {
       response = await fetchImpl(new URL(path, target), {
@@ -44,7 +46,7 @@ export function createPlatformOperationProviderClient({
         },
         method,
         redirect: "error",
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new HttpError(
@@ -88,6 +90,16 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    async sourceCheckout(input) {
+      return request("/v1/console-operations/source-checkout", { body: input, method: "POST", timeoutMs: 180000 });
+    },
+    async inspectSourceAuthority(input) {
+      return request("/v1/console-operations/source-authority/inspect", { body: input, method: "POST", timeoutMs: 45000 });
+    },
+    async inspectOwnerControls(input) {
+      // A bounded private read, not a command or an operation journal payload.
+      return request("/v1/console-operations/source-controls/inspect", { body: input, method: "POST", timeoutMs: 90000 });
+    },
     async getGovernedProducts(query = {}) {
       return assertGovernedProductProjection(await request(`/v1/console-operations/governed-products?${new URLSearchParams(query)}`));
     },
@@ -137,7 +149,7 @@ export function createPlatformOperationProviderClient({
   };
 }
 
-function admittedTarget(value, allowHttp) {
+function admittedTarget(value, allowHttp, allowPrivateHttp) {
   let target;
   try {
     target = new URL(value);
@@ -149,7 +161,10 @@ function admittedTarget(value, allowHttp) {
   const hostname = target.hostname.toLowerCase();
   const local = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostname);
   const clusterLocal = hostname.endsWith(".svc.cluster.local");
-  if (allowHttp === true && target.protocol === "http:" && (local || clusterLocal)) {
+  const parts = hostname.split(".").map(Number);
+  const privateHost = allowPrivateHttp === true && isIP(hostname) === 4 &&
+    (parts[0] === 10 || parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
+  if (allowHttp === true && target.protocol === "http:" && (local || clusterLocal || privateHost)) {
     return target;
   }
   return null;

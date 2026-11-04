@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { assertInstanceSourceProof, instanceSourceReference } from "../instance-records/source-proof.js";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -634,8 +635,21 @@ export function createAgentSourceIdentityAdapter({
       const repository = resolved?.repository;
       const account = contract.identity.installation_accounts.find((item) =>
         item.login.toLowerCase() === String(repository?.full_name ?? "").split("/")[0].toLowerCase());
-      if (resolved?.owner_repo !== session.owner_repo || !account || !Number.isSafeInteger(repository.id) || repository.id <= 0 ||
-          !COMMIT_PATTERN.test(resolved.inventory_revision ?? "") || !/^sha256:[0-9a-f]{64}$/.test(resolved.inventory_digest ?? "")) throw new Error();
+      if (resolved?.owner_repo !== session.owner_repo || !account || !Number.isSafeInteger(repository.id) || repository.id <= 0) throw new Error();
+      if (resolved.instance_record !== undefined) {
+        const proof = assertInstanceSourceProof({ schema_version: 1, canonical_authority: resolved.source_authority?.canonical_authority,
+          source_authority: resolved.source_authority }, { instanceId: resolved.instance_record.instance_id, ownerRepo: session.owner_repo, operation: "ordinary-source" });
+        const reference = instanceSourceReference(proof, "ordinary-source");
+        if (canonicalDigest(reference) !== canonicalDigest(resolved.instance_record) ||
+            proof.provider_repository.full_name !== repository.full_name || Number(proof.provider_repository.provider_repository_id) !== repository.id ||
+            resolved.inventory_revision !== undefined || resolved.inventory_digest !== undefined ||
+            contract.repositories.some(item => item.id === repository.id || item.full_name.toLowerCase() === repository.full_name.toLowerCase())) throw new Error();
+        const { repository_inventory: _legacyInventory, ...authority } = contract.authority;
+        return { ...contract, identity: { ...contract.identity, installation_id: account.installation_id }, resolved_repository: resolved,
+          authority: { ...authority, instance_record: reference } };
+      }
+      if (resolved.source_authority !== undefined || !COMMIT_PATTERN.test(resolved.inventory_revision ?? "") ||
+          !/^sha256:[0-9a-f]{64}$/.test(resolved.inventory_digest ?? "")) throw new Error();
       return { ...contract, identity: { ...contract.identity, installation_id: account.installation_id },
         resolved_repository: resolved, authority: { ...contract.authority,
           repository_inventory: { ...contract.authority.repository_inventory,
@@ -654,8 +668,10 @@ export function createAgentSourceIdentityAdapter({
         ordinary_source_eligible: false, model_writes_allowed: false, canonical_mutation: false, runtime_activation: false };
       return {
         authority: {
-          inventory_digest: contract.authority.repository_inventory.digest,
-          inventory_revision: contract.authority.repository_inventory.revision,
+          ...(contract.authority.instance_record ? { instance_record: structuredClone(contract.authority.instance_record) } : {
+            inventory_digest: contract.authority.repository_inventory.digest,
+            inventory_revision: contract.authority.repository_inventory.revision,
+          }),
           platform_definition_digest: contract.authority.platform_definition.digest,
           platform_definition_revision: contract.authority.platform_definition.revision,
         },
@@ -819,7 +835,8 @@ export function createAgentSourceIdentityAdapter({
           const fresh = currentContract(session);
           const binding = expectedRepository(fresh, session.owner_repo);
           if (binding.id !== repository.id || binding.full_name !== repository.full_name ||
-              fresh.identity.installation_id !== contract.identity.installation_id) {
+              fresh.identity.installation_id !== contract.identity.installation_id ||
+              canonicalDigest(fresh.authority.instance_record ?? null) !== canonicalDigest(contract.authority.instance_record ?? null)) {
             fail("agent_source_repository_authority_unavailable", "Canonical source admission changed before publication.");
           }
         }

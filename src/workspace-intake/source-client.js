@@ -122,7 +122,8 @@ export function createWorkspaceIntakeSourceClient({ authorityRoot, python = "pyt
     },
     async openReview(record, assertHeld) {
       assertHeld();
-      return provider.prepareReview(record.preparation, { requestId: record.request.request_id, binding: record.binding_digest });
+      return provider.prepareReview(record.preparation, { requestId: record.request.request_id, binding: record.binding_digest,
+        sourceRepository: record.request.target.kind === "repo" ? record.request.requested_record.provider_repository ?? null : null });
     },
     async observe(record, assertHeld) {
       assertHeld();

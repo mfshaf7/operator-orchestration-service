@@ -40,6 +40,12 @@ const activeAuthority = closed({ owner_repo: owner, intake_entry_ref: { type: "n
   source_bootstrap_eligible: no, verification_setup_eligible: { const: true }, ordinary_source_eligible: { const: true },
   model_writes_allowed: no, canonical_mutation: no, runtime_activation: no });
 const authority = { oneOf: [proposedAuthority, activeAuthority] };
+const nativeAuthorityFields = {
+  canonical_authority: closed({ kind: { const: "internal-instance-record" }, instance_id: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }, record_id: { type: "string", pattern: "^repo:[a-z0-9][a-z0-9._-]{0,185}$" } }),
+  record_ref: closed({ version: { type: "integer", minimum: 1 }, digest }),
+  policy_ref: closed({ repo: { const: "workspace-governance" }, revision: commit, contract_digest: digest }),
+};
+const nativeAuthority = { oneOf: [closed({ ...proposedAuthority.properties, ...nativeAuthorityFields }), closed({ ...activeAuthority.properties, ...nativeAuthorityFields })] };
 const command = { schema_version: { const: 1 }, command_id: id, expected_revision: timestamp, requested_at: timestamp };
 const pr = closed({ url: { type: "string", format: "uri" }, head_commit: commit });
 const sourceIntent = { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" };
@@ -70,7 +76,12 @@ export const ownerBootstrapSchemas = {
     application_markers: { type: "array", minItems: 0, maxItems: 48, items: { type: "string" } }, ci_selected: { type: "boolean" },
     requires_workflow_permission: { type: "boolean" }, source_change_required: { type: "boolean" }, files: { type: "array", minItems: 3, maxItems: sourceOwnerBootstrapPaths(true).length, items: file },
     model_invoked: no, app_import: no, canonical_mutation: no, runtime_activation: no, plan_digest: digest }, ["schema_version", "workflow_id", "owner_repo", "provider_repository", "intake_entry_ref", "fetched_base", "template", "evidence_profile_digest", "application_markers", "ci_selected", "requires_workflow_permission", "source_change_required", "files", "model_invoked", "app_import", "canonical_mutation", "runtime_activation", "plan_digest"]),
-  OwnerBootstrapPreparation: closed(preparationFields, Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key))),
+  OwnerBootstrapPreparation: { oneOf: [
+    closed(preparationFields, Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key))),
+    closed({ ...preparationFields, owner_authority: nativeAuthority, credential_issued: { const: true },
+      read_authorization: closed({ scope: { const: "trusted-owner-controls" }, credential_revoked: { const: true } }) },
+      [...Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key)), "read_authorization"]),
+  ] },
   OwnerBootstrapRequest: closed({ schema_version: { const: 1 }, request_id: id, preparation_input: ref("OwnerBootstrapPreparationInput"),
     expected_preparation_digest: digest, workflow_approval_ref: nullable(id), requested_at: timestamp }),
   OwnerBootstrapProjection: closed(projectionFields, basicProjectionFields),
@@ -108,13 +119,19 @@ const preparationBody = { schema_version: 1, workflow_id: "repository-owner-boot
   owner_authority: { ...selectedAuthority, custody_receipt_digest: sha }, plan, authorization: "preparation-only", credential_issued: false,
   checkout_created: false, canonical_mutation: false, runtime_activation: false };
 const preparation = { ...preparationBody, preparation_digest: canonicalDigest(preparationBody) };
+const nativePreparationBody = { ...preparationBody, owner_authority: { ...preparationBody.owner_authority,
+  canonical_authority: { kind: "internal-instance-record", instance_id: "example-installation", record_id: `repo:${ownerName}` },
+  record_ref: { version: selectedAuthority.intake_entry_ref.version, digest: selectedAuthority.intake_entry_ref.digest },
+  policy_ref: { repo: "workspace-governance", revision: base, contract_digest: sha } }, credential_issued: true,
+  read_authorization: { scope: "trusted-owner-controls", credential_revoked: true } };
+const nativePreparation = { ...nativePreparationBody, preparation_digest: canonicalDigest(nativePreparationBody) };
 const request = { schema_version: 1, request_id: "bootstrap-request:documentation-example", preparation_input: input,
   expected_preparation_digest: preparation.preparation_digest, workflow_approval_ref: null, requested_at: now };
 const projection = { schema_version: 1, workflow_id: "repository-owner-bootstrap", request_id: request.request_id, owner_repo: ownerName,
   state: "prepared", revision: now, created_at: now, updated_at: now, session_id: "bootstrap-session:documentation-example", source_intent_ref: null,
   source_start_digest: sha, next_action: { code: "owner-bootstrap-authorization-and-start-required", authority: "operator-orchestration-service" },
   request, binding: {}, source_delivery: {}, draft: null, existing_owner_controls: null, app_acceptance: false, inventory_admission: false, runtime_activation: false };
-export const ownerBootstrapExamples = { input, preparation, request, projection };
+export const ownerBootstrapExamples = { input, preparation, nativePreparation, request, projection };
 const control = { schema_version: 1, command_id: "command:documentation-example", expected_revision: now, requested_at: now };
 const source = "source-intent:documentation-example";
 const errors = Object.fromEntries([400, 401, 403, 404, 409, 413, 502, 503].map(code => [String(code), {

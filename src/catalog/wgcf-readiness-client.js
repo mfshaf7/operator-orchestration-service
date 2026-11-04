@@ -1,4 +1,4 @@
-import { canonicalStringify } from "../delivery-art/canonical-json.js";
+import { canonicalStringify, canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import { createWgcfAuthenticatedJsonTransport } from "../wgcf-transport.js";
 import { assertRepositoryReadinessReference } from "./contracts.js";
@@ -11,6 +11,15 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/;
 
 function invalidResponse(message) {
   return new HttpError(502, "repository_readiness_blocked", message);
+}
+
+function sameInstanceRecord(actual, expected) {
+  if (!actual || typeof actual !== "object" || Array.isArray(actual)) return false;
+  try {
+    return canonicalDigest(actual) === canonicalDigest(expected);
+  } catch {
+    return false;
+  }
 }
 
 function receiptToken(reference) {
@@ -78,6 +87,7 @@ function assertLedgerEnvelope(body, expectedIdentity) {
     receipt.subject?.target_scope !== `repo:${expectedIdentity.repo_name}` ||
     (expectedIdentity.expected_authority_digest &&
       receipt.authority?.record_digest !== expectedIdentity.expected_authority_digest) ||
+    (expectedIdentity.expected_instance_record && !sameInstanceRecord(receipt.authority?.record_ref, expectedIdentity.expected_instance_record)) ||
     (expectedIdentity.receipt &&
       (reference.receipt.uri !== expectedIdentity.receipt.uri ||
         reference.receipt.digest !== expectedIdentity.receipt.digest))
@@ -127,6 +137,7 @@ export function createWgcfRepositoryReadinessClient({
             expected_owner_repo: authority.expected_owner_repo,
             catalog_value_key: authority.catalog_value_key,
             expected_authority_digest: authority.expected_authority_digest,
+            ...(authority.expected_instance_record ? { expected_instance_record: authority.expected_instance_record } : {}),
           }),
           method: "POST",
         }),
@@ -154,12 +165,14 @@ export function createWgcfRepositoryReadinessClient({
             expected_owner_repo: current.receipt.subject.owner_repo,
             catalog_value_key: current.receipt.subject.catalog_value_key,
             expected_authority_digest: current.receipt.authority.record_digest,
+            ...(current.receipt.authority.record_ref?.canonical_authority?.kind === "internal-instance-record" ? { expected_instance_record: current.receipt.authority.record_ref } : {}),
           }),
           method: "POST",
         }),
         {
           ...expectedReference,
           expected_authority_digest: current.receipt.authority.record_digest,
+          ...(current.receipt.authority.record_ref?.canonical_authority?.kind === "internal-instance-record" ? { expected_instance_record: current.receipt.authority.record_ref } : {}),
         },
       );
       return refreshed.reference;

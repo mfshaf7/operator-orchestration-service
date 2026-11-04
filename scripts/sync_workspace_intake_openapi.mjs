@@ -1,3 +1,4 @@
+import { addInstanceIntakeSchemas } from "./instance_intake_openapi_tools.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
@@ -103,6 +104,10 @@ directPage.properties.custody_request_id = { type: "null" };
 directPage.properties.target.properties.kind = { enum: ["product", "component"] };
 directPage.properties.records.items.properties.candidate = ref("WorkspaceIntakeDirectCandidate");
 schemas.WorkspaceIntakeRequestPage = { oneOf: [schemas.WorkspaceIntakeRequestPage, directPage] };
+addInstanceIntakeSchemas(schemas, {
+  nativeRequest: project(JSON.parse(readFileSync(new URL("contracts/instance-records/intake-request.schema.json", root), "utf8")), "InstanceRepositoryIntakeRequest"),
+  nativeReceipt: project(JSON.parse(readFileSync(new URL("contracts/instance-records/receipt.schema.json", root), "utf8")), "InstanceOperationalRecordReceipt"),
+});
 for (const [name, schema] of Object.entries(schemas)) source = upsertOpenApiComponent(source, name, schema);
 const input = inputFixture();
 const example = { schema_version: 1, workflow_id: "workspace-intake", request_id: input.request.request_id, session_ref: input.session_ref, execution_ref: input.execution_ref,
@@ -113,7 +118,7 @@ const responses = (success = "200") => ({
   ...Object.fromEntries([400, 401, 403, 404, 409, 413, 502, 503].map((status) => [String(status), { description: "Bounded validation, authorization, conflict or dependency failure." }])),
 });
 const common = { tags: ["Workspace Intake"], security: [{ CallerIdHeader: [], CallerSecretHeader: [] }],
-  description: "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+  description: "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. Existing source-backed requests require exact reviewed merged-source readback. Internal registrations require their installation-bound durable record and receipt, with no Git review. Cancellation is allowed only before the first internal write attempt; resolve the original outcome afterward.",
   "x-oos-surface": "workspace-intake", "x-oos-primary-caller": "governance-operations-console", "x-oos-owner": "operator-orchestration-service", "x-oos-workflow-family": "workspace-intake" };
 const requestId = { name: "request_id", in: "path", required: true, schema: text };
 const preparationInput = { target: { kind: input.request.target.kind, name: input.request.target.name } };
@@ -140,7 +145,7 @@ const sourceCandidateExample = bindWorkspaceIntakeSourceCandidate({
 });
 source = upsertOpenApiPath(source, "/v1/workspace-intake/preparations", { post: { ...common,
   operationId: "prepareWorkspaceIntake", summary: "Read current canonical bindings for one Workspace Intake target",
-  description: "Caller-bound, non-mutating preparation from current committed Workspace Governance source. This does not accept an operator decision, create workflow state, or authorize canonical mutation.",
+  description: "Caller-bound, non-mutating preparation from its canonical authority. Existing source registrations retain committed Workspace Governance authority; new source-only project registrations use the installation-private operational record and current Governance policy. This does not accept an operator decision, create workflow state, or authorize canonical mutation.",
   requestBody: { description: "One target identity whose current optimistic-concurrency bindings are required.", required: true, content: { "application/json": { schema: ref("WorkspaceIntakePreparationCommand"), example: preparationInput } } },
   responses: {
     "200": { description: "Current canonical bindings; no workflow or authority state was mutated.", content: { "application/json": { schema: ref("WorkspaceIntakePreparation"), example: preparationExample } } },

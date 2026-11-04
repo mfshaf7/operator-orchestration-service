@@ -19,12 +19,13 @@ async function invoke(app, {
   method = "POST",
   body = "{}",
   secret = "test-secret",
+  callerId = caller,
 } = {}) {
   const request = Readable.from([Buffer.from(body)]);
   Object.assign(request, {
     url,
     method,
-    headers: { "x-oos-caller-id": caller, "x-oos-caller-secret": secret },
+    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret },
   });
   let code;
   let output = "";
@@ -84,6 +85,25 @@ test("registry reads require caller-bound identity but not mutation authority", 
   assert.equal(JSON.parse(output).callerId, "registry-reader");
 });
 
+test("private instance Registry listing requires its dedicated Console identity and exact GET selectors", async () => {
+  const calls = [];
+  const service = { instanceRegistry: async args => { calls.push(args); return { schema_version: 1, mode: "not-configured", projected_at: "2026-11-04T01:00:00Z" }; } };
+  const app = createApp({ config: config(), workspaceInventoryService: service });
+  const url = "/v1/workspace-inventory/instance-records?scope=inventory&query=private&after=repo%3Aprevious";
+  assert.equal((await invoke(app, { url, method: "GET", body: "" })).code, 200);
+  assert.deepEqual(calls, [{ callerId: caller, input: { scope: "inventory", query: "private", after: "repo:previous" } }]);
+  for (const suffix of ["&scope=eligible", "&instance_id=other", "&force=true"]) assert.equal((await invoke(app, { url: url + suffix, method: "GET", body: "" })).code, 400);
+  assert.equal((await invoke(app, { url, method: "GET", body: "", secret: "incorrect" })).code, 401);
+  const shared = createApp({ config: config(true), workspaceInventoryService: service });
+  assert.equal((await invoke(shared, { url, method: "GET", body: "" })).code, 403);
+  const other = createApp({ config: loadConfig({ CALLER_ALLOWED_IDS: "registry-reader", CALLER_AUTH_SECRETS_JSON: JSON.stringify({ "registry-reader": "reader-secret" }) }), workspaceInventoryService: service });
+  assert.equal((await invoke(other, { url, method: "GET", body: "", callerId: "registry-reader", secret: "reader-secret" })).code, 403);
+  assert.equal((await invoke(app, { url, method: "POST" })).code, 404);
+  assert.equal(calls.length, 1);
+  const missing = createApp({ config: config(), workspaceInventoryService: {} });
+  assert.equal((await invoke(missing, { url, method: "GET", body: "" })).code, 503);
+});
+
 test("Inventory original-request discovery is caller-bound, GET-only and strict about selectors", async () => {
   const calls = [];
   const list = async input => {
@@ -135,4 +155,19 @@ test("unconfigured runtime, wrong credential and shared-secret fallback cannot i
   assert.equal((await invoke(createApp({ config: config() }))).code, 503);
   assert.equal((await invoke(createApp({ config: config(), workspaceInventoryService: {} }), { secret: "wrong" })).code, 401);
   assert.equal((await invoke(createApp({ config: config(true), workspaceInventoryService: { submit() { throw new Error("must not execute"); } } }))).code, 403);
+});
+
+test("selected private status is Console-only, GET-only and bounded before reading canonical state", async () => {
+  const calls = [], service = { instanceStatus: async args => { calls.push(args); return { schema_version: 1, mode: "not-configured", projected_at: "2026-11-05T01:00:00Z" }; } };
+  const app = createApp({ config: config(), workspaceInventoryService: service });
+  const url = "/v1/workspace-inventory/repository-status?name=first&name=second";
+  assert.equal((await invoke(app, { url, method: "GET", body: "" })).code, 200);
+  assert.deepEqual(calls, [{ callerId: caller, input: { names: ["first", "second"] } }]);
+  for (const query of ["", "?name=second&name=first", "?name=first&name=first", "?name=first&instance_id=foreign"])
+    assert.equal((await invoke(app, { url: "/v1/workspace-inventory/repository-status" + query, method: "GET", body: "" })).code, 400);
+  assert.equal((await invoke(app, { url, method: "POST" })).code, 404);
+  assert.equal((await invoke(app, { url, method: "GET", body: "", secret: "incorrect" })).code, 401);
+  const shared = createApp({ config: config(true), workspaceInventoryService: service });
+  assert.equal((await invoke(shared, { url, method: "GET", body: "" })).code, 403);
+  assert.equal(calls.length, 1);
 });

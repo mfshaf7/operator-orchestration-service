@@ -415,8 +415,17 @@ export function loadConfig(
       wgcfCallerSecret: env.WGCF_WORKSPACE_INTAKE_CALLER_SECRET,
       wgcfImplementationRef: env.WGCF_WORKSPACE_INTAKE_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_WORKSPACE_INTAKE_SERVICE_IDENTITY_REF,
+      instanceRecords: {
+        enabled: parseBoolean(env.OOS_INSTANCE_RECORDS_ENABLED),
+        instanceId: env.OOS_INSTANCE_ID?.trim(),
+        baseUrl: env.WGCF_INSTANCE_RECORDS_BASE_URL ?? env.WGCF_WORKSPACE_INTAKE_BASE_URL,
+      },
     },
     workspaceInventory: {
+      instanceRecords: {
+        enabled: parseBoolean(env.OOS_INSTANCE_RECORDS_ENABLED), instanceId: env.OOS_INSTANCE_ID?.trim(),
+        baseUrl: env.WGCF_INSTANCE_RECORDS_BASE_URL ?? env.WGCF_WORKSPACE_INVENTORY_BASE_URL ?? env.WGCF_WORKSPACE_INTAKE_BASE_URL,
+      },
       enabled: parseBoolean(env.OOS_WORKSPACE_INVENTORY_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_WORKSPACE_INVENTORY_STATE_ROOT,

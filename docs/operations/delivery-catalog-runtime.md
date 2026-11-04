@@ -11,6 +11,17 @@ Repository admission and lifecycle remain outside Catalog. Catalog can link an
 already admitted repository only after OOS proves its referenced WGCF readiness
 decision is still current.
 
+The unpublished internal-registration extension accepts the same operator
+request. OOS resolves current active source-only Inventory and sends WGCF its
+actual installation, record version/digest and policy reference. WGCF checks
+current native eligibility; OOS reevaluates before linking. Stale, suspended,
+foreign or unavailable native authority blocks linking without a public-Git
+fallback. No invented repository rule, Git revision or new application test is
+required. This extends repository admission consumption; it does not migrate
+Catalog storage or activate private Studio import. Existing Git-backed records
+retain their original authority. Normal live operation still requires the
+coordinated batch's accepted source and composition.
+
 ## Operator Sequence
 
 1. Read `GET /v1/delivery-catalog/projection` and retain its `source_revision`.

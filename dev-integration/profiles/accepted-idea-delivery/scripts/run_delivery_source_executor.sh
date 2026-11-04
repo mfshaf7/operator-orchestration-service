@@ -15,7 +15,7 @@ if [[ "${DEVINT_COMPOSITION_ID:-}" == "${REFINEMENT_CATALOG_COMPOSITION_ID}" ]];
   # Reuse the existing Console composition's record cache and acceptance pin.
   # Standalone ART/engineering keeps the original fixed-set source lane.
   platform_repo="$(repo_path platform-engineering)"
-  source_repository_authority="$(python3 - "${platform_repo}/products/governance-operations-console/complete-runtime-policy.yaml" <<'PY'
+  source_repository_configuration="$(python3 - "${platform_repo}/products/governance-operations-console/complete-runtime-policy.yaml" <<'PY'
 from pathlib import Path
 import sys
 import yaml
@@ -24,11 +24,13 @@ root = Path(policy["runtime_state_root"])
 if not root.is_absolute() or policy.get("record_authority", {}).get("enabled") is not True:
     raise SystemExit("refused: composed source admission requires its existing Platform canonical record authority")
 print(root / "record-authority" / "workspace-governance")
+print("true" if policy.get("instance_records", {}).get("enabled") is True else "false")
 PY
 )"
   source_repository_environment=(
     OOS_RECORD_AUTHORITY_FRESHNESS_REQUIRED=true
-    "OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT=${source_repository_authority}"
+    "OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT=${source_repository_configuration%%$'\n'*}"
+    "OOS_INSTANCE_RECORDS_ENABLED=${source_repository_configuration##*$'\n'}"
   )
 fi
 exec env \

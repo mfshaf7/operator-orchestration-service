@@ -16,6 +16,9 @@ import path from "node:path";
 import { canonicalDigest } from "./canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
 import { createCanonicalSourceRepositoryReader } from "./source-repository-admission.js";
+import { createConfiguredHostInstanceSourceReader } from "../instance-records/host-source-reader.js";
+import { instanceSourceLocation, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
+import { createHostSourceGitReader } from "../instance-records/host-source-git.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
   DeliveryArtEvidenceAcquisitionError,
@@ -128,21 +131,27 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   currentDirectory = () => process.cwd(),
   execFileSyncImpl = execFileSync,
   worktreeRelativePath = deliveryArtWorktreeRelativePath,
+  sourceLocation = null,
+  sourceGitReader = null,
   workspaceRoot,
 } = {}) {
   if (!workspaceRoot) {
     throw new Error("workspaceRoot is required");
   }
+  const ownerLocations = new Map();
 
   function canonicalRepo(ownerRepo) {
     if (!/^[a-z0-9][a-z0-9._-]*$/.test(String(ownerRepo))) {
       throw new Error(`Owner repository name is invalid: ${ownerRepo}.`);
     }
-    const repoRoot = path.join(workspaceRoot, ownerRepo);
+    const location = sourceLocation?.(ownerRepo);
+    const repoRoot = location?.root ?? path.join(workspaceRoot, ownerRepo);
+    if (!path.isAbsolute(repoRoot) || !repoRoot.startsWith(`${workspaceRoot}${path.sep}`)) throw new Error("Owner source must stay within its managed workspace.");
     if (!existsSync(repoRoot)) {
       throw new Error(`Owner repository ${ownerRepo} is not present at ${repoRoot}.`);
     }
     command(execFileSyncImpl, ["rev-parse", "--git-dir"], repoRoot);
+    ownerLocations.set(repoRoot, { ownerRepo, location });
     return repoRoot;
   }
 
@@ -155,7 +164,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function expectedWorktreePath(session) {
-    return path.join(workspaceRoot, worktreeRelativePath(session));
+    return path.join(workspaceRoot, sourceWorktreeRelativePath(worktreeRelativePath(session), sourceLocation?.(session.owner_repo)));
   }
 
   function localBranchHead(repoRoot, branch) {
@@ -168,6 +177,11 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function remoteBranchHead(repoRoot, remote, branch) {
+    const bound = ownerLocations.get(repoRoot);
+    if (bound?.location) {
+      if (remote !== "origin" || typeof sourceGitReader !== "function") throw new Error("Private source requires its exact authenticated read connection.");
+      return sourceGitReader({ ownerRepo: bound.ownerRepo, action: "ref", branch }).remote_commit;
+    }
     const output = command(
       execFileSyncImpl,
       ["ls-remote", "--heads", remote, `refs/heads/${branch}`],
@@ -177,6 +191,15 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       return null;
     }
     return output.split(/\s+/)[0] ?? null;
+  }
+
+  function fetchOrigin(repoRoot, branch) {
+    const bound = ownerLocations.get(repoRoot);
+    if (bound?.location) {
+      if (typeof sourceGitReader !== "function") throw new Error("Private source requires its exact authenticated read connection.");
+      return sourceGitReader({ ownerRepo: bound.ownerRepo, action: "fetch", branch });
+    }
+    command(execFileSyncImpl, ["fetch", "origin", branch], repoRoot);
   }
 
   function trackedResource({
@@ -263,11 +286,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         ["check-ref-format", "--branch", branchName(baseRef)],
         repoRoot,
       );
-      command(
-        execFileSyncImpl,
-        ["fetch", "origin", branchName(baseRef)],
-        repoRoot,
-      );
+      fetchOrigin(repoRoot, branchName(baseRef));
     }
     return {
       commit: command(
@@ -1256,7 +1275,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   function mergedIntoBase(repoRoot, commit, baseRef) {
     if (baseRef.startsWith("origin/")) {
-      command(execFileSyncImpl, ["fetch", "origin", branchName(baseRef)], repoRoot);
+      fetchOrigin(repoRoot, branchName(baseRef));
     }
     return optionalCommand(
       execFileSyncImpl,
@@ -1590,12 +1609,36 @@ export function createConfiguredAgentSourceIdentityAdapter({
       ? { repositoryReader: createCanonicalSourceRepositoryReader({
         authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
         python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3",
+        instanceReader: createConfiguredHostInstanceSourceReader({ env }),
       }) }
       : {}),
     ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
       ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }
       : {}),
   });
+}
+
+// Location is a projection of the same current source admission reader used by
+// identity checks; it does not grant source effects or export registration.
+export function createConfiguredSourceLocationResolver({ workspaceRoot, env = process.env }) {
+  const instanceReader = createConfiguredHostInstanceSourceReader({ env });
+  if (instanceReader === null) return null;
+  const read = createCanonicalSourceRepositoryReader({ authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
+    python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3", instanceReader });
+  return ownerRepo => {
+    const current = read({ ownerRepo });
+    return current.source_authority ? { ...instanceSourceLocation(workspaceRoot, current.source_authority), authority: current.source_authority } : null;
+  };
+}
+
+export function createConfiguredSourceGitReader({ workspaceRoot, sourceLocation, env = process.env }) {
+  if (sourceLocation === null) return null;
+  const git = createHostSourceGitReader({ workspaceRoot, env });
+  return ({ ownerRepo, action, branch }) => {
+    const current = sourceLocation(ownerRepo);
+    if (!current?.authority) throw new Error("The private source registration changed its storage authority.");
+    return git({ authority: current.authority, action, branch });
+  };
 }
 
 export function resolveAgentSourceCredentialRoot(env = process.env) {

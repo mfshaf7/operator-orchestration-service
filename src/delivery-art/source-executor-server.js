@@ -5,8 +5,11 @@ import { createDeliveryArtLifecycleSourceAdapter } from "./lifecycle-cli-adapter
 import { createDeliveryArtSourceExecutorServer } from "./source-executor.js";
 import { createPrototypeSourceAdapter } from "../source-authoring/prototype-source-adapter.js";
 import { createRepositoryOwnerBootstrapSourceAdapter } from "../repository-owner-bootstrap/source-adapter.js";
+import { applyHostSourceBinding } from "../instance-records/host-source-binding.js";
 import {
   createConfiguredAgentSourceIdentityAdapter,
+  createConfiguredSourceLocationResolver,
+  createConfiguredSourceGitReader,
   createDeliveryArtWorkSessionSourceAdapter,
 } from "./work-session-cli-adapters.js";
 
@@ -40,14 +43,18 @@ if (existsSync(socketPath)) {
   rmSync(socketPath);
 }
 
-const agentSourceIdentity = createConfiguredAgentSourceIdentityAdapter();
+const sourceEnv = applyHostSourceBinding();
+const agentSourceIdentity = createConfiguredAgentSourceIdentityAdapter({ env: sourceEnv });
+const sourceLocation = createConfiguredSourceLocationResolver({ workspaceRoot, env: sourceEnv });
 const server = createDeliveryArtSourceExecutorServer({
   adapters: {
-    bootstrapSource: createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, stateRoot: path.join(resultStoreRoot, "owner-bootstrap") }),
+    bootstrapSource: createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, env: sourceEnv, stateRoot: path.join(resultStoreRoot, "owner-bootstrap") }),
     prototypeSource: createPrototypeSourceAdapter({ workspaceRoot, agentSourceIdentity }),
     lifecycleSource: createDeliveryArtLifecycleSourceAdapter({ providerId: executorId }),
     workSource: createDeliveryArtWorkSessionSourceAdapter({
       agentSourceIdentity,
+      sourceLocation,
+      sourceGitReader: createConfiguredSourceGitReader({ workspaceRoot, sourceLocation, env: sourceEnv }),
       workspaceRoot,
     }),
   },
