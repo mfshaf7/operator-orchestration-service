@@ -19,6 +19,12 @@ export const workspaceOperationActivation = Object.freeze({
     "32538b651ce50ad549f6268b5e62302b324e17b3a1dcc98fffb6aca49b4d3ceb",
 });
 
+export const workspaceInventoryOperationActivation = Object.freeze({
+  ...workspaceOperationActivation,
+  authorityCommit: "c824d357c05eaa50da5c71180506fba10b8052f1",
+  readinessCommit: "fc522a77ae1fdc267b4e791ac65a4b6a6e1392c6",
+});
+
 function fail(domain) {
   throw new Error(`${domain} operation activation manifest is invalid.`);
 }
@@ -27,8 +33,9 @@ export function assertWorkspaceOperationActivation(manifest, {
   domain,
   readinessContractId,
   readinessManifestPath,
+  activation = workspaceOperationActivation,
 }) {
-  const expected = workspaceOperationActivation;
+  const expected = activation;
   const source = manifest?.source_activation;
   const runtime = manifest?.runtime_activation;
   const authority = source?.authority;

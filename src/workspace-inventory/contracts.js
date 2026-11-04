@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { HttpError } from "../errors.js";
-import { assertWorkspaceOperationActivation } from "../workspace-operation-activation.js";
+import { assertWorkspaceOperationActivation, workspaceInventoryOperationActivation } from "../workspace-operation-activation.js";
 
 const root = new URL("../../contracts/workspace-inventory/", import.meta.url);
 export const inventoryManifest = JSON.parse(readFileSync(new URL("manifest.json", root), "utf8"));
@@ -12,6 +12,7 @@ assertWorkspaceOperationActivation(inventoryManifest, {
   domain: "Workspace Inventory",
   readinessContractId: "wgcf.workspace-active-inventory-readiness.v1",
   readinessManifestPath: "contracts/workspace-active-inventory/manifest.json",
+  activation: workspaceInventoryOperationActivation,
 });
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);

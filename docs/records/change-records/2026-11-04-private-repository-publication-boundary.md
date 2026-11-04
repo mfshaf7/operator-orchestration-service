@@ -2,6 +2,13 @@
 security_evidence:
   review_areas: [identity, secrets, delivery, runtime]
   reviewed_artifacts:
+    - src/workspace-operation-activation.js
+    - src/workspace-inventory/contracts.js
+    - test/workspace-operation-activation.test.js
+    - scripts/sync_workspace_inventory_contracts.mjs
+    - contracts/workspace-inventory/manifest.json
+    - contracts/workspace-inventory/workspace-active-inventory.yaml
+    - contracts/workspace-inventory/lifecycle-policy.yaml
     - Dockerfile
     - src/workspace-intake/provider-client.js
     - src/workspace-intake/source-client.js
@@ -203,3 +210,22 @@ now informs Repo Control, verification availability and primary attention. It is
 not an automatic model-context source. The fresh source-only Security delta is
 [private project operational records](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-11-05-private-project-operational-records.md);
 the unpublished review and candidate source are not operating activation.
+
+## Legacy Inventory policy dependency reconciliation
+
+Controlled activation exposed stale retained-Inventory copies of the two shared
+Governance policy documents clarified by native registration. Consume the exact
+reviewed WGCF bundle after its owner merge and repin the existing bundle producer
+to the corresponding Governance and WGCF commits. Preserve original operation
+contract content hashes, architecture evidence and immutable request receipts.
+This changes packaged policy dependencies and their fixed source-pin assertions; no API route, source command,
+OpenProject mutation, approval scope or record migration is introduced. Verify
+the existing producer in check mode against committed upstream source, legacy/
+native Inventory tests and normal owner validation before publication.
+
+Inventory selects its exact refreshed authority/readiness pair in the existing
+assertion. Retained Intake keeps its unchanged reviewed pair; no historical
+manifest is reissued simply to advance Inventory policy text. The source-owned
+selector is not request-configurable. Regression proof rejects the old Intake
+pair for current Inventory and rejects mixing new Governance with old readiness.
+Both domains keep the original operation/architecture digests and runtime gates.
