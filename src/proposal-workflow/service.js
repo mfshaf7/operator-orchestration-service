@@ -424,8 +424,28 @@ export function createProposalWorkflowService({
   deliveryIngressService,
   openProjectClient,
   readRepositoryCustody,
+  requireRepositoryReady,
 }) {
   let automationUserRefPromise = null;
+
+  async function verifyRepositoryForUse({callerId, correlationId, ownerRepo, target}) {
+    const name = typeof ownerRepo === "string" ? ownerRepo.replace(/^repo:/, "") : "";
+    if (!/^[a-z0-9][a-z0-9._-]{0,185}$/.test(name)) throw new HttpError(409, "proposal_repository_onboarding_required", "Select an onboarded repository before using it for project work.");
+    if (typeof requireRepositoryReady !== "function") throw new HttpError(503, "proposal_repository_readiness_unavailable", "Current repository readiness is unavailable. Project use stays blocked.");
+    try { await requireRepositoryReady({callerId, correlationId, repoName: name, target}); }
+    catch (error) {
+      if (error instanceof HttpError && error.code === "proposal_repository_route_unavailable") throw error;
+      throw new HttpError(error?.statusCode >= 500 ? 503 : 409, "proposal_repository_onboarding_required", "Complete repository onboarding in Workspace Registry before using this repository. Current readiness could not be confirmed.");
+    }
+  }
+
+  async function verifyRouteRepository({callerId, correlationId, route}) {
+    const custody = route?.source_custody;
+    // Incubation/planning without a selected repository stays available.
+    if (!custody || custody.repository_mode === "not-required") return;
+    if (custody.repository_gate_state !== "resolved") return;
+    await verifyRepositoryForUse({callerId, correlationId, ownerRepo: custody.owner, target: route.target});
+  }
 
   async function automationUserRef() {
     automationUserRefPromise ??=
@@ -709,6 +729,7 @@ export function createProposalWorkflowService({
         currentState,
         receiptRef,
       });
+      if (["disposition", "handoff"].includes(command.command.type)) await verifyRouteRepository({callerId, correlationId, route: workflowState.route});
       const mutation = commandMutationFields(command);
       record = await openProjectClient.applyProposalWorkflowMutation({
         currentRecord: record,
@@ -819,6 +840,7 @@ export function createProposalWorkflowService({
           "Create or explicitly attach the repository from this request. An unrelated custody receipt cannot fulfil it.");
       }
       const owner = custody.request.requested_custody.workspace_owner_ref;
+      if (!replayed) await verifyRepositoryForUse({callerId, correlationId, ownerRepo: owner, target: state.route.target});
       const repoRef = custody.provider_readback.canonical_url;
       const recordedAt = replayed ? state.repository_resolution.recorded_at : timestampAfter(state.updated_at);
       event = assertProposalEvent({
@@ -936,6 +958,7 @@ export function createProposalWorkflowService({
 
     assertHandoffReady({ application, failureReceiptRef, record, state });
     assertHandoffSourcePrecondition({ application, record, state });
+    await verifyRouteRepository({callerId, correlationId, route: state.route});
     audit?.emit({
       application_id: application.application_id,
       caller: { id: callerId },
@@ -1196,5 +1219,6 @@ export function createProposalWorkflowService({
     getHistory,
     getProjection,
     getSnapshot,
+    verifyRepositoryForUse,
   };
 }

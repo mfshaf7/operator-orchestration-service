@@ -278,3 +278,13 @@ test("Catalog result requires backend readback and a durable receipt", () => {
     "repository_readiness_stale",
   );
 });
+
+test('readiness accepts current qualified workspace names without admitting invalid path-like identifiers',()=>{
+ for(const repo_name of ['example--notes.docs','example--shared_tools']){
+  assert.equal(assertRepositoryReadinessRequest({schema_version:1,repo_name}).repo_name,repo_name);
+  const reference={...repositoryBinding(),repo_name,repo_ref:`repo://${repo_name}`,catalog_value_key:repo_name};
+  reference.receipt={...reference.receipt,target_scope:`repo:${repo_name}`};
+  assert.equal(assertRepositoryReadinessReference(reference).repo_name,repo_name);
+ }
+ for(const repo_name of ['../notes','account/notes','.hidden','notes?other'])assert.throws(()=>assertRepositoryReadinessRequest({schema_version:1,repo_name}));
+});

@@ -721,3 +721,14 @@ test("explicit request-bound existing attachment keeps fresh provider verificati
   assert.equal(result.provider_operation.command,"read-provider");
  }finally{target.cleanup();}
 });
+
+test("unsupported workspace identifiers stop before readiness or provider work", async () => {
+  for (const workspace_owner_ref of ["wrong-prefix", "repo:UPPER CASE"]) {
+    const h=harness();
+    try {
+      const input=custodyRequest({requested_custody:{workspace_owner_ref,custody_kind:"dedicated-owner-repo"}});
+      await assert.rejects(h.service.execute({callerId:"governance-operations-console",input}),{code:"repository_workspace_reference_invalid"});
+      assert.equal(h.calls.filter(call=>["provider","readiness"].includes(call.operation)).length,0);
+    } finally {h.cleanup();}
+  }
+});

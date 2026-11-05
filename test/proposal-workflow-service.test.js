@@ -271,6 +271,7 @@ function createHarness({
   currentRecord = record(),
   mutationFailureAfterCommit = false,
   readRepositoryCustody,
+  requireRepositoryReady = async () => {},
 } = {}) {
   const calls = [];
   let storedRecord = structuredClone(currentRecord);
@@ -353,7 +354,7 @@ function createHarness({
   };
   return {
     calls,
-    reopen: () => createProposalWorkflowService({ openProjectClient, readRepositoryCustody }),
+    reopen: () => createProposalWorkflowService({ openProjectClient, readRepositoryCustody, requireRepositoryReady }),
     service: createProposalWorkflowService({
       deliveryIngressService: createDeliveryIngressService({
         adapters: {
@@ -363,6 +364,7 @@ function createHarness({
       }),
       openProjectClient,
       readRepositoryCustody,
+      requireRepositoryReady,
     }),
     storedRecord: () => structuredClone(storedRecord),
   };
@@ -930,4 +932,21 @@ test("explicit request-bound attachment fulfils the requirement without claiming
  const result=await h.service.resolveRepositoryGate({callerId:"governance-operations-console",proposalId:"idea-851",resolution:repositoryResolution()});
  assert.equal(result.projection.repository_resolution.custody_request_id,repositoryResolution().custody_request_id);
  assert.equal(result.projection.route.source_custody.repository_gate_state,"resolved");
+});
+
+test("successful repository creation cannot resolve a Proposal use gate before current onboarding is ready", async () => {
+  for (const status of [409, 503]) {
+    let readinessReads = 0;
+    const h = createHarness({currentRecord: pendingRepositoryRecord(), readRepositoryCustody: async () => successfulRepositoryCustody(),
+      requireRepositoryReady: async ({repoName}) => { readinessReads++; assert.equal(repoName, 'todo'); throw new HttpError(status, 'repository_not_admitted', 'Synthetic not-ready authority'); }});
+    await assert.rejects(h.service.resolveRepositoryGate({callerId:'governance-operations-console',proposalId:'idea-851',resolution:repositoryResolution()}), error => error.code === 'proposal_repository_onboarding_required');
+    assert.equal(readinessReads, 1);
+    assert.equal(h.calls.filter(([name]) => name === 'applyProposalWorkflowMutation' || name === 'addProposalWorkflowEvent').length, 0);
+    assert.equal((await h.service.getProjection({callerId:'governance-operations-console',proposalId:'idea-851'})).route.source_custody.repository_gate_state,'pending');
+  }
+});
+
+test("repository use is denied when the authoritative readiness reader is missing", async () => {
+ const service=createProposalWorkflowService({openProjectClient:{}});
+ await assert.rejects(service.verifyRepositoryForUse({callerId:'console',ownerRepo:'repo:todo'}),{code:'proposal_repository_readiness_unavailable'});
 });

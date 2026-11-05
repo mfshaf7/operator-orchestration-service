@@ -60,6 +60,11 @@ function assertCaller(record, callerId) {
 }
 
 export function createProposalTargetService({ store, sourceClient, proposalWorkflowService, clock = () => new Date(), audit }) {
+  async function verifyRepository(callerId, route) {
+    if (route?.source_custody?.repository_mode === "not-required") return;
+    if (typeof proposalWorkflowService.verifyRepositoryForUse !== "function") throw proposalTargetError("repository_readiness_unavailable", "Repository onboarding readiness is unavailable. Project use stays blocked.", 503);
+    await proposalWorkflowService.verifyRepositoryForUse({callerId, correlationId: "proposal-target-repository-use", ownerRepo: route?.source_custody?.owner, target: "prototype"});
+  }
   async function transition(transaction, record, status, details = null) {
     transaction.assertHeld(); record.status = status; record.failure = null;
     record.history.push({ sequence: record.history.length + 1, at: clock().toISOString(), status, details }); await transaction.put(record);
@@ -69,6 +74,7 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
     const command = assertProposalTargetPreparationInput(input);
     const projection = await proposalWorkflowService.getProjection({ callerId, correlationId: `proposal-target-preparation:${command.proposal_id}`, proposalId: command.proposal_id });
     const proposal = proposalSnapshot(projection, command.proposal_id);
+    await verifyRepository(callerId, proposal.route);
     const prototypeId = `prototype:proposal-${command.proposal_id.slice("idea-".length)}`;
     const state = await sourceClient.state(prototypeId);
     if (!SHA.test(state.authority_revision) || state.prototype_id !== prototypeId || state.expected_state?.source_revision !== state.authority_revision || !DIGEST.test(state.expected_state?.registry_digest) || state.expected_state.record_present !== false || state.expected_state.record_digest !== null) {
@@ -82,6 +88,7 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
   async function submit({ callerId, input }) {
     const evaluation = createProposalTargetEvaluation(input, callerId);
     const projection = await proposalWorkflowService.getProjection({ callerId, correlationId: evaluation.correlation_id, proposalId: evaluation.proposal.proposal_id });
+    await verifyRepository(callerId, projection.route);
     const proposal = proposalSnapshot(projection, evaluation.proposal.proposal_id);
     const suppliedProposal = { ...evaluation.proposal };
     if (Object.entries(suppliedProposal).some(([key, value]) => proposal[key] !== value)) {
@@ -152,9 +159,17 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
           if (outcome?.result) await finish(transaction, record, outcome, callerId); else await transition(transaction, record, "cancelled", outcome?.retained_branch ? { retained_branch: outcome.retained_branch } : null);
           return publicResult(record);
         }
+        if (["accepted", "preparing"].includes(record.status)) {
+          const current = proposalSnapshot(await proposalWorkflowService.getProjection({callerId, correlationId: record.evaluation.correlation_id, proposalId: record.evaluation.proposal.proposal_id}), record.evaluation.proposal.proposal_id);
+          if (current.handoff_packet_digest !== record.evaluation.proposal.handoff_packet_digest) throw proposalTargetError("proposal_stale", "The selected Proposal repository or handoff changed before source preparation.");
+          await verifyRepository(callerId, current.route);
+        }
         if (record.status === "accepted") await transition(transaction, record, "preparing");
         if (record.status === "preparing") {
           if (!record.preparation) { record.preparation = await sourceClient.prepare(record, transaction.assertHeld); await transaction.put(record); }
+          const current = proposalSnapshot(await proposalWorkflowService.getProjection({callerId, correlationId: record.evaluation.correlation_id, proposalId: record.evaluation.proposal.proposal_id}), record.evaluation.proposal.proposal_id);
+          if (current.handoff_packet_digest !== record.evaluation.proposal.handoff_packet_digest) throw proposalTargetError("proposal_stale", "The selected repository or handoff changed before publication.");
+          await verifyRepository(callerId, current.route);
           record.review = await sourceClient.openReview(record, transaction.assertHeld);
           await transition(transaction, record, "review-required", { review_number: record.review.number, head_commit: record.review.head_commit });
           return publicResult(record);

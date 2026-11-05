@@ -160,6 +160,7 @@ test("Proposal target workflow stops at review then acknowledges exact merged ta
   let merged = false;
   const acknowledgements = [];
   const proposalWorkflowService = {
+    async verifyRepositoryForUse() {},
     async getProjection() { return projection(); },
     async acknowledgePrototypeHandoff(value) { acknowledgements.push(value); return { replayed: false, projection: { record_version: "version-22", handoff: { state: "applied" } }, event: {}, history: {} }; },
   };
@@ -203,7 +204,8 @@ test("Proposal target workflow restarts only a cancelled zero-mutation applicati
   const currentTarget = { authority_revision: "3".repeat(40), expected_state: { source_revision: "3".repeat(40), registry_digest: `sha256:${"4".repeat(64)}`, record_present: false, record_digest: null } };
   const events = [];
   const sourceClient = { async cancel() { return null; } };
-  const proposalWorkflowService = { async getProjection() { return projection(); } };
+  const proposalWorkflowService = {
+    async verifyRepositoryForUse() {}, async getProjection() { return projection(); } };
   const service = createProposalTargetService({
     store: createProposalTargetStore({ root }),
     sourceClient,
@@ -249,7 +251,7 @@ test("Proposal target workflow denies changed authority after preparation even w
   const service = createProposalTargetService({
     store: createProposalTargetStore({ root }),
     sourceClient,
-    proposalWorkflowService: { async getProjection() { return projection(); } },
+    proposalWorkflowService: { async verifyRepositoryForUse() {}, async getProjection() { return projection(); } },
     clock: () => new Date(at),
   });
   await service.submit({ callerId: caller, input });
@@ -266,7 +268,7 @@ test("Proposal target workflow rejects unresolved repository custody before Stud
   const service = createProposalTargetService({
     store: { transact() { throw new Error("must not write"); } },
     sourceClient: { async state() { sourceCalls += 1; } },
-    proposalWorkflowService: { async getProjection() { return projection({ route: { ...route, source_custody: { ...route.source_custody, repository_gate_state: "blocked" } } }); } },
+    proposalWorkflowService: { async verifyRepositoryForUse() {}, async getProjection() { return projection({ route: { ...route, source_custody: { ...route.source_custody, repository_gate_state: "blocked" } } }); } },
   });
   await assert.rejects(service.prepare({ callerId: caller, input: { proposal_id: "idea-851" } }), /Repository custody must be resolved/);
   assert.equal(sourceCalls, 0);
@@ -322,4 +324,26 @@ test("Proposal target source client proves bounded real-Git preparation and stal
   const stale = structuredClone(record);
   stale.evaluation.target.expected_state.registry_digest = `sha256:${"f".repeat(64)}`;
   await assert.rejects(client.prepare(stale, () => {}), /rejected the Proposal target source preparation/);
+});
+
+test('repository onboarding failure blocks target preparation before touching Studio source', async t => {
+ const root=await mkdtemp(path.join(tmpdir(),'proposal-onboarding-gate-'));t.after(()=>rm(root,{recursive:true,force:true}));let sourceReads=0;
+ const service=createProposalTargetService({store:createProposalTargetStore({root}),
+  proposalWorkflowService:{async getProjection(){return projection();},async verifyRepositoryForUse(){throw new Error('Repository onboarding is incomplete');}},
+  sourceClient:{async state(){sourceReads++;throw new Error('must not reach source');}}});
+ await assert.rejects(service.prepare({callerId:caller,input:{proposal_id:'idea-851'}}),/onboarding is incomplete/);
+ assert.equal(sourceReads,0);
+});
+
+test('readiness loss after an accepted target blocks publication while retaining its original request',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'proposal-onboarding-retained-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const target={authority_revision:'1'.repeat(40),expected_state:{source_revision:'1'.repeat(40),registry_digest:`sha256:${'2'.repeat(64)}`,record_present:false,record_digest:null}};
+ let ready=true,writes=0;
+ const service=createProposalTargetService({store:createProposalTargetStore({root}),
+  proposalWorkflowService:{async getProjection(){return projection();},async verifyRepositoryForUse(){if(!ready)throw Object.assign(new Error('Current repository onboarding is unavailable'),{code:'repository_onboarding_unavailable',statusCode:503});}},
+  sourceClient:{async state(){return target;},async prepare(){writes++;throw new Error('must not prepare');}}});
+ const accepted=await service.submit({callerId:caller,input:command(target)});ready=false;
+ await assert.rejects(service.advance({callerId:caller,applicationId:accepted.application_id}),{code:"proposal_target_dependency_unavailable"});
+ assert.equal(writes,0);const retained=await service.project(accepted.application_id,{callerId:caller});
+ assert.equal(retained.application_id,accepted.application_id);assert.ok(retained.failure);assert.notEqual(retained.status,'succeeded');
 });

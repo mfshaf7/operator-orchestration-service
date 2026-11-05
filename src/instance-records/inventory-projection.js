@@ -18,7 +18,8 @@ export function projectInstanceRegistryRecord({ record: entry, receipt }, author
       entry.repo_class !== "product-source" || entry.requires_security_bindings !== false || entry.security_review_subject === true ||
       entry.validation_behavior?.posture !== "covered-by-owner-repo" || entry.validation_behavior.wgcf_graph_role !== "product-runtime-source") fail();
   const canonical_authority = { ...authority, record_id: id };
-  const common = { authority_kind: "internal-instance-record", canonical_authority };
+  const common = { authority_kind: "internal-instance-record", canonical_authority,
+    provider_repository: structuredClone(entry.provider_repository) };
   if (entry.phase === "intake") {
     if (entry.status !== "admitted") return null;
     const decision = envelope.decision;

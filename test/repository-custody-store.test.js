@@ -141,3 +141,44 @@ test("repository custody transaction holds one request lock across asynchronous 
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("repository register pages survive more than 250 requests and preserve independent scoped history", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-repository-register-"));
+  try {
+    const store = createRepositoryCustodyStore({root});
+    for (let i = 1; i <= 280; i++) {
+      const request = custodyRequest({request_id:`repository-custody-request:register-${i}`,
+        target:{provider:"github",provider_host:"github.com",owner:"example",name:`source-${i}`,provider_repository_id:String(i)},
+        correlation:{correlation_id:i<=2?"repo-request://proposal/idea-7":"standalone",causation_id:null}});
+      store.put({request,status:"succeeded",retryable:false,receipt:{completed_at:"2026-11-05T00:00:00Z"}});
+    }
+    // Another success for the same immutable repository is history, not another row.
+    const original = store.list({view:"register",providerRepositoryId:"1"}).records[0];
+    store.put({...original,request:{...original.request,request_id:"repository-custody-request:new-link",request_digest:"new"},
+      receipt:{completed_at:"2026-11-05T01:00:00Z"}});
+    const all=[];let cursor=null;
+    do {const page=store.list({view:"register",cursor});assert.ok(page.records.length<=25);all.push(...page.records);cursor=page.next_cursor;}while(cursor);
+    assert.equal(all.length,280);assert.equal(new Set(all.map(r=>r.request.target.provider_repository_id)).size,280);
+    assert.equal(store.list({view:"register",providerRepositoryId:"1"}).records[0].request.request_id,"repository-custody-request:new-link");
+    assert.equal(store.list({providerRepositoryId:"1"}).records.length,2);
+    assert.equal(store.list({proposalId:"idea-7"}).records.length,3);
+    const scoped=store.list({proposalId:"idea-7",limit:1});
+    assert.throws(()=>store.list({proposalId:"idea-8",cursor:scoped.next_cursor}),{code:"repository_custody_page_invalid"});
+    assert.throws(()=>store.list({view:"unknown"}),{code:"repository_custody_page_invalid"});
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
+
+test("repository read metadata is reconstructed and invalidated after another writer or corruption", () => {
+  const root=mkdtempSync(path.join(tmpdir(),"oos-repository-index-"));
+  try{
+    const reader=createRepositoryCustodyStore({root}),writer=createRepositoryCustodyStore({root});
+    const request=custodyRequest();
+    writer.put({request,status:"applying",retryable:false});
+    assert.equal(reader.list({view:"register"}).records.length,0);
+    writer.put({request,status:"succeeded",retryable:false},{replaceMutable:true});
+    assert.equal(reader.list({view:"register"}).records.length,1);
+    assert.equal(createRepositoryCustodyStore({root}).list({view:"register"}).records.length,1);
+    const name=readdirSync(path.join(root,"records"))[0];writeFileSync(path.join(root,"records",name),"corrupt");
+    assert.throws(()=>reader.list({view:"register"}),{code:"repository_custody_state_corrupt"});
+  }finally{rmSync(root,{recursive:true,force:true});}
+});

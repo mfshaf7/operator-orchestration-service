@@ -8731,7 +8731,7 @@
           "Repository Custody"
         ],
         "summary": "List retained repository custody requests",
-        "description": "Reads a bounded page of integrity-validated durable custody results so the Console can recover canonical repository state after reload. No provider or downstream mutation occurs.",
+        "description": "Reads at most 25 canonical results. The register view selects the latest successful result per immutable provider repository; request history remains independently pageable and can be scoped to a repository or Proposal. No provider or downstream mutation occurs.",
         "operationId": "listRepositoryCustodyResults",
         "security": [
           {
@@ -8758,6 +8758,37 @@
               "minimum": 1,
               "maximum": 25,
               "default": 25
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "requests",
+                "register"
+              ],
+              "default": "requests"
+            }
+          },
+          {
+            "name": "provider_repository_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^idea-[1-9][0-9]*$"
             }
           }
         ],
@@ -8835,7 +8866,7 @@
                         "authority": {
                           "policy_profile_ref": {
                             "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                            "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                            "digest": "sha256:3743465948524d9b07c30a729658106eed168d84f11f5d00d5f657a1feb99824"
                           },
                           "approval_ref": {
                             "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -8851,7 +8882,7 @@
                           "causation_id": null
                         },
                         "idempotency_key": "repository-custody-link-example-001",
-                        "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                        "request_digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                       },
                       "status": "succeeded",
                       "replayed": true,
@@ -8861,8 +8892,8 @@
                         "artifact_type": "repository_custody_decision",
                         "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                         "request_ref": {
-                          "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                          "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                          "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                          "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                         },
                         "evaluated_at": "2026-08-29T08:00:00.000Z",
                         "policy_version": "repository-custody/v1",
@@ -8881,12 +8912,12 @@
                         "integrity": {
                           "canonicalization": "RFC8785",
                           "algorithm": "sha256",
-                          "content_digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                          "content_digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                         }
                       },
                       "decision_ref": {
                         "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                        "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                        "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                       },
                       "provider_operation": {
                         "command": "read-provider",
@@ -8900,8 +8931,8 @@
                         "artifact_type": "repository_provider_readback",
                         "readback_id": "repository-provider-readback:link-example-001",
                         "request_ref": {
-                          "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                          "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                          "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                          "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                         },
                         "observed_at": "2026-08-29T08:00:00.000Z",
                         "action": "link-existing",
@@ -8924,28 +8955,28 @@
                         "integrity": {
                           "canonicalization": "RFC8785",
                           "algorithm": "sha256",
-                          "content_digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                          "content_digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                         }
                       },
                       "provider_readback_ref": {
-                        "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                        "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                        "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                        "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                       },
                       "receipt": {
                         "schema_version": 1,
                         "artifact_type": "repository_custody_receipt",
                         "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                         "request_ref": {
-                          "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                          "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                          "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                          "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                         },
                         "decision_ref": {
                           "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                          "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                          "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                         },
                         "provider_readback_ref": {
-                          "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                          "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                          "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                          "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                         },
                         "completed_at": "2026-08-29T08:00:00.000Z",
                         "action": "link-existing",
@@ -8972,12 +9003,12 @@
                         "integrity": {
                           "canonicalization": "RFC8785",
                           "algorithm": "sha256",
-                          "content_digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                          "content_digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                         }
                       },
                       "receipt_ref": {
-                        "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713.json",
-                        "digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                        "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938.json",
+                        "digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                       },
                       "failure": null,
                       "next_action": "complete"
@@ -9074,7 +9105,7 @@
                 "authority": {
                   "policy_profile_ref": {
                     "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                    "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                    "digest": "sha256:3743465948524d9b07c30a729658106eed168d84f11f5d00d5f657a1feb99824"
                   },
                   "approval_ref": {
                     "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -9090,7 +9121,7 @@
                   "causation_id": null
                 },
                 "idempotency_key": "repository-custody-link-example-001",
-                "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                "request_digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
               }
             }
           }
@@ -9137,7 +9168,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                        "digest": "sha256:3743465948524d9b07c30a729658106eed168d84f11f5d00d5f657a1feb99824"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -9153,7 +9184,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                    "request_digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                   },
                   "status": "succeeded",
                   "replayed": false,
@@ -9163,8 +9194,8 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
@@ -9183,12 +9214,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                      "content_digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                    "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                   },
                   "provider_operation": {
                     "command": "read-provider",
@@ -9202,8 +9233,8 @@
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -9226,28 +9257,28 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                      "content_digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                    "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                    "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                      "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                      "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                      "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -9274,12 +9305,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                      "content_digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713.json",
-                    "digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938.json",
+                    "digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -9416,7 +9447,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                        "digest": "sha256:3743465948524d9b07c30a729658106eed168d84f11f5d00d5f657a1feb99824"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -9432,7 +9463,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                    "request_digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                   },
                   "status": "succeeded",
                   "replayed": true,
@@ -9442,8 +9473,8 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
@@ -9462,12 +9493,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                      "content_digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                    "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                   },
                   "provider_operation": {
                     "command": "read-provider",
@@ -9481,8 +9512,8 @@
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -9505,28 +9536,28 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                      "content_digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                    "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                    "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d.json",
-                      "digest": "sha256:526dfc39e108675dd41793cc4a8f43333ec5f9b1b89dd0b650b9cfd61537439d"
+                      "uri": "wgcf://requests/repository-custody/95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f.json",
+                      "digest": "sha256:95c038e28033f4b8f3f0c3f33df951e71ee9ca39a57d96e64cf0ef1746b0837f"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:28360221432f4838399e3b760f19cff197b61aa86a600bcf56f51fd8096e60b2"
+                      "digest": "sha256:115a99f269a329733439875a6d4748d1a3cefe5452abb2882b072b8d3910fb63"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb.json",
-                      "digest": "sha256:cf937dd41d40bf49d4ae423ca8125e4460e39e86d383b92e7e99b90c21f272bb"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce.json",
+                      "digest": "sha256:1441a88f928f27002bfd044593ea569e0b0c11ecc1c6a7254d1f999c937e83ce"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -9553,12 +9584,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                      "content_digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713.json",
-                    "digest": "sha256:ac919c524ea20040acda7644046d87277d464638a53dc917b99ed4ac8d519713"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938.json",
+                    "digest": "sha256:423c17d99247a6389f7a5f00e08fe328816081212ca9e0601b9a473f8e63f938"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -35050,6 +35081,83 @@
           }
         }
       }
+    },
+    "/v1/repository-custody/connections": {
+      "get": {
+        "tags": [
+          "Repository Custody"
+        ],
+        "summary": "Inspect connected GitHub accounts",
+        "operationId": "listRepositoryConnections",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Authenticated Console-only projection of Platform-verified accounts, default destination and current purpose-specific credential bindings. No tokens, keys or provider mutation. An absent or expired grant never borrows another account's authority.",
+        "responses": {
+          "200": {
+            "description": "Verified connection metadata; capabilities reflect credential currency, not application acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryConnectionsV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "default_connection_id": null,
+                  "connections": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unexpected query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Connection metadata unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-custody"
+      }
     }
   },
   "components": {
@@ -51179,15 +51287,15 @@
         "properties": {
           "repo_name": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$"
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
           },
           "repo_ref": {
             "type": "string",
-            "pattern": "^repo://[a-z0-9][a-z0-9-]*$"
+            "pattern": "^repo://[a-z0-9][a-z0-9._-]{0,185}$"
           },
           "catalog_value_key": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$"
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
           },
           "receipt": {
             "type": "object",
@@ -51220,7 +51328,7 @@
               },
               "target_scope": {
                 "type": "string",
-                "pattern": "^repo:[a-z0-9][a-z0-9-]*$"
+                "pattern": "^repo:[a-z0-9][a-z0-9._-]{0,185}$"
               },
               "outcome": {
                 "const": "ready"
@@ -54799,7 +54907,10 @@
                   ],
                   "properties": {
                     "owner_scope": {
-                      "const": "organization"
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
                     },
                     "provider_repository_id": {
                       "type": "null"
@@ -55241,7 +55352,10 @@
                 "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
               },
               "owner_scope": {
-                "const": "organization"
+                "enum": [
+                  "personal",
+                  "organization"
+                ]
               },
               "name": {
                 "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
@@ -55593,7 +55707,10 @@
             ],
             "properties": {
               "owner_scope": {
-                "const": "organization"
+                "enum": [
+                  "personal",
+                  "organization"
+                ]
               },
               "initialization_state": {
                 "const": "initialized"
@@ -74618,7 +74735,7 @@
           },
           "repo_name": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$"
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
           }
         },
         "x-oos-canonical-schema": "contracts/catalog/repository-readiness-request.schema.json"
@@ -93903,6 +94020,28 @@
                           "pattern": "^repo:[a-z0-9][a-z0-9._-]{0,185}$"
                         }
                       }
+                    },
+                    "provider_repository": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "provider",
+                        "provider_repository_id",
+                        "full_name"
+                      ],
+                      "properties": {
+                        "provider": {
+                          "const": "github"
+                        },
+                        "provider_repository_id": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$"
+                        },
+                        "full_name": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+                        }
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -94012,6 +94151,28 @@
                         "record_id": {
                           "type": "string",
                           "pattern": "^repo:[a-z0-9][a-z0-9._-]{0,185}$"
+                        }
+                      }
+                    },
+                    "provider_repository": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "provider",
+                        "provider_repository_id",
+                        "full_name"
+                      ],
+                      "properties": {
+                        "provider": {
+                          "const": "github"
+                        },
+                        "provider_repository_id": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$"
+                        },
+                        "full_name": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
                         }
                       }
                     }
@@ -94227,6 +94388,140 @@
             }
           }
         ]
+      },
+      "RepositoryConnectionsV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "default_connection_id",
+          "connections"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "default_connection_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connections": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "account",
+                "account_id",
+                "account_type",
+                "capabilities",
+                "credential_bindings"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "account": {
+                  "type": "string"
+                },
+                "account_id": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "account_type": {
+                  "enum": [
+                    "personal",
+                    "organization"
+                  ]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "metadata",
+                    "provisioning",
+                    "lifecycle"
+                  ],
+                  "properties": {
+                    "metadata": {
+                      "type": "boolean"
+                    },
+                    "provisioning": {
+                      "type": "boolean"
+                    },
+                    "lifecycle": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "credential_bindings": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "metadata": {
+                      "type": "object",
+                      "required": [
+                        "uri",
+                        "digest"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        }
+                      }
+                    },
+                    "provisioning": {
+                      "type": "object",
+                      "required": [
+                        "uri",
+                        "digest"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        }
+                      }
+                    },
+                    "lifecycle": {
+                      "type": "object",
+                      "required": [
+                        "uri",
+                        "digest"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
