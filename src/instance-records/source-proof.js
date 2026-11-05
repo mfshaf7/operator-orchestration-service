@@ -45,7 +45,16 @@ export function assertInstanceSourceProof(value, { instanceId, ownerRepo, operat
       !/^[1-9][0-9]*$/.test(repository.provider_repository_id ?? "") || !Number.isSafeInteger(Number(repository.provider_repository_id)) ||
       !/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(repository.full_name ?? "") ||
       typeof proof.owner_purpose !== "string" || !proof.owner_purpose.trim() || !proof.owner_purpose.isWellFormed() || Buffer.byteLength(proof.owner_purpose) > 8192) fail();
-  return structuredClone(proof);
+  // Native authority crosses both an async JSON transport and a canonical-JSON
+  // host helper. Project validated typed fields in one order before a source
+  // template embeds them as file bytes; transport key order is not authority.
+  const normalized = structuredClone(proof);
+  normalized.provider_repository = { full_name: repository.full_name, provider: repository.provider,
+    provider_repository_id: repository.provider_repository_id };
+  const entryReference = value => value === null ? null : { id: value.id, version: value.version, digest: value.digest };
+  normalized.intake_entry_ref = entryReference(proof.intake_entry_ref);
+  if (Object.hasOwn(proof, "inventory_entry_ref")) normalized.inventory_entry_ref = entryReference(proof.inventory_entry_ref);
+  return normalized;
 }
 
 export function instanceSourceReference(proof, operation) {

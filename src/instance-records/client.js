@@ -143,8 +143,9 @@ export function createInstanceRecordReader({ baseUrl, instanceId, callerId, call
         throw new HttpError(400, "instance_records_operation_invalid", "Select one supported repository source operation.");
       }
       const body = await transport.request(`${target(name)}/source-authority?${new URLSearchParams({ operation })}`, { method: "GET" });
-      try { assertInstanceSourceProof(body, { instanceId, ownerRepo: name, operation }); } catch { fail(); }
-      return structuredClone(body);
+      let proof;
+      try { proof = assertInstanceSourceProof(body, { instanceId, ownerRepo: name, operation }); } catch { fail(); }
+      return proof === null ? structuredClone(body) : { ...structuredClone(body), source_authority: proof };
     },
     async prepare(name, { operation = "intake" } = {}) {
       operationKind(operation);
