@@ -60,6 +60,12 @@ The new synchronous host admission bridge reuses the existing protected
 OOS-to-Platform connection, reads only current source eligibility, and compares
 the exact internal namespace/version against the current accepted Governance
 policy bytes. Only positive legacy proof permits the retained Git reader.
+Both native readers project validated provider and record references in the
+same field order before generating source files. Canonical helper transport
+must reproduce the exact approved plan, including generated metadata bytes.
+If Start stops at a plan check, preserve the original request and checkout;
+inspect the actual discrepancy before retrying. Transport field ordering alone
+does not justify a new approval, replacement request or weaker consistency check.
 Ordinary authoring carries an internal record reference rather than a fictitious
 Git revision and rechecks it before push. The unpublished checkout transport
 supports only clone, fetch and exact branch-reference reads. Platform derives
