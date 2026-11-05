@@ -35,6 +35,19 @@ async function execute(app, { body = null, method = "POST", url, callerId = "gov
   return { body: JSON.parse(responseBody), statusCode };
 }
 
+test("connection metadata is Console-only, authenticated and query-free", async () => {
+  let reads = 0;
+  const app = createApp({config:config(), deliveryService:{}, ideaService:{}, openProjectClient:{},
+    repositoryCustodyService:{connections(){reads++;return {schema_version:1,default_connection_id:null,connections:[]};}}});
+  const url="/v1/repository-custody/connections";
+  assert.equal((await execute(app,{method:"GET",url,callerSecret:"wrong"})).statusCode,401);
+  assert.equal(reads,0);
+  assert.equal((await execute(app,{method:"GET",url:url+"?token=forbidden"})).statusCode,400);
+  assert.equal(reads,0);
+  assert.deepEqual((await execute(app,{method:"GET",url})).body,{schema_version:1,default_connection_id:null,connections:[]});
+  assert.equal(reads,1);
+});
+
 test("repository custody API preserves caller and request identity", async () => {
   const calls = [];
   const request = custodyRequest();

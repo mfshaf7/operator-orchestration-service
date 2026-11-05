@@ -6,7 +6,7 @@ import { assertRepositoryReadinessReference } from "./contracts.js";
 const RECEIPT_URI_PATTERN =
   /^wgcf:\/\/receipts\/repository-readiness\/repository-readiness-receipt-([0-9a-f]{24})-([0-9a-f]{64})\.json$/;
 const MAX_RESPONSE_BYTES = 393_216;
-const REPO_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const REPO_NAME = /^[a-z0-9][a-z0-9._-]{0,185}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 
 function invalidResponse(message) {

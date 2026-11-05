@@ -612,6 +612,7 @@ export function loadConfig(
         env.OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN ?? "",
       providerReadAccount:
         env.OOS_REPOSITORY_PROVIDER_ACCOUNT?.trim() || undefined,
+      providerConnections: env.OOS_REPOSITORY_CONNECTIONS_JSON,
       providerProvisioningInstallationToken:
         env.OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN ?? "",
       providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),
@@ -635,6 +636,7 @@ export function loadConfig(
         env.OOS_REPOSITORY_PROVIDER_API_BASE_URL ?? "https://api.github.com",
       providerInstallationToken:
         env.OOS_REPOSITORY_LIFECYCLE_INSTALLATION_TOKEN ?? "",
+      providerConnections: env.OOS_REPOSITORY_CONNECTIONS_JSON,
       providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),
     },
     orchestration: {

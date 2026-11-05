@@ -1,4 +1,5 @@
 import { HttpError } from "../errors.js";
+import { repositoryConnections } from "../repository-custody/connections.js";
 import { withRepositoryLifecycleIntegrity } from "./contracts.js";
 
 const GITHUB_API_BASE_URL = "https://api.github.com";
@@ -47,8 +48,16 @@ export function createGitHubRepositoryLifecycleClient({
   clock = () => new Date(),
   fetchImpl = globalThis.fetch,
   installationToken,
+  connections,
   sandbox = false,
 }) {
+  let connected, connectionError;
+  try { connected = repositoryConnections(connections, {clock}); } catch (error) { connectionError = error; }
+  function credential(request) {
+    if (connectionError) throw connectionError;
+    return connected ? connected.resolveBinding("lifecycle", request.authority?.provider_credential_binding_ref, request.repository_identity.provider_repository_id) : null;
+  }
+  const token = request => credential(request)?.token ?? installationToken;
   const baseUrl = apiBaseUrl.replace(/\/+$/, "");
   let parsed;
   try { parsed = new URL(baseUrl); } catch {
@@ -63,7 +72,7 @@ export function createGitHubRepositoryLifecycleClient({
   function assertReady(request) {
     if (
       request.repository_identity.provider !== "github" ||
-      !configured(installationToken) ||
+      !configured(token(request)) ||
       typeof fetchImpl !== "function"
     ) {
       throw new HttpError(503, "repository_provider_not_configured", "Governed lifecycle provider identity is not active.");
@@ -80,10 +89,15 @@ export function createGitHubRepositoryLifecycleClient({
     assertReady(request);
     const id = request.repository_identity.provider_repository_id;
     const response = await providerRequest(`${baseUrl}/repositories/${encodeURIComponent(id)}`, {
-      headers: headers(installationToken),
+      headers: headers(token(request)),
     });
     if (!response.ok) throw providerError(response);
     const body = await boundedJson(response);
+    const account = credential(request);
+    if (account && (body?.owner?.login?.toLowerCase() !== account.account.toLowerCase() || String(body?.owner?.id) !== account.accountId ||
+        body?.owner?.type !== (account.accountType === "personal" ? "User" : "Organization"))) {
+      throw new HttpError(409, "repository_provider_identity_mismatch", "The lifecycle repository belongs to a different connected GitHub account.");
+    }
     if (String(body?.id ?? "") !== id || !body?.owner?.login || !body?.name) {
       throw new HttpError(409, "repository_provider_identity_mismatch", "Provider readback does not match immutable repository identity.");
     }
@@ -109,7 +123,7 @@ export function createGitHubRepositoryLifecycleClient({
         `${baseUrl}/repos/${encodeURIComponent(before.coordinates.owner)}/${encodeURIComponent(before.coordinates.name)}`,
         {
           method: "PATCH",
-          headers: headers(installationToken, { json: true }),
+          headers: headers(token(request), { json: true }),
           body: JSON.stringify({ archived }),
         },
       );

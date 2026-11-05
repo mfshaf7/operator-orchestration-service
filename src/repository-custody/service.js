@@ -270,7 +270,7 @@ function readbackMatches(request, readback, expectedRepositoryId = null) {
   return (
     readback.canonical_owner.toLowerCase() === request.target.owner.toLowerCase() &&
     readback.canonical_name.toLowerCase() === request.target.name.toLowerCase() &&
-    readback.applied_provisioning?.owner_scope === "organization" &&
+    readback.applied_provisioning?.owner_scope === request.target.owner_scope &&
     readback.applied_provisioning?.initialization_state === "initialized" &&
     exactMatch(readback.applied_provisioning?.settings, request.provisioning)
   );
@@ -349,7 +349,7 @@ export function createRepositoryCustodyService({
       throw new HttpError(
         409,
         "repository_custody_action_not_active",
-        "Only existing-repository linkage and organization repository provisioning are supported.",
+        "Only existing-repository linkage and connected-account repository provisioning are supported.",
       );
     }
 
@@ -371,6 +371,10 @@ export function createRepositoryCustodyService({
         const existing = current ? validateStored(current) : null;
         if (existing && existing.status !== "applying" && existing.retryable !== true) {
           return { ...existing, replayed: true };
+        }
+        if (!/^repo:[a-z0-9][a-z0-9._-]*$/.test(request.requested_custody.workspace_owner_ref)) {
+          throw new HttpError(400, "repository_workspace_reference_invalid",
+            "Use repo: followed by lowercase letters, numbers, dots, hyphens or underscores.");
         }
 
         const authority = repositoryCustodyAuthority();
@@ -494,10 +498,11 @@ export function createRepositoryCustodyService({
   return {
     execute,
     lookup,
+    connections() { return providerClient.connections?.() ?? {schema_version: 1, default_connection_id: null, connections: []}; },
     project,
-    async list({ cursor = null, limit = 25 } = {}) {
+    async list({ cursor = null, limit = 25, ...selection } = {}) {
       try {
-        const page = store.list({ cursor, limit });
+        const page = store.list({ cursor, limit, ...selection });
         return {
           schema_version: 1,
           records: page.records.map((record) => ({ ...validateStored(record), replayed: true })),

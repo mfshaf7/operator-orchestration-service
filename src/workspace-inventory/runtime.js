@@ -82,6 +82,10 @@ export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl }) {
     return createInstanceInventoryFacade({ legacy, legacyStore, native, journal, reader, enabled: instance.enabled, family });
   };
   return { ...service, ...workflow("workspace-inventory-promotion", service, store, "promotion"),
+    repositorySourceAuthority: async ({repoName}) => {
+      const value = await reader.sourceAuthority(repoName, "ordinary-source");
+      return value.canonical_authority.kind === "legacy-git" ? null : value.source_authority;
+    },
     repositoryReadinessAuthority: async args => {
       const value = await reader.sourceAuthority(args.repoName, "ordinary-source");
       if (value.canonical_authority.kind === "legacy-git") return service.repositoryReadinessAuthority(args);

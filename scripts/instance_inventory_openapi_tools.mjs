@@ -32,7 +32,9 @@ export function extendInstanceInventoryWorkflow(schemas, prefix, requestSchema) 
 
 export function instanceInventoryPageSchema(record, candidate) {
   const extend = schema => ({ ...schema, required: [...schema.required, "authority_kind", "canonical_authority"], properties: { ...schema.properties,
-    authority_kind: { const: "internal-instance-record" }, canonical_authority: recordAuthority } });
+    authority_kind: { const: "internal-instance-record" }, canonical_authority: recordAuthority,
+    provider_repository: object({provider: {const: "github"}, provider_repository_id: {type: "string", pattern: "^[1-9][0-9]*$"},
+      full_name: {type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"}}) } });
   return { oneOf: [object({ schema_version: { const: 1 }, mode: { const: "not-configured" }, projected_at: date }),
     object({ schema_version: { const: 1 }, mode: { const: "current" }, artifact_type: { const: "instance-repository-registry-page" },
       authority, selection: object({ query: { type: "string", maxLength: 128 }, scope: { enum: ["inventory", "eligible"] } }),

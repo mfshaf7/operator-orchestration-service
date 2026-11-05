@@ -1,5 +1,35 @@
 # Repository Custody Workflow
 
+## Connected GitHub accounts
+
+The account-routing extension uses Platform's server-only
+`OOS_REPOSITORY_CONNECTIONS_JSON` projection. It contains verified account IDs,
+personal/organization type, a default connection and separate short-lived grants.
+`GET /v1/repository-custody/connections` exposes bounded non-secret metadata only
+to the authenticated Console caller. Expired or missing permissions are not ready;
+an invalid optional projection fails its own operations without a fallback token.
+
+Creation selects the exact target account, type and provisioning binding. Personal
+creation uses `/user/repos` and explicit Private/Public; organization creation uses
+`/orgs/{account}/repos`. Independent readback verifies immutable repository ID,
+provider account ID/type and exact settings. Linking and URL lookup use only that
+account's metadata reader. Default selection is a form convenience and never
+changes an existing request, credential binding or retry target.
+
+Same names in different accounts retain different immutable provider IDs. New
+Console aliases include the account; existing Registry aliases are preserved.
+Native Registry rows expose their recorded provider coordinates without another
+database or an account-specific Registry. Operational metadata remains private.
+
+Source and lifecycle grants remain independent. Lifecycle credentials retain the
+existing explicit single-repository bound; an account connection does not activate
+that workflow or authorize account-wide archive operations. No personal token,
+browser credential, ambient `gh` login or more privileged fallback is accepted.
+
+Engineering delivery/renewal and connection inspection use the existing
+[Platform procedure](https://github.com/mfshaf7/platform-engineering/blob/main/products/governance-operations-console/runbooks/operate-complete-runtime.md#connected-github-accounts).
+Packaged customer onboarding remains an explicit Console release requirement.
+
 ## Current Posture
 
 The source is Security-approved for local `dev-integration` activation. It
@@ -137,3 +167,42 @@ to name the failed creation. A provisioning correction cannot reassign a provide
 creation to another request. Exact historical acknowledgements retain recovery
 without rewriting original outcomes. New confirmation requires a successful
 create or attach receipt for the same requirement, not an unrelated existing link.
+
+## Paged repository list and scoped history
+
+The same authenticated `GET /v1/repository-custody/requests` supports
+`view=register`: one latest successful result per immutable provider repository.
+The default `requests` view retains original request history. Both are paged at
+no more than25 results per read; there is no250-request workspace-read limit.
+`provider_repository_id` and `proposal_id` select exact repository or Proposal
+history; cursors for indexed views bind their read selection. No read invokes
+GitHub, changes state or grants downstream authority. Source envelopes include
+the selected read view.
+
+The existing canonical request files remain the system of record. Their derived
+in-process lookup metadata is reconstructed after restart and invalidated by
+atomic file changes, including another writer. Warm list reads load only their
+selected result bodies. Corrupt source metadata fails closed. No database,
+retention deletion or replacement receipt is introduced.
+
+New create/link effects require a valid `repo:` workspace identifier consistent
+with registration. Invalid identifiers stop before readiness/provider operations.
+Existing terminal historical readbacks remain readable and are not rewritten.
+
+## Repository onboarding and use
+
+Repository creation/linking verifies custody. Workspace Registry coordinates its
+existing Intake decision, trusted source-control setup and active Inventory
+promotion. A successful provider receipt alone cannot unlock project use.
+
+Proposal repository resolution, repository-backed decisions/handoffs and Prototype
+target preparation/publication recheck the existing current Inventory/WGCF
+readiness authority. Unavailable, stale or incomplete onboarding blocks new use.
+Original requests, historical receipts, cancellation and outcome recovery remain
+available without replacement IDs or invented activation evidence.
+
+Internal project sources additionally need exact current public provider readback
+before the existing public Studio route can publish metadata. Private/internal,
+archived, mismatched or unknown sources cannot use that publication route.
+Private-capable Delivery retains its own approved source access and controls.
+Repository onboarding does not grant private Studio import or model context export.

@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -71,6 +72,36 @@ export function createRepositoryCustodyStore({ root = repositoryCustodyStateRoot
   const locks = path.join(root, "locks");
   mkdirSync(records, { recursive: true, mode: 0o700 });
   mkdirSync(locks, { recursive: true, mode: 0o700 });
+  // Derived read metadata only; request files remain canonical. Atomic file
+  // replacement invalidates entries, including changes by another process.
+  const catalog = new Map();
+
+  function indexedRecords() {
+    const names = readdirSync(records).filter(name => /^[a-f0-9]{64}\.json$/.test(name));
+    const present = new Set(names.map(name => name.slice(0, -5)));
+    for (const key of catalog.keys()) if (!present.has(key)) catalog.delete(key);
+    for (const name of names) {
+      const key = name.slice(0, -5), info = statSync(path.join(records, name));
+      const version = `${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+      if (catalog.get(key)?.version === version) continue;
+      let value;
+      try { value = read(JSON.parse(readFileSync(path.join(records, name), "utf8"))?.request?.request_id); }
+      catch { throw new RepositoryCustodyStoreError("repository_custody_state_corrupt", "Repository custody index could not read a canonical request."); }
+      if (!value || storageKey(value.request.request_id) !== key ||
+          !["succeeded", "failed", "denied", "applying"].includes(value.status)) {
+        throw new RepositoryCustodyStoreError("repository_custody_state_corrupt", "Repository custody index identity is invalid.");
+      }
+      const providerId = value.provider_readback?.repository_identity?.provider_repository_id ??
+        value.provider_operation?.provider_repository_id ?? value.request.target?.provider_repository_id ?? null;
+      if (value.status === "succeeded" && !/^[1-9][0-9]*$/.test(providerId)) {
+        throw new RepositoryCustodyStoreError("repository_custody_state_corrupt", "A successful repository record has no provider identity.");
+      }
+      catalog.set(key, { key, version, requestId: value.request.request_id, providerId,
+        correlation: value.request.correlation?.correlation_id, status: value.status,
+        time: value.receipt?.completed_at ?? value.request.requested_at });
+    }
+    return [...catalog.values()];
+  }
 
   function recordPath(requestId) {
     return path.join(records, `${storageKey(requestId)}.json`);
@@ -190,15 +221,40 @@ export function createRepositoryCustodyStore({ root = repositoryCustodyStateRoot
 
   return {
     get: read,
-    list({ cursor = null, limit = 25 } = {}) {
+    list({ cursor = null, limit = 25, view = "requests", providerRepositoryId = null, proposalId = null } = {}) {
       if (
         (cursor !== null && !/^[a-f0-9]{64}$/.test(cursor)) ||
-        !Number.isInteger(limit) || limit < 1 || limit > 25
+        !Number.isInteger(limit) || limit < 1 || limit > 25 ||
+        !["requests", "register"].includes(view) ||
+        providerRepositoryId !== null && !/^[1-9][0-9]*$/.test(providerRepositoryId) ||
+        proposalId !== null && !/^idea-[1-9][0-9]*$/.test(proposalId)
       ) {
         throw new RepositoryCustodyStoreError(
           "repository_custody_page_invalid",
           "Repository custody pages require a valid cursor and a limit from 1 to 25.",
         );
+      }
+      if (view === "register" || providerRepositoryId !== null || proposalId !== null) {
+        let entries = indexedRecords().filter(item =>
+          (providerRepositoryId === null || item.providerId === providerRepositoryId) &&
+          (proposalId === null || item.correlation === `repo-request://proposal/${proposalId}`));
+        if (view === "register") {
+          const latest = new Map();
+          for (const item of entries.filter(item => item.status === "succeeded")) {
+            const previous = latest.get(item.providerId);
+            if (!previous || item.time > previous.time || item.time === previous.time && item.requestId > previous.requestId) latest.set(item.providerId, item);
+          }
+          entries = [...latest.values()];
+        }
+        const scope = { view, providerRepositoryId, proposalId };
+        entries = entries.map(item => ({ ...item, cursor: storageKey(JSON.stringify({ ...scope,
+          identity: view === "register" ? item.providerId : item.key })) })).sort((a, b) => a.cursor.localeCompare(b.cursor));
+        if (cursor !== null && !entries.some(item => item.cursor === cursor)) {
+          throw new RepositoryCustodyStoreError("repository_custody_page_invalid", "This repository cursor does not belong to the selected read.");
+        }
+        const remaining = entries.filter(item => cursor === null || item.cursor > cursor);
+        return { records: remaining.slice(0, limit).map(item => read(item.requestId)),
+          next_cursor: remaining.length > limit ? remaining[limit - 1].cursor : null };
       }
       const keys = readdirSync(records)
         .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))

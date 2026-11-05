@@ -146,3 +146,21 @@ application is live only through the authenticated OOS application route.
 
 See [Proposal Workflow Contract V1](../contracts/proposal-workflow-v1.md) for
 the machine contract and [OpenAPI](../api/openapi.json) for exact route shapes.
+
+## Repository onboarding and use
+
+Repository creation/linking verifies custody. Workspace Registry coordinates its
+existing Intake decision, trusted source-control setup and active Inventory
+promotion. A successful provider receipt alone cannot unlock project use.
+
+Proposal repository resolution, repository-backed decisions/handoffs and Prototype
+target preparation/publication recheck the existing current Inventory/WGCF
+readiness authority. Unavailable, stale or incomplete onboarding blocks new use.
+Original requests, historical receipts, cancellation and outcome recovery remain
+available without replacement IDs or invented activation evidence.
+
+Internal project sources additionally need exact current public provider readback
+before the existing public Studio route can publish metadata. Private/internal,
+archived, mismatched or unknown sources cannot use that publication route.
+Private-capable Delivery retains its own approved source access and controls.
+Repository onboarding does not grant private Studio import or model context export.

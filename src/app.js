@@ -4345,18 +4345,23 @@ async function handleRepositoryProviderLookup({config, repositoryCustodyService,
 async function handleRepositoryCustodyList({ config, repositoryCustodyService, request, response, url }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Repository custody reads");
-  if ([...url.searchParams.keys()].some((key) => !["cursor", "limit"].includes(key))) {
+  const selectors = ["cursor", "limit", "view", "provider_repository_id", "proposal_id"];
+  if ([...url.searchParams.keys()].some((key) => !selectors.includes(key) || url.searchParams.getAll(key).length !== 1)) {
     throw new HttpError(400, "repository_custody_page_invalid", "Unsupported repository custody page filter.");
   }
   const result = await repositoryCustodyService.list({
     callerId: caller.id,
     cursor: url.searchParams.get("cursor"),
     limit: Number(url.searchParams.get("limit") ?? 25),
+    ...(url.searchParams.has("view") ? { view: url.searchParams.get("view") } : {}),
+    ...(url.searchParams.has("provider_repository_id") ? { providerRepositoryId: url.searchParams.get("provider_repository_id") } : {}),
+    ...(url.searchParams.has("proposal_id") ? { proposalId: url.searchParams.get("proposal_id") } : {}),
   });
   sendSourceProjection(response, request, result, () => ({
     recordRef: "oos://repository-custody/requests",
     sourceOwner: "operator-orchestration-service",
-    sourceRef: sourceReadViewRef(url, { cursor: url.searchParams.get("cursor"), limit: Number(url.searchParams.get("limit") ?? 25) }),
+    sourceRef: sourceReadViewRef(url, { cursor: url.searchParams.get("cursor"), limit: Number(url.searchParams.get("limit") ?? 25),
+      view: url.searchParams.get("view") ?? "requests", provider_repository_id: url.searchParams.get("provider_repository_id"), proposal_id: url.searchParams.get("proposal_id") }),
     sourceRevision: sourceRevisionDigest(result),
     sourceTimestamp: result.records.reduce(
       (latest, record) => {
@@ -6539,6 +6544,15 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/repository-custody/connections") {
+        const caller = authenticateCaller(request, config);
+        assertCallerIdentityBound(caller, "GitHub connections");
+        if (caller.id !== "governance-operations-console") throw new HttpError(403, "repository_connections_caller_denied", "GitHub connections are limited to the operator Console.");
+        if (url.search) throw new HttpError(400, "repository_connections_query_invalid", "GitHub connections do not accept query parameters.");
+        if (!repositoryCustodyService) throw new HttpError(503, "repository_custody_runtime_not_configured", "The repository custody runtime is not configured.");
+        sendJson(response, 200, repositoryCustodyService.connections());
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/v1/repository-custody/provider-repository") {
         if (!repositoryCustodyService) throw new HttpError(503, "repository_custody_runtime_not_configured", "The repository custody runtime is not configured.");
         await handleRepositoryProviderLookup({config, repositoryCustodyService, request, response, url});

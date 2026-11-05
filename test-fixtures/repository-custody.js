@@ -211,7 +211,7 @@ export function provisionReadback(request, overrides = {}) {
     canonical_name: request.target.name,
     canonical_url: `https://github.com/${request.target.owner}/${request.target.name}`,
     applied_provisioning: {
-      owner_scope: "organization",
+      owner_scope: request.target.owner_scope,
       initialization_state: "initialized",
       settings: request.provisioning,
     },

@@ -1,4 +1,5 @@
 import { HttpError } from "../errors.js";
+import { repositoryConnections } from "./connections.js";
 import {
   assertRepositoryProviderReadback,
   withArtifactIntegrity,
@@ -96,9 +97,9 @@ function providerFailure(response, { create = false } = {}) {
   );
 }
 
-function appliedProvisioning(body) {
+function appliedProvisioning(body, request) {
   return {
-    owner_scope: "organization",
+    owner_scope: request.target.owner_scope,
     initialization_state: "initialized",
     settings: {
       description: body.description ?? null,
@@ -127,8 +128,12 @@ export function createGitHubRepositoryProviderClient({
   provisioningInstallationToken,
   readInstallationToken,
   readAccount,
+  connections,
   sandbox = false,
 }) {
+  let connected, connectionError;
+  try { connected = repositoryConnections(connections, { clock }); }
+  catch (error) { connectionError = error; }
   if (readAccount !== undefined && (typeof readAccount !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(readAccount))) {
     throw new HttpError(503, "repository_provider_account_invalid", "The repository reader account is invalid.");
   }
@@ -156,6 +161,14 @@ export function createGitHubRepositoryProviderClient({
   }
 
   function installationToken(request) {
+    if (connectionError) throw connectionError;
+    if (connected) return connected.resolve({ owner: request.target.owner,
+      role: request.action === "provision-new" ? "provisioning" : "metadata",
+      credentialBindingRef: request.authority?.credential_binding_ref,
+      ownerScope: request.target.owner_scope }).token;
+    if (request.action === "provision-new" && request.target.owner_scope === "personal") {
+      throw new HttpError(503, "repository_connection_not_ready", "Connect this personal GitHub account before creating a repository.");
+    }
     return request.action === "provision-new"
       ? provisioningInstallationToken
       : readInstallationToken;
@@ -187,10 +200,19 @@ export function createGitHubRepositoryProviderClient({
   async function readRepository(request, response, expectedRepositoryId = null) {
     if (!response.ok) throw providerFailure(response);
     const body = await readBoundedJson(response);
-    if (request.action !== "provision-new" && readAccount && (typeof body?.owner?.login !== "string" || body.owner.login.toLowerCase() !== readAccount.toLowerCase())) {
+    if (!connected && request.action !== "provision-new" && readAccount && (typeof body?.owner?.login !== "string" || body.owner.login.toLowerCase() !== readAccount.toLowerCase())) {
       throw new HttpError(403, "repository_provider_owner_not_admitted", "The repository is outside the connected account.");
     }
     const providerRepositoryId = String(body?.id ?? "");
+    if (connected) {
+      const account = connected.resolve({owner: request.target.owner,
+        role: request.action === "provision-new" ? "provisioning" : "metadata", credentialBindingRef: request.authority?.credential_binding_ref,
+        ownerScope: request.target.owner_scope});
+      if (body?.owner?.login?.toLowerCase() !== account.account.toLowerCase() || String(body?.owner?.id) !== account.accountId ||
+          body?.owner?.type !== (account.accountType === "personal" ? "User" : "Organization")) {
+        throw new HttpError(409, "repository_provider_identity_mismatch", "GitHub returned a repository under a different connected account.");
+      }
+    }
     if (
       !/^[1-9][0-9]*$/.test(providerRepositoryId) ||
       (expectedRepositoryId !== null && providerRepositoryId !== expectedRepositoryId) ||
@@ -245,27 +267,34 @@ export function createGitHubRepositoryProviderClient({
       provider_version: String(version ?? "").trim(),
       credential_binding_ref: request.authority.credential_binding_ref,
       applied_provisioning: request.action === "provision-new"
-        ? appliedProvisioning(body)
+        ? appliedProvisioning(body, request)
         : null,
     });
     return assertRepositoryProviderReadback(readback);
   }
 
   return {
+    connections() { if (connectionError) throw connectionError; return connected?.projection() ?? {schema_version: 1, default_connection_id: null, connections: []}; },
     async lookup({ owner, name }) {
       const coordinate = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
       if (typeof owner !== "string" || typeof name !== "string" || !coordinate.test(owner) || !coordinate.test(name) || name.toLowerCase().endsWith(".git")) {
         throw new HttpError(400, "repository_provider_lookup_invalid", "Use the organization and repository name from a GitHub repository URL.");
       }
-      if (readAccount && owner.toLowerCase() !== readAccount.toLowerCase()) {
+      if (!connected && readAccount && owner.toLowerCase() !== readAccount.toLowerCase()) {
         throw new HttpError(403, "repository_provider_owner_not_admitted", "The repository is outside the connected account.");
       }
-      const context = { action: "link-existing", target: {provider: "github", provider_host: "github.com"} };
+      const context = { action: "link-existing", target: {owner, provider: "github", provider_host: "github.com"} };
       assertConfigured(context);
       const response = await providerRequest(`${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
-        { method: "GET", headers: providerHeaders(readInstallationToken), signal: AbortSignal.timeout(10_000) });
+        { method: "GET", headers: providerHeaders(installationToken(context)), signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw providerFailure(response);
       const body = await readBoundedJson(response);
+      if (connected) {
+        const account = connected.resolve({owner, role: "metadata"});
+        if (String(body?.owner?.id) !== account.accountId || body?.owner?.type !== (account.accountType === "personal" ? "User" : "Organization")) {
+          throw new HttpError(409, "repository_provider_identity_mismatch", "GitHub returned a different account identity.");
+        }
+      }
       if (!/^[1-9][0-9]*$/.test(String(body?.id ?? "")) || typeof body?.owner?.login !== "string" || typeof body?.name !== "string" ||
           body?.owner?.login?.toLowerCase() !== owner.toLowerCase() || body?.name?.toLowerCase() !== name.toLowerCase() ||
           body?.html_url !== `https://github.com/${body.owner.login}/${body.name}` ||
@@ -325,15 +354,21 @@ export function createGitHubRepositoryProviderClient({
       assertConfigured(request);
       const token = installationToken(request);
       const settings = approvedProvisioning.settings;
+      const personal = approvedProvisioning.owner_scope === "personal";
+      if (personal && settings.visibility === "internal") throw new HttpError(400,
+        "repository_visibility_not_supported", "Personal GitHub repositories support Private or Public visibility.");
+      if (approvedProvisioning.owner !== request.target.owner || approvedProvisioning.owner_scope !== request.target.owner_scope || approvedProvisioning.name !== request.target.name) {
+        throw new HttpError(409, "repository_provider_identity_mismatch", "Creation must use the exact approved GitHub destination.");
+      }
       const response = await providerRequest(
-        `${baseUrl}/orgs/${encodeURIComponent(approvedProvisioning.owner)}/repos`,
+        personal ? `${baseUrl}/user/repos` : `${baseUrl}/orgs/${encodeURIComponent(approvedProvisioning.owner)}/repos`,
         {
           method: "POST",
           headers: providerHeaders(token, { json: true }),
           body: JSON.stringify({
             name: approvedProvisioning.name,
             description: settings.description,
-            visibility: settings.visibility,
+            ...(personal ? { private: settings.visibility === "private" } : { visibility: settings.visibility }),
             auto_init: settings.initialize_with_readme,
             has_issues: settings.features.issues,
             has_projects: settings.features.projects,

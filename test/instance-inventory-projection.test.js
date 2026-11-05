@@ -15,12 +15,14 @@ test("Private registry projection preserves native namespace, real lineage and t
   const eligible = await project({ input: { scope: "eligible" } });
   const candidate = eligible.eligible_promotions[0];
   assert.equal(candidate.canonical_authority.instance_id, instanceId);
+  assert.deepEqual(candidate.provider_repository, intake.record.provider_repository);
   assert.equal(candidate.intake_entry_ref.digest, intake.receipt.record_digest);
   assert.deepEqual(candidate.active_record.value.owns, [intake.record.notes]);
   assert.deepEqual(candidate.approval_refs, [intake.record.record.decision.ref, intake.record.record.decision.id]);
   assert.equal(candidate.candidate_digest, intakeDigest(candidate, "candidate_digest"));
   const page = await project();
   assert.equal(page.records[0].id, target.record_id);
+  assert.deepEqual(page.records[0].provider_repository, inventory.record.provider_repository);
   assert.equal(page.records[0].version, inventory.receipt.version);
   assert.equal(page.records[0].lineage.source_digest, inventory.record.record.lineage.source_digest);
   assert.equal(page.projection_digest, intakeDigest(page, "projection_digest"));

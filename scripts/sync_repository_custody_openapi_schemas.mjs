@@ -233,12 +233,15 @@ synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests"
   get: {
     tags: ["Repository Custody"],
     summary: "List retained repository custody requests",
-    description: "Reads a bounded page of integrity-validated durable custody results so the Console can recover canonical repository state after reload. No provider or downstream mutation occurs.",
+    description: "Reads at most 25 canonical results. The register view selects the latest successful result per immutable provider repository; request history remains independently pageable and can be scoped to a repository or Proposal. No provider or downstream mutation occurs.",
     operationId: "listRepositoryCustodyResults",
     security,
     parameters: [
       { name: "cursor", in: "query", required: false, schema: { type: "string", pattern: "^[a-f0-9]{64}$" } },
       { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 25, default: 25 } },
+      { name: "view", in: "query", required: false, schema: { type: "string", enum: ["requests", "register"], default: "requests" } },
+      { name: "provider_repository_id", in: "query", required: false, schema: { type: "string", pattern: "^[1-9][0-9]*$" } },
+      { name: "proposal_id", in: "query", required: false, schema: { type: "string", pattern: "^idea-[1-9][0-9]*$" } },
     ],
     responses: {
       200: {
@@ -337,6 +340,28 @@ synchronized = upsertPlainOpenApiPath(synchronized, "/v1/repository-custody/prov
     400:errorResponse("Invalid coordinates or unsupported query."),403:errorResponse("Caller or provider access denied."),404:errorResponse("Repository not found or not accessible."),
     409:errorResponse("Provider returned a different identity."),503:errorResponse("Runtime or provider read identity unavailable.")},
   "x-oos-owner":"operator-orchestration-service","x-oos-primary-caller":"governance-operations-console","x-oos-surface":"operator-facing","x-oos-workflow-family":"repository-custody",
+}});
+
+const connectionRef = {type: "object", required: ["uri", "digest"], additionalProperties: false,
+  properties: {uri: {type: "string", format: "uri"}, digest: {type: "string", pattern: "^sha256:[a-f0-9]{64}$"}}};
+synchronized = upsertOpenApiComponent(synchronized, "RepositoryConnectionsV1", {
+  type: "object", additionalProperties: false, required: ["schema_version", "default_connection_id", "connections"],
+  properties: {schema_version: {const: 1}, default_connection_id: {type: ["string", "null"]}, connections: {
+    type: "array", maxItems: 32, items: {type: "object", additionalProperties: false,
+      required: ["id", "account", "account_id", "account_type", "capabilities", "credential_bindings"],
+      properties: {id: {type: "string"}, account: {type: "string"}, account_id: {type: "string", pattern: "^[1-9][0-9]*$"},
+        account_type: {enum: ["personal", "organization"]}, capabilities: {type: "object", additionalProperties: false,
+          required: ["metadata", "provisioning", "lifecycle"], properties: Object.fromEntries(["metadata", "provisioning", "lifecycle"].map(role => [role, {type: "boolean"}]))},
+        credential_bindings: {type: "object", additionalProperties: false, properties: Object.fromEntries(["metadata", "provisioning", "lifecycle"].map(role => [role, connectionRef]))},
+      }},
+  }},
+});
+synchronized = upsertPlainOpenApiPath(synchronized, "/v1/repository-custody/connections", {get: {
+  tags: ["Repository Custody"], summary: "Inspect connected GitHub accounts", operationId: "listRepositoryConnections", security,
+  description: "Authenticated Console-only projection of Platform-verified accounts, default destination and current purpose-specific credential bindings. No tokens, keys or provider mutation. An absent or expired grant never borrows another account's authority.",
+  responses: {200: {description: "Verified connection metadata; capabilities reflect credential currency, not application acceptance.", content: {"application/json": {schema: {$ref: "#/components/schemas/RepositoryConnectionsV1"}, example: {schema_version: 1, default_connection_id: null, connections: []}}}},
+    400: errorResponse("Unexpected query."), 401: errorResponse("Caller authentication failed."), 403: errorResponse("Caller denied."), 503: errorResponse("Connection metadata unavailable.")},
+  "x-oos-owner": "operator-orchestration-service", "x-oos-primary-caller": "governance-operations-console", "x-oos-surface": "operator-facing", "x-oos-workflow-family": "repository-custody",
 }});
 
 if (process.argv.includes("--check")) {

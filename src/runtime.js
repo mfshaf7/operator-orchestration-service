@@ -1,3 +1,4 @@
+import {createRepositoryUseReadiness} from "./repository-custody/use-readiness.js";
 import { loadConfig } from "./config.js";
 import path from "node:path";
 import { createSavedWorkStore } from "./saved-work/store.js";
@@ -147,6 +148,7 @@ export function createRuntime({
       }
       return repositoryCustodyService.project(requestId);
     },
+    requireRepositoryReady: input => createRepositoryUseReadiness({catalogService, inventoryService: workspaceInventoryService, custodyService: repositoryCustodyService})(input),
   });
   const wgcfDeliveryArtReadinessClient = createWgcfDeliveryArtReadinessClient({
     baseUrl: config.wgcf.deliveryArtBaseUrl,
