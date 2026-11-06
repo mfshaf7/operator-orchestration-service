@@ -1,5 +1,7 @@
+import {reviewDecision,decisionReference} from './decisions.js';
 import {
   assertModelProfileContract,
+  assertModelProfileLifecycleContract,
   createModelProfileReceipt,
   modelProfileDigest,
   modelProfileRequestError,
@@ -176,8 +178,9 @@ export function createModelProfileRequestService({
   fulfillmentCallerIds,
   operatorBindings,
   store,
+  securityOperatorIds = new Set(),
 }) {
-  async function create({ callerId, input, operatorId }) {
+  async function create({ callerId, input, operatorId, lifecycleContext = null }) {
     assertOperatorBinding(operatorBindings, callerId, operatorId);
     const request = assertModelProfileContract("request.schema.json", structuredClone(input));
     assertProfileIntentSemantics(request.profile_intent);
@@ -185,6 +188,7 @@ export function createModelProfileRequestService({
       throw modelProfileRequestError("operator_mismatch", "Request operator does not match authenticated operator.", 403);
     }
     const digest = modelProfileDigest(request);
+    const contextDigest = modelProfileDigest(lifecycleContext);
     const createKey = `${callerId}:${request.idempotency_key}`;
     return store.transact(async (transaction) => {
       const existingById = transaction.get(request.request_id);
@@ -192,7 +196,7 @@ export function createModelProfileRequestService({
       const existing = existingById ?? (existingKey ? transaction.get(existingKey.request_id) : null);
       if (existing) {
         assertOwner(existing, callerId);
-        if (existing.request_digest !== digest || existingKey?.digest && existingKey.digest !== digest) {
+        if (existing.request_digest !== digest || (existing.lifecycle_context_digest ?? modelProfileDigest(null)) !== contextDigest || existingKey?.digest && existingKey.digest !== digest) {
           throw modelProfileRequestError(
             "idempotency_conflict",
             "Request identity or idempotency key is bound to different input.",
@@ -203,6 +207,10 @@ export function createModelProfileRequestService({
       }
       const now = clock().toISOString();
       const record = {
+        lifecycle_context: lifecycleContext === null ? null : structuredClone(lifecycleContext),
+        lifecycle_context_digest: contextDigest,
+        decision_records: {},
+        security_acceptance: null,
         owner_caller_id: callerId,
         request,
         request_digest: digest,
@@ -236,9 +244,10 @@ export function createModelProfileRequestService({
     });
   }
 
-  async function command({ callerId, input, operatorId, requestId }) {
+  async function command({ callerId, input, operatorId, requestId, recordDecision = false, lifecycleContext = undefined }) {
     assertOperatorBinding(operatorBindings, callerId, operatorId);
-    const commandInput = assertModelProfileContract("command.schema.json", structuredClone(input));
+    const recorded = recordDecision ? reviewDecision(input,{callerId,operatorId,requestId}) : null;
+    const commandInput = assertModelProfileContract("command.schema.json", {...structuredClone(input),...(recorded?{decision_ref:decisionReference(recorded)}:{})});
     if (commandInput.request_id !== requestId || commandInput.operator_id !== operatorId) {
       throw modelProfileRequestError("command_binding_invalid", "Command request or operator binding is invalid.", 403);
     }
@@ -262,6 +271,7 @@ export function createModelProfileRequestService({
       }
       const reviewBefore = record.review_state;
       const fulfillmentBefore = record.fulfillment_state;
+      if(commandInput.action==='approve'&&record.lifecycle_context&&['activate','exception'].includes(record.request.intent)&&!record.security_acceptance)throw modelProfileRequestError('security_acceptance_required','Record separate Security acceptance for this exact policy before approving activation or exception.',409);
       if (commandInput.action === "revise") {
         const revisedRequest = {
           ...record.request,
@@ -269,8 +279,14 @@ export function createModelProfileRequestService({
         };
         assertModelProfileContract("request.schema.json", revisedRequest);
         assertProfileIntentSemantics(revisedRequest.profile_intent);
+        const metadataOnly=modelProfileDigest(Object.fromEntries(Object.entries(record.request.profile_intent).filter(([key])=>!['display_name','intended_purpose','operator_justification','input_data_classification','operational_expectations'].includes(key))))===modelProfileDigest(Object.fromEntries(Object.entries(revisedRequest.profile_intent).filter(([key])=>!['display_name','intended_purpose','operator_justification','input_data_classification','operational_expectations'].includes(key))));
+        if(record.lifecycle_context && !metadataOnly && lifecycleContext===undefined)throw modelProfileRequestError('lifecycle_reprepare_required','Use Revise operating policy to refresh the policy and integration evidence. Review wording alone cannot change that setup.',409);
+        const retainedContext=metadataOnly?(record.lifecycle_context??null):null;
         record.request = revisedRequest;
         record.request_digest = modelProfileDigest(revisedRequest);
+        record.lifecycle_context = lifecycleContext === undefined ? retainedContext : structuredClone(lifecycleContext);
+        record.lifecycle_context_digest = modelProfileDigest(record.lifecycle_context);
+        record.security_acceptance = null;
       }
       record.review_state = AFTER[commandInput.action](record.review_state);
       if (commandInput.action === "request-changes") {
@@ -280,6 +296,7 @@ export function createModelProfileRequestService({
       }
       if (["approve", "reject"].includes(commandInput.action)) {
         record.decision_ref = structuredClone(commandInput.decision_ref);
+        if(recorded){record.decision_records??={};record.decision_records[recorded.digest]=recorded;}
       }
       record.revision += 1;
       appendEvent(record, {
@@ -381,21 +398,72 @@ export function createModelProfileRequestService({
   return {
     create,
     command,
+    recordReview: input => command({...input, recordDecision: true}),
     fulfill,
+    async decision({callerId,requestId,digest}) {
+      const record=await store.get(requestId);
+      if(!record || record.owner_caller_id!==callerId && !(fulfillmentCallerIds.has(callerId)&&record.review_state==='approved'))throw modelProfileRequestError('not_found','Decision was not found.',404);
+      const decision=/^sha256:[0-9a-f]{64}$/.test(digest??'')&&Object.hasOwn(record.decision_records??{},digest)?record.decision_records[digest]:null;
+      if(!decision)throw modelProfileRequestError('not_found','Decision was not found.',404);
+      return structuredClone(decision);
+    },
+    async lifecycle({callerId,requestId}) {
+      const record=await store.get(requestId);
+      if(!record || record.owner_caller_id!==callerId && !(fulfillmentCallerIds.has(callerId)&&record.review_state==='approved'))throw modelProfileRequestError('not_found','Request was not found.',404);
+      return {request:project(record),context:structuredClone(record.lifecycle_context??null),security_acceptance:structuredClone(record.security_acceptance??null)};
+    },
+    async acceptSecurity({callerId,operatorId,requestId,input}) {
+      assertOperatorBinding(operatorBindings,callerId,operatorId);
+      if(!securityOperatorIds.has(operatorId))throw modelProfileRequestError('security_acceptance_forbidden','This operator is not an admitted Security decision maker.',403);
+      assertModelProfileLifecycleContract('securityAcceptance',input);
+      if(!input||Object.keys(input).sort().join(',')!=='command_id,expected_revision,reason'||typeof input.command_id!=='string'||!/^model-profile-security:[A-Za-z0-9._:-]{1,180}$/.test(input.command_id)||typeof input.reason!=='string'||!input.reason.trim()||input.reason.length>2000||!Number.isInteger(input.expected_revision))throw modelProfileRequestError('security_acceptance_invalid','Record an explicit Security acceptance with its reason and current revision.',400);
+      return store.transact(async transaction=>{
+        const record=transaction.get(requestId);assertOwner(record,callerId);
+        const key='security:'+input.command_id,digest=modelProfileDigest(input);
+        if(assertReplay(record,[key],digest)){
+          const prior=Object.values(record.decision_records??{}).find(d=>d.command_id===input.command_id);
+          return {reference:decisionReference(prior),decision:structuredClone(prior),request:project(record)};
+        }
+        assertRevision(record,input.expected_revision);
+        if(record.review_state!=='under-review'||!['activate','exception'].includes(record.request.intent)||!record.lifecycle_context?.candidate_digest)throw modelProfileRequestError('security_acceptance_not_ready','Security acceptance requires an owner-prepared activation or exception under review.',409);
+        const decision={schema_version:1,artifact_type:'model-profile-security-acceptance',command_id:input.command_id,request_id:requestId,request_revision:record.revision,operator_id:operatorId,caller_id:callerId,candidate_digest:record.lifecycle_context.candidate_digest,source:record.request.profile_intent.source,decision:'accept',reason:input.reason,recorded_at:clock().toISOString()};
+        decision.digest=modelProfileDigest(decision);record.security_acceptance=decision;
+        assertTimestampOrder(record,decision.recorded_at);
+        record.decision_records??={};record.decision_records[decision.digest]=decision;
+        record.revision+=1;
+        appendEvent(record,{actorId:{callerId,operatorId},commandId:input.command_id,eventType:'security-acceptance-recorded',fulfillmentBefore:record.fulfillment_state,reviewBefore:record.review_state,occurredAt:decision.recorded_at,summary:'Security acceptance recorded for this exact source and candidate: '+input.reason});
+        bindOperation(record,[key],digest);await transaction.put(record);
+        return {reference:decisionReference(decision),decision:structuredClone(decision),request:project(record)};
+      });
+    },
+    async securityStatus({callerId,operatorId,requestId}) {
+      assertOperatorBinding(operatorBindings,callerId,operatorId);
+      const record=await store.get(requestId);assertOwner(record,callerId);
+      return {request_id:requestId,revision:record.revision,prepared:Boolean(record.lifecycle_context?.candidate),edit:structuredClone(record.lifecycle_context?.selection??null),review:structuredClone(record.lifecycle_context?.review??null),required:['activate','exception'].includes(record.request.intent),authorized:securityOperatorIds.has(operatorId),acceptance:record.security_acceptance?{reference:decisionReference(record.security_acceptance),reason:record.security_acceptance.reason,operator_id:record.security_acceptance.operator_id,recorded_at:record.security_acceptance.recorded_at}:null};
+    },
     async get({ callerId, requestId }) {
       const record = await store.get(requestId);
-      assertOwner(record, callerId);
+      if(!record || record.owner_caller_id!==callerId && !(fulfillmentCallerIds.has(callerId)&&record.review_state==='approved'))throw modelProfileRequestError('not_found','Model-profile request was not found.',404);
       return project(record);
     },
-    async list({ callerId, cursor = null, limit = 50 }) {
-      const records = (await store.list())
+    async list({ callerId, cursor = null, limit = 50, view = "full" }) {
+      if (!["full", "summary"].includes(view) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+          cursor !== null && (typeof cursor !== "string" || cursor.length > 240)) {
+        throw modelProfileRequestError("list_invalid", "Select a supported request view, cursor and page size.", 400);
+      }
+      const records = (await store.list({ summary: view === "summary" }))
         .filter((record) => record.owner_caller_id === callerId)
         .filter((record) => !cursor || record.request.request_id > cursor)
-        .sort((left, right) => left.request.request_id.localeCompare(right.request.request_id));
+        .sort((left, right) => left.request.request_id === right.request.request_id ? 0 : left.request.request_id < right.request.request_id ? -1 : 1);
       const page = records.slice(0, limit);
       return {
         schema_version: 1,
-        requests: page.map(project),
+        requests: view === "summary" ? page.map(record => ({
+          request_id: record.request.request_id, revision: record.revision,
+          display_name: record.request.profile_intent.display_name,
+          requested_at: record.request.requested_at, review_state: record.review_state,
+          fulfillment_state: record.fulfillment_state, next_action: nextAction(record),
+        })) : page.map(project),
         next_cursor: records.length > limit ? page.at(-1).request.request_id : null,
       };
     },

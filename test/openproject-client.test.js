@@ -1268,6 +1268,7 @@ test("getIdea retries a recoverable network error once", async () => {
   const client = createOpenProjectClient({
     config,
     fetchImpl: async (url, options) => {
+      if(new URL(url).pathname.startsWith("/api/v3/projects/"))return Response.json({id:7});
       calls.push({ url, options });
       attempts += 1;
 
@@ -1281,6 +1282,7 @@ test("getIdea retries a recoverable network error once", async () => {
         text: async () =>
           JSON.stringify({
             _links: {
+              project:{href:"/api/v3/projects/7"},type:{href:`/api/v3/types/${config.ideaTypeId}`},
               status: {
                 title: "accepted",
               },

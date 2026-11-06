@@ -102,6 +102,7 @@ Actions and exact inputs:
 | `backend.register`, `backend.remove` | `{backend_id}` |
 | `model.register` | `{backend_id, model}` |
 | `model.remove` | `{model_id}` |
+| `profile.assign` | `{capability_id, profile_id}`; selects an active compatible preset inside the existing capability permissions |
 | `routing.save` | `{default, overrides}` |
 | `routing.rollback` | `{revision}` |
 | `account.login.start` | `{backend_id}` |
@@ -187,3 +188,15 @@ existing `model.register` command. Successful verification updates the same mode
 identity and creates a new configuration revision; routes and prior receipts are
 retained. Failed or uncertain verification does not adopt metadata. Request
 `reconcile` still means recover that original command, not accept provider drift.
+
+## Capability permission profile selection
+
+**Permission profiles** selects an active named preset for an installed AI
+capability, using the normal revisioned operation path. Creation and activation
+are separate. The base contract still authorizes the caller, context and output;
+a preset cannot implement new behavior or broaden that grant. Selection and model
+routing use one configuration snapshot and original invocation identity. Older
+configurations keep the base profile until an explicit selection. See
+[Purpose profile requests](model-profile-request-operator-surface.md#explicit-capability-profile-selection-and-revision-recovery)
+for creation, reviewed policy changes and recovery. The staged extension still
+requires exact source/composition acceptance before operating qualification.

@@ -1,4 +1,5 @@
 export const PROPOSAL_OPENAPI_SCHEMA_BINDINGS = [
+  {canonicalFilename:"register-result.schema.json",componentName:"ProposalRegisterV1"},
   {
     canonicalFilename: "repository-resolution-record.schema.json",
     componentName: "ProposalRepositoryResolutionRecordV1",

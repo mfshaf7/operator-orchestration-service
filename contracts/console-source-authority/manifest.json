@@ -24,6 +24,7 @@
     { "method": "get", "path": "/v1/delivery-intake/sources" },
     { "method": "get", "path": "/v1/delivery-initiatives/{delivery_id}/history" },
     { "method": "get", "path": "/v1/orchestration/runs/{run_id}" },
+    { "method": "get", "path": "/v1/proposals/register" },
     { "method": "get", "path": "/v1/proposals/{proposal_id}/projection" },
     { "method": "get", "path": "/v1/proposals/{proposal_id}/history" },
     { "method": "get", "path": "/v1/delivery-work-design/{package_id}/projection" },

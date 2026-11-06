@@ -164,6 +164,10 @@ export function createModelOperationsService({ store, platform, operatorBindings
       const configuration = assertConfiguration(await platform.configuration({ operatorId }));
       for (const backend of backends.backends) backend.registered = Object.hasOwn(configuration.configuration.backends, backend.backend_id);
       const { health: observedHealth, ...registry } = backends;
+      if (registry.capabilities) for (const capability of registry.capabilities) {
+        capability.selected_profile_id = configuration.configuration.profile_assignments?.[capability.capability_id] ?? capability.capability_id;
+        if (!capability.profiles.some(profile => profile.profile_id === capability.selected_profile_id)) throw fail("owner_response_invalid", "The selected permission profile is absent from the current capability catalog.", 502);
+      }
       if (!includeHealth) return { schema_version: 1, ...registry, configuration };
       let health = null;
       try { health = assertProviderHealth(observedHealth, configuration); }

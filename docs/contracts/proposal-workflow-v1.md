@@ -15,6 +15,8 @@ draft host; it is not a Proposal record authority.
 
 - `contracts/proposal-workflow/manifest.json` records live, contract-admitted,
   and deferred capabilities.
+- `contracts/proposal-workflow/register-result.schema.json` defines selector-bound,
+  bounded read-only summaries; `summaryOnly` records are not submission authority.
 - `contracts/proposal-workflow/command.schema.json` defines versioned triage,
   disposition, and handoff commands.
 - `contracts/proposal-workflow/command-result.schema.json` defines the accepted
@@ -88,6 +90,7 @@ invalid.
 
 The versioned Proposal workflow routes are:
 
+- `GET /v1/proposals/register`
 - `GET /v1/proposals/{proposal_id}/projection`
 - `POST /v1/proposals/{proposal_id}/commands`
 - `POST /v1/proposals/{proposal_id}/handoff/apply`
@@ -147,3 +150,15 @@ The following remain separate landing units:
 Handoff commands prepare canonical target packets only. Delivery application
 requires the separate application route. Neither preparation nor application
 claims lifecycle implementation or downstream completion.
+
+## Register and immutable decision evidence
+
+The read-only register bounds each request to25matching summaries and four
+native25-record pages, with exact selector-bound continuation and explicit
+whole-source counts. Its records retain source versions and optional scoped
+Delivery metadata, but their empty history is an unloaded placeholder.
+Selected snapshot/history reads retain current source and exact ID/version
+checks. New disposition events may carry the original accepted disposition
+command in `decision`. Legacy events remain valid and are never rewritten with
+later projection notes or route. This additive event field changes no Proposal
+machine-state fields, lifecycle values, write commands or operator approval.

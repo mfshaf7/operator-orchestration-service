@@ -2,7 +2,7 @@ import { HttpError } from "../errors.js";
 import { modelProfileDigest } from "../model-profile-request/contracts.js";
 
 export const digest = modelProfileDigest;
-export const ACTIONS = ["backend.register", "backend.remove", "model.register", "model.remove", "routing.save", "routing.rollback", "account.login.start", "account.login.cancel"];
+export const ACTIONS = ["backend.register", "backend.remove", "model.register", "model.remove", "profile.assign", "routing.save", "routing.rollback", "account.login.start", "account.login.cancel"];
 export const TERMINAL = new Set(["completed", "rejected", "cancelled"]);
 const SHA = /^sha256:[0-9a-f]{64}$/;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,180}$/;
@@ -50,6 +50,10 @@ export function assertAction(action, input) {
       closed(input, ["model_id"], action);
       if (!SHA.test(input.model_id)) throw fail("invalid_input", "Select a registered model.", 400);
       break;
+    case "profile.assign":
+      closed(input, ["capability_id", "profile_id"], action);
+      if (!text(input.capability_id, 128) || !text(input.profile_id, 128)) throw fail("invalid_input", "Choose an AI capability and its permission profile.", 400);
+      break;
     case "routing.save":
       closed(input, ["default", "overrides"], action); route(input.default);
       if (!object(input.overrides) || Object.keys(input.overrides).length > 100) throw fail("invalid_input", "Task overrides must be a bounded mapping.", 400);
@@ -86,7 +90,8 @@ export function assertConfiguration(value, expectedRevision = null) {
       expectedRevision !== null && value.revision !== expectedRevision || !object(value.configuration) ||
       value.digest !== digest(value.configuration) || !Array.isArray(value.history)) invalidOwner();
   const config = value.configuration;
-  if (Object.keys(config).sort().join(",") !== "backends,default,models,overrides") invalidOwner();
+  if (!["backends,default,models,overrides", "backends,default,models,overrides,profile_assignments"].includes(Object.keys(config).sort().join(","))) invalidOwner();
+  if (Object.hasOwn(config, "profile_assignments") && (!object(config.profile_assignments) || Object.keys(config.profile_assignments).length > 128 || Object.entries(config.profile_assignments).some(([key, value]) => !text(key, 128) || !text(value, 128)))) invalidOwner();
   if (!object(config.backends) || !object(config.models) || !object(config.overrides) || !Object.hasOwn(config, "default")) invalidOwner();
   for (const [key, backend] of Object.entries(config.backends)) {
     if (!object(backend) || Object.keys(backend).join(",") !== "backend_id" || backend.backend_id !== key) invalidOwner();
@@ -103,7 +108,8 @@ export function assertConfiguration(value, expectedRevision = null) {
   return value;
 }
 export function assertBackends(value) {
-  if (!object(value) || !["backends,tasks", "backends,health,tasks"].includes(Object.keys(value).sort().join(",")) || !Array.isArray(value.tasks) || !value.tasks.every(x => text(x, 300)) || !Array.isArray(value.backends)) invalidOwner();
+  if (!object(value) || !["backends,tasks", "backends,health,tasks", "backends,capabilities,tasks", "backends,capabilities,health,tasks"].includes(Object.keys(value).sort().join(",")) || !Array.isArray(value.tasks) || !value.tasks.every(x => text(x, 300)) || !Array.isArray(value.backends)) invalidOwner();
+  if (Object.hasOwn(value, "capabilities")) assertCapabilities(value.capabilities);
   for (const backend of value.backends) {
     const api = ["claude-api", "deepseek-api", "glm-api"].includes(backend?.provider);
     const keys = ["account_login_supported", "allowed_tasks", "availability", "backend_id", "provider", "registered",
@@ -114,6 +120,26 @@ export function assertBackends(value) {
         typeof backend.account_login_supported !== "boolean" || backend.availability !== "not-probed") invalidOwner();
     if (api && (backend.experimental !== true || backend.qualification !== "real-account-verification-pending" ||
         backend.catalogue_supported !== (backend.provider !== "glm-api") || backend.verification_max_tokens !== 4096)) invalidOwner();
+  }
+  return value;
+}
+export function assertCapabilities(value) {
+  if (!Array.isArray(value) || value.length > 128) invalidOwner();
+  const capabilities = new Set(), profiles = new Set();
+  for (const row of value) {
+    if (!object(row) || Object.keys(row).sort().join(',') !== 'capability_id,name,profiles,purpose,selected_profile_id' ||
+        !text(row.capability_id,128) || capabilities.has(row.capability_id) || !text(row.name) || !text(row.purpose,2000) ||
+        !Array.isArray(row.profiles) || !row.profiles.length || row.profiles.length > 128) invalidOwner();
+    capabilities.add(row.capability_id);
+    const ids = new Set();
+    for (const profile of row.profiles) {
+      if (!object(profile) || Object.keys(profile).sort().join(',') !== 'name,profile_id,selectable,state' ||
+          !text(profile.profile_id,128) || profiles.has(profile.profile_id) || !text(profile.name,160) ||
+          !['active','suspended','retired','exception'].includes(profile.state) || typeof profile.selectable !== 'boolean' ||
+          profile.selectable && profile.state !== 'active') invalidOwner();
+      profiles.add(profile.profile_id); ids.add(profile.profile_id);
+    }
+    if (!ids.has(row.capability_id) || !ids.has(row.selected_profile_id)) invalidOwner();
   }
   return value;
 }

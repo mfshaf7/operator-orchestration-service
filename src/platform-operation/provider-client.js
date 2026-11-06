@@ -90,6 +90,9 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    prepareModelProfile: input => request('/v1/console-operations/model-profiles/prepare',{body:input,method:'POST'}),
+    inspectModelProfile: input => request('/v1/console-operations/model-profiles/inspect',{body:input,method:'POST'}),
+    controlModelProfile: input => request('/v1/console-operations/model-profiles/control',{body:input,method:'POST',timeoutMs:30000}),
     async sourceCheckout(input) {
       return request("/v1/console-operations/source-checkout", { body: input, method: "POST", timeoutMs: 180000 });
     },

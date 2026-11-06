@@ -26,6 +26,7 @@ const schemaFilenames = [
   "handoff-application.schema.json",
   "handoff-application-result.schema.json",
   "history.schema.json",
+  "register-result.schema.json",
   "projection.schema.json",
   "repository-resolution.schema.json",
   "repository-resolution-record.schema.json",
