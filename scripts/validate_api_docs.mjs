@@ -613,7 +613,7 @@ function normalizeRegexRoute(literal) {
     return pattern.replace("[^/]+", "{transition_id}");
   }
   if (pattern.startsWith("/v1/model-profile-requests/")) {
-    return pattern.replace("[^/]+", "{request_id}");
+    return pattern.replace("[^/]+", "{request_id}").replace("[^/]+", "{digest}");
   }
   if (pattern.startsWith("/v1/model-operations/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");

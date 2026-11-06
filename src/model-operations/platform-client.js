@@ -44,6 +44,7 @@ export function createModelOperationsPlatformClient({ baseUrl, tokenFile, caller
     }
   }
   return {
+    profileRequestOptions: options => request("/v1/model-management/profile-request-options", options),
     backends: options => request("/v1/model-management/backends", options),
     configuration: ({ revision = null, ...options }) => request(`/v1/model-management/configuration${revision === null ? "" : `?revision=${revision}`}`, options),
     catalogue: ({ backendId, model = null, ...options }) => {

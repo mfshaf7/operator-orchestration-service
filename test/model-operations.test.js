@@ -45,7 +45,9 @@ function owner() {
       }
       if (command.expected_revision !== revision) throw new ModelOwnerError("revision-conflict", { status: 409, responseKnown: true });
       revision += 1;
-      const config = structuredClone(snapshots.at(-1)); config.backends[command.input.backend_id] = { backend_id: command.input.backend_id };
+      const config = structuredClone(snapshots.at(-1));
+      if(command.action==='profile.assign')config.profile_assignments={...(config.profile_assignments??{}),[command.input.capability_id]:command.input.profile_id};
+      else config.backends[command.input.backend_id] = { backend_id: command.input.backend_id };
       snapshots.push(config);
       const receipt = { command_id: command.command_id, command_digest: digest({ actor, command }), actor, action: command.action,
         previous_revision: revision - 1, revision, configuration_digest: digest(config) };
@@ -311,4 +313,19 @@ test("provider success remains historical and rejects future or unbounded eviden
   health.models[0].last_success.at = new Date(start - 1).toISOString();
   health.models[0].last_success.account = "never forward";
   assert.throws(() => assertProviderHealth(health, snapshot));
+});
+
+test("permission-profile assignment has an exact operation receipt and consistent catalog/configuration readback",async t=>{
+ const platform=owner(),describe=platform.backends.bind(platform);
+ platform.backends=async()=>({...await describe(),capabilities:[{capability_id:'profile',name:'Planning',purpose:'Bounded planning',selected_profile_id:'profile',profiles:[{profile_id:'profile',name:'Standard',state:'active',selectable:true},{profile_id:'restricted',name:'Restricted planning',state:'active',selectable:true}]}]});
+ const {service}=await fixture(t,platform);
+ await service.create({...identity,input:request('test:permission',{action:'profile.assign',input:{capability_id:'profile',profile_id:'restricted'}})});await service.idle();
+ const result=await read(service,'test:permission');assert.equal(result.state,'completed');assert.equal(result.owner_receipt.action,'profile.assign');
+ assert.deepEqual(result.applied_configuration.configuration.profile_assignments,{profile:'restricted'});
+ const registry=await service.registry(identity);assert.equal(registry.capabilities[0].selected_profile_id,'restricted');
+ assert.equal(registry.configuration.configuration.profile_assignments.profile,'restricted');
+ await assert.rejects(service.create({...identity,input:request('test:permission-injected',{action:'profile.assign',input:{capability_id:'profile',profile_id:'restricted',caller_id:'unreviewed'}})}),e=>e.statusCode===400);
+ const selection={revision:1,configuration_digest:'sha256:'+'a'.repeat(64),task:'profile/task',policy_profile_id:'restricted',selection_ref:'ai-routing-selection:'+'b'.repeat(64),attempts:[{backend_id:'local',model:'sample',effort:null,outcome:'suggestion-produced'}]};
+ assert.equal(selectionEvidence({effective_selection:selection,output:{}},{profileId:'profile',taskKind:'task'}).effective_selection.policy_profile_id,'restricted');
+ assert.throws(()=>selectionEvidence({effective_selection:{...selection,policy_profile_id:'not valid / input'},output:{}},{profileId:'profile',taskKind:'task'}));
 });

@@ -48,6 +48,7 @@ const effort = { anyOf: [string, { type: "boolean" }, { type: "null" }] };
 const actionInputs = {
   "backend.register": object({ backend_id: string }), "backend.remove": object({ backend_id: string }),
   "model.register": object({ backend_id: string, model: string }), "model.remove": object({ model_id: hash }),
+  "profile.assign": object({ capability_id: { ...string, maxLength: 128 }, profile_id: { ...string, maxLength: 128 } }),
   "routing.save": object({ default: ref("Route"), overrides: { ...map(ref("Route")), maxProperties: 100 } }),
   "routing.rollback": object({ revision: integer }), "account.login.start": object({ backend_id: string }),
   "account.login.cancel": object({ login_command_id: id }),
@@ -75,7 +76,7 @@ const components = {
   Control: object({ control_id: id, expected_revision: { type: "integer", minimum: 1 }, action: { enum: ["retry", "reconcile", "cancel"] } }),
   VerifiedModel: object({ backend_id: string, model: string, supported_efforts: array(effort, { minItems: 1 }), model_digest: nullable(string), runtime_version: nullable({ ...string, maxLength: 2048 }), verification_ref: hash }),
   Configuration: object({ revision: integer, current_revision: integer, digest: hash, history: array(object({ revision: integer, digest: hash })),
-    configuration: object({ backends: map(object({ backend_id: string })), models: map(ref("VerifiedModel")), default: ref("Route"), overrides: map(ref("Route")) }) }),
+    configuration: object({ backends: map(object({ backend_id: string })), models: map(ref("VerifiedModel")), default: ref("Route"), overrides: map(ref("Route")), profile_assignments: { ...map({ ...string, maxLength: 128 }), maxProperties: 128 } }, ["backends", "models", "default", "overrides"]) }),
   Receipt: object({ command_id: id, command_digest: hash, actor: string, action: { enum: Object.keys(actionInputs).filter(name => !name.startsWith("account.")) }, previous_revision: integer, revision: { type: "integer", minimum: 1 }, configuration_digest: hash, receipt_digest: hash }),
   Login: object({ command_id: id, request_digest: hash, backend_id: string, actor: string,
     state: { enum: ["starting", "waiting-for-operator", "cancel-requested", "connected", "cancelled", "failed", "interrupted"] },
@@ -86,7 +87,9 @@ const components = {
     failure: nullable(object({ code: string, retryable: { type: "boolean" } })),
     history: array(object({ sequence: { type: "integer", minimum: 1 }, type: string, state: string, occurred_at: { type: "string", format: "date-time" } }), { maxItems: 128 }),
     next_action: { enum: ["await-progress", "complete-account-sign-in", "retry-or-cancel", "reconcile-original-operation", "review-owner-evidence", "complete", "refresh-and-create-corrected-request"] } }),
-  Registry: object({ schema_version: { const: 1 }, tasks: array(string), backends: array(ref("Backend")), configuration: ref("Configuration"), health: ref("ProviderHealth") }, ["schema_version", "tasks", "backends", "configuration"]),
+  Capability: object({capability_id: {...string,maxLength:128}, name:string, purpose:string, selected_profile_id:{...string,maxLength:128},
+    profiles:array(object({profile_id:{...string,maxLength:128},name:{...string,maxLength:160},state:{enum:["active","suspended","retired","exception"]},selectable:{type:"boolean"}}),{minItems:1,maxItems:128})}),
+  Registry: object({ capabilities: array(ref("Capability"),{maxItems:128}), schema_version: { const: 1 }, tasks: array(string), backends: array(ref("Backend")), configuration: ref("Configuration"), health: ref("ProviderHealth") }, ["schema_version", "tasks", "backends", "configuration"]),
   Catalogue: object({ backend_id: string, models: array(object({ model: string, supported_efforts: nullable(array(effort, { minItems: 1 })), model_digest: nullable(string), runtime_version: nullable({ ...string, maxLength: 2048 }) })) }),
   List: object({ requests: array(ref("Projection"), { maxItems: 100 }), next_cursor: nullable(id) }),
 };

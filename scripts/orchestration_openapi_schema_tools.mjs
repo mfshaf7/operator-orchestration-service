@@ -93,11 +93,15 @@ function projectSchemaNode(
   for (const [key, entry] of Object.entries(value)) {
     if (key === "$ref") {
       if (!entry.startsWith("#/")) {
-        const externalComponentName = externalRefMap[entry];
+        const marker = entry.indexOf("#/");
+        const rootRef = marker < 0 ? entry : entry.slice(0, marker);
+        const fragment = marker < 0 ? "" : entry.slice(marker + 1);
+        const exact = externalRefMap[entry];
+        const externalComponentName = exact ?? externalRefMap[rootRef];
         if (!externalComponentName) {
           throw new Error(`unsupported canonical schema ref: ${entry}`);
         }
-        projected.$ref = `#/components/schemas/${externalComponentName}`;
+        projected.$ref = `#/components/schemas/${externalComponentName}${exact ? "" : fragment}`;
         continue;
       }
       projected.$ref =

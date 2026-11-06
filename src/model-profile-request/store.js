@@ -122,9 +122,14 @@ export function createModelProfileRequestStore({ root }) {
       await initialize();
       return structuredClone((await load()).records[requestId] ?? null);
     },
-    async list() {
+    async list({ summary = false } = {}) {
       await initialize();
-      return Object.values((await load()).records).map((record) => structuredClone(record));
+      return Object.values((await load()).records).map(record => summary ? {
+        owner_caller_id: record.owner_caller_id, revision: record.revision,
+        review_state: record.review_state, fulfillment_state: record.fulfillment_state,
+        request: { request_id: record.request.request_id, requested_at: record.request.requested_at,
+          profile_intent: { display_name: record.request.profile_intent.display_name } },
+      } : structuredClone(record));
     },
   };
 }

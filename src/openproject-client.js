@@ -2840,6 +2840,14 @@ export function createOpenProjectClient({
     throw new Error("request implementation is required");
   }
 
+  let proposalProjectIdPromise;
+  async function proposalProjectId() {
+    if(!proposalProjectIdPromise)proposalProjectIdPromise=getProjectPayload(config.projectIdentifier).then(project=>{
+      if(!Number.isSafeInteger(project?.id) || project.id<1)throw new OpenProjectError("backend_contract_drift","Proposal backlog identity is unavailable.",502,"proposal_project_identity_missing");
+      return project.id;
+    }).catch(error=>{proposalProjectIdPromise=null;throw error;});
+    return proposalProjectIdPromise;
+  }
   let deliveryProjectIdPromise;
 
   async function deliveryProjectId() {
@@ -6155,7 +6163,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     },
 
     async getIdea(recordId) {
-      return mapWorkPackageToIdeaRecord(config, await getWorkPackagePayload(recordId));
+      const [payload,projectId]=await Promise.all([getWorkPackagePayload(recordId),proposalProjectId()]);
+      if(payload?.id!==recordId || payload?._links?.project?.href!==`/api/v3/projects/${projectId}` || payload?._links?.type?.href!==`/api/v3/types/${config.ideaTypeId}`) {
+        throw new OpenProjectError("not_found","Proposal was not found in the configured backlog.",404,"proposal_source_scope_mismatch");
+      }
+      return mapWorkPackageToIdeaRecord(config,payload);
     },
 
     async getWorkDesignSourceRevision({ recordId }) {
@@ -6857,7 +6869,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         page: { number: page, has_more: page * payload.pageSize < payload.total }, scope };
     },
 
-    async listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata = false } = {}) {
+    async listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata = false, recordIds = null } = {}) {
+      if (recordIds !== null && (!Array.isArray(recordIds) || recordIds.length > 100 || recordIds.some(id => !Number.isSafeInteger(id) || id < 1))) throw new TypeError("Invalid scoped Delivery identifiers.");
+      if (recordIds?.length === 0) return [];
       const payloads = (await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
         {
@@ -6866,8 +6880,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           // descendant in ART. Explicit filters retain closed/inactive work;
           // local type and parent checks below remain authoritative.
           filters: Number.isSafeInteger(config.deliveryTopLevelTypeId) && config.deliveryTopLevelTypeId > 0
-            ? [{ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } }]
-            : null,
+            ? [{ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } }, ...(recordIds ? [{ id: { operator: "=", values: recordIds.map(String) } }] : [])]
+            : recordIds ? [{ id: { operator: "=", values: recordIds.map(String) } }] : null,
         },
       )).filter(
         (payload) =>

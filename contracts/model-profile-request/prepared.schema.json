@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/model-profile-request/prepared.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "workflow_id",
+    "setup_digest",
+    "display_name",
+    "intended_purpose",
+    "requested_environment",
+    "input_data_classification",
+    "operator_justification",
+    "additional_expectations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "request_id": {
+      "$ref": "request.schema.json#/$defs/requestId"
+    },
+    "workflow_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "setup_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "intended_purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "requested_environment": {
+      "enum": [
+        "dev-integration",
+        "stage",
+        "prod"
+      ]
+    },
+    "input_data_classification": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "operator_justification": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "additional_expectations": {
+      "type": "array",
+      "maxItems": 19,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "uniqueItems": true
+    },
+    "changes": {
+      "$ref": "lifecycle.schema.json#/$defs/selection/properties/changes"
+    }
+  },
+  "additionalProperties": false
+}

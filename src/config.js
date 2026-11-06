@@ -499,6 +499,10 @@ export function loadConfig(
       ),
     },
     modelProfileRequest: {
+      lifecycleEnabled: parseBoolean(env.OOS_MODEL_PROFILE_LIFECYCLE_ENABLED),
+      securityOperatorIds:parseCsv(env.OOS_MODEL_PROFILE_SECURITY_OPERATOR_IDS),
+      preparationEnabled: parseBoolean(env.OOS_MODEL_PROFILE_REQUEST_PREPARATION_ENABLED),
+      contextBaseUrl: env.CGG_MODEL_PROFILE_REQUEST_BASE_URL?.trim() || undefined,
       enabled: parseBoolean(env.OOS_MODEL_PROFILE_REQUEST_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_MODEL_PROFILE_REQUEST_STATE_ROOT?.trim() || undefined,

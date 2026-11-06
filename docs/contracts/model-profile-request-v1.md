@@ -71,3 +71,13 @@ The API publishes normal JSON and the shared Console source-projection media
 type on the item read route. Consumers must use monotonic `revision`, current
 `next_action`, and receipt coordinates. They must not infer Platform lifecycle
 state from OOS fulfillment state.
+
+## Optional prepared intake
+
+The native request, command, receipt and fulfillment schemas are unchanged.
+The optional `options.schema.json` and `prepared.schema.json` describe an
+owner-backed setup read and a reduced operator-intent submission. The broker
+resolves setup and CGG context before constructing the same native create
+request. Existing clients and Platform's pinned native-v1 fulfillment reader
+remain compatible. The new contract bundle advertises source availability;
+its separate preparation runtime flag remains off until exact acceptance.

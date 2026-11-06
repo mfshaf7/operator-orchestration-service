@@ -7,10 +7,13 @@ import { HttpError } from "../errors.js";
 const root = new URL("../../contracts/model-profile-request/", import.meta.url);
 const names = [
   "request.schema.json",
+  "options.schema.json",
+  "prepared.schema.json",
   "command.schema.json",
   "fulfillment.schema.json",
   "receipt.schema.json",
   "projection.schema.json",
+  "lifecycle.schema.json",
 ];
 const schemas = Object.fromEntries(
   names.map((name) => [name, JSON.parse(readFileSync(new URL(name, root), "utf8"))]),
@@ -32,6 +35,12 @@ for (const schema of Object.values(schemas)) ajv.addSchema(schema);
 const validators = Object.fromEntries(
   Object.entries(schemas).map(([name, schema]) => [name, ajv.getSchema(schema.$id)]),
 );
+
+export function assertModelProfileLifecycleContract(kind,value){
+ const validate=ajv.getSchema(schemas['lifecycle.schema.json'].$id+'#/$defs/'+kind);
+ if(!validate||!validate(value))throw modelProfileRequestError('lifecycle_input_invalid','Complete a supported profile action with valid bounded inputs.',400);
+ return value;
+}
 
 export function modelProfileRequestError(code, message, status = 409, details = null) {
   return new HttpError(status, `model_profile_request_${code}`, message, details);

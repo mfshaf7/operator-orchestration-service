@@ -1,8 +1,10 @@
+import { createProposalRegisterReader } from "./register.js";
 import { parseIdeaId } from "../idea-model.js";
 import { HttpError } from "../errors.js";
 import { deliveryIngressId } from "../delivery-ingress/service.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import {
+  assertProposalContract,
   assertProposalCommand,
   assertProposalCommandResult,
   assertProposalEvent,
@@ -106,6 +108,7 @@ function buildEvent({ command, occurredAt, recordVersion, receiptRef }) {
     },
     command_id: command.command_id,
     receipt_refs: [receiptRef],
+    ...(command.command.type === "disposition" ? { decision: structuredClone(command.command) } : {}),
     summary: commandSummary(command),
     occurred_at: occurredAt,
   });
@@ -512,6 +515,8 @@ export function createProposalWorkflowService({
   }
 
   function projectionFromRecord(record, events = []) {
+    const historyObserved = events !== null;
+    events ??= [];
     if (!Number.isInteger(record.lockVersion)) {
       throw new HttpError(
         502,
@@ -535,8 +540,8 @@ export function createProposalWorkflowService({
         state.route.source_custody.source_ref === resolution.resolved_repo_ref;
     });
     return assertProposalProjection({
-      ...(repositoryResolution ? { repository_resolution: repositoryResolution } : {}),
-      ...(repositoryResolution ? { repository_resolution_history_pending: !events.some((event) => event.repository_resolution?.receipt_ref === repositoryResolution.receipt_ref) } : {}),
+      ...(repositoryResolution && historyObserved ? { repository_resolution: repositoryResolution } : {}),
+      ...(repositoryResolution && historyObserved ? { repository_resolution_history_pending: !events.some((event) => event.repository_resolution?.receipt_ref === repositoryResolution.receipt_ref) } : {}),
       schema_version: 1,
       proposal_id: record.ideaId,
       record_ref: record.recordRef,
@@ -565,13 +570,9 @@ export function createProposalWorkflowService({
 
   async function getRecordAndEvents(proposalId, onFirstPage = null) {
     const recordId = parseIdeaId(proposalId);
-    const [record, events] = await Promise.all([
-      openProjectClient.getIdea(recordId),
-      readAllEvents(recordId, onFirstPage),
-    ]);
-    if (!record) {
-      throw new HttpError(404, "proposal_not_found", "Proposal was not found.");
-    }
+    const record = await openProjectClient.getIdea(recordId);
+    if (!record) throw new HttpError(404, "proposal_not_found", "Proposal was not found.");
+    const events = await readAllEvents(recordId, onFirstPage);
     return { events, record, recordId };
   }
 
@@ -614,7 +615,7 @@ export function createProposalWorkflowService({
     return history;
   }
 
-  // List clients need the projection and the original first history page.
+  // Selected-record clients need the projection and original first history page.
   // Read one fresh record/event scan, rather than racing two independent scans.
   async function getSnapshot({ callerId, correlationId, proposalId }) {
     let first;
@@ -632,11 +633,13 @@ export function createProposalWorkflowService({
     audit?.emit({ caller: { id: callerId }, correlation_id: correlationId,
       event_type: "proposal.history.read", proposal_id: proposalId,
       event_count: history.events.length, status: "succeeded" });
-    return { schema_version: 1, workflow_id: "proposal-read-snapshot", projection, history };
+    return { schema_version: 1, workflow_id: "proposal-read-snapshot", created_at: record.createdAt ?? null, projection, history };
   }
 
   async function getEvent({ callerId, correlationId, eventId, proposalId }) {
     const recordId = parseIdeaId(proposalId);
+    const record = await openProjectClient.getIdea(recordId);
+    if (!record) throw new HttpError(404, "proposal_not_found", "Proposal was not found.");
     const events = await readAllEvents(recordId);
     const event = events.find((entry) => entry.event_id === eventId);
     if (!event) {
@@ -1219,6 +1222,12 @@ export function createProposalWorkflowService({
     getHistory,
     getProjection,
     getSnapshot,
+    async getRegister({callerId,correlationId,...selection}={}) {
+      const result=await createProposalRegisterReader({openProjectClient,projectRecord:projectionFromRecord})(selection);
+      assertProposalContract("register-result.schema.json",result,"Proposal register");
+      audit?.emit({event_type:"proposal.register.read",caller:{id:callerId},correlation_id:correlationId,status:"succeeded",record_count:result.records.length,source_total:result.source_total,has_more:result.next_cursor!==null});
+      return result;
+    },
     verifyRepositoryForUse,
   };
 }

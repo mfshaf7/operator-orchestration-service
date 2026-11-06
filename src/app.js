@@ -4056,7 +4056,24 @@ async function handleModelProfileRequest({
       "Model-profile request workflow is not activated.",
     );
   }
-  if (action === "create") {
+  if (action === "options") {
+    sendJson(response,200,await modelProfileRequestService.options({callerId:caller.id,operatorId:modelProfileOperatorId(request)}));
+  } else if (action === 'lifecycle-prepare' || action === 'lifecycle-submit' || action === 'lifecycle-revise') {
+    const method=action==='lifecycle-prepare'?'prepareLifecycle':action==='lifecycle-revise'?'reviseLifecycle':'submitLifecycle';
+    sendJson(response,action==='lifecycle-submit'?202:200,await modelProfileRequestService[method]({callerId:caller.id,operatorId:modelProfileOperatorId(request),input:await readJsonBody(request,{canonical:true,maxBytes:32768})}));
+  } else if (action === 'lifecycle') {
+    sendJson(response,200,await modelProfileRequestService.lifecycle({callerId:caller.id,requestId}));
+  } else if (action === 'operation') {
+    sendJson(response,200,await modelProfileRequestService.profileOperation({callerId:caller.id,operatorId:modelProfileOperatorId(request),requestId,input:request.method==='GET'?null:await readJsonBody(request,{canonical:true,maxBytes:4096})}));
+  } else if (action === 'review-decision') {
+    sendJson(response,200,await modelProfileRequestService.recordReview({callerId:caller.id,operatorId:modelProfileOperatorId(request),requestId,input:await readJsonBody(request,{canonical:true,maxBytes:65536})}));
+  } else if (action === 'security-acceptance') {
+    sendJson(response,200,request.method==='GET'?await modelProfileRequestService.securityStatus({callerId:caller.id,operatorId:modelProfileOperatorId(request),requestId}):await modelProfileRequestService.acceptSecurity({callerId:caller.id,operatorId:modelProfileOperatorId(request),requestId,input:await readJsonBody(request,{canonical:true,maxBytes:4096})}));
+  } else if (action === 'decision') {
+    sendJson(response,200,await modelProfileRequestService.decision({callerId:caller.id,requestId,digest:decodeURIComponent(url.pathname.split('/')[5])}));
+  } else if (action === "submit-prepared") {
+    sendJson(response,202,await modelProfileRequestService.submitPrepared({callerId:caller.id,operatorId:modelProfileOperatorId(request),input:await readJsonBody(request,{canonical:true,maxBytes:32768})}));
+  } else if (action === "create") {
     sendJson(response, 201, await modelProfileRequestService.create({
       callerId: caller.id,
       input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }),
@@ -4072,6 +4089,7 @@ async function handleModelProfileRequest({
       callerId: caller.id,
       cursor,
       limit,
+      view: url.searchParams.get("view") ?? "full",
     }));
   } else if (action === "read") {
     const result = await modelProfileRequestService.get({ callerId: caller.id, requestId });
@@ -5849,6 +5867,42 @@ export function createApp({
         }
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/model-profile-requests/lifecycle/prepare") {
+        await handleModelProfileRequest({action:"lifecycle-prepare",config,modelProfileRequestService,request,response,url});return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/model-profile-requests/lifecycle/revise") {
+        await handleModelProfileRequest({action:"lifecycle-revise",config,modelProfileRequestService,request,response,url});return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/model-profile-requests/lifecycle/submit") {
+        await handleModelProfileRequest({action:"lifecycle-submit",config,modelProfileRequestService,request,response,url});return;
+      }
+      if (request.method === "GET" && /^\/v1\/model-profile-requests\/[^/]+\/lifecycle$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"lifecycle",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "GET" && /^\/v1\/model-profile-requests\/[^/]+\/operation$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"operation",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "POST" && /^\/v1\/model-profile-requests\/[^/]+\/operation$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"operation",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "POST" && /^\/v1\/model-profile-requests\/[^/]+\/review-decisions$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"review-decision",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "GET" && /^\/v1\/model-profile-requests\/[^/]+\/security-acceptance$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"security-acceptance",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "POST" && /^\/v1\/model-profile-requests\/[^/]+\/security-acceptance$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"security-acceptance",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "GET" && /^\/v1\/model-profile-requests\/[^/]+\/decisions\/[^/]+$/.test(url.pathname)) {
+        await handleModelProfileRequest({action:"decision",config,modelProfileRequestService,request,requestId:decodeURIComponent(url.pathname.split("/")[3]),response,url});return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/model-profile-requests/options") {
+        await handleModelProfileRequest({action:"options",config,modelProfileRequestService,request,response});return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/model-profile-requests/submit-prepared") {
+        await handleModelProfileRequest({action:"submit-prepared",config,modelProfileRequestService,request,response});return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/model-profile-requests") {
         await handleModelProfileRequest({ action: "create", config, modelProfileRequestService, request, response });
         return;
@@ -7176,6 +7230,16 @@ export function createApp({
           response,
           workflowId: url.pathname.split("/").at(-1),
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/proposals/register") {
+        const caller = authenticateCaller(request, config);
+        assertProposalWorkflowConfigured(config);
+        if ([...url.searchParams.keys()].some(key => !["query", "status", "ingress", "cursor"].includes(key) || url.searchParams.getAll(key).length !== 1)) throw new HttpError(400, "proposal_register_query_invalid", "Select one Proposal search and filter set.");
+        const result = await proposalWorkflowService.getRegister({...Object.fromEntries(url.searchParams),callerId:caller.id,correlationId:createCorrelationId(request)});
+        sendSourceProjection(response, request, result, () => ({ recordRef: "openproject://projects/workspace-proposals",
+          sourceOwner: "workspace-proposals", sourceRef: sourceReadViewRef(url, {...result.selector,cursor:url.searchParams.get("cursor")}), sourceRevision: sourceRevisionDigest(result), sourceTimestamp: new Date().toISOString() }));
         return;
       }
 

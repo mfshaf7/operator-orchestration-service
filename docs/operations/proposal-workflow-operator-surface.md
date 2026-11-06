@@ -29,6 +29,37 @@ If the machine-state field is absent, the Proposal route family returns
 `proposal_workflow_not_configured` with HTTP `503`. Other OOS route families
 remain available.
 
+## Register, selected source and scope
+
+`GET /v1/proposals/register` is the authenticated read-only summary route.
+Optional `query`, `status`, `ingress` and opaque `cursor` select one bounded
+page. It returns at most 25matches after scanning at most four native 25-record
+collection pages. Status/source predicates and text search apply over source
+pages, so a sparse search may return an empty page with `next_cursor`; continue
+until that cursor is null. This is a bounded source scan, not an indexed query.
+`source_total` is the whole source backlog count, not the filtered-match total.
+
+The selector-bound cursor rejects another search or filter. Changed totals or
+continuation anchors return a conflict requiring a first-page refresh. No fixed
+inventory ceiling silently removes older records. Linked Delivery status uses
+only exact candidate-page IDs and existing project/type/root constraints;
+unavailable metadata stays explicit, and denied metadata access fails closed.
+The register never opens every Proposal journal or expands Delivery child trees.
+
+Records have `summaryOnly: true` and an empty history placeholder. This means
+history is unloaded, not that it has no events. Open the exact selected source
+with `GET /v1/proposals/{proposal_id}/projection?include_history=true` before
+review or submission. Its optional `created_at` is the real source creation
+stamp; consumers must not invent one from the last update. Summary polling is
+not write authority. All exact reads prove the configured Proposal project and
+Idea type before reading events or reaching mutation logic; foreign work
+packages return not found.
+
+The route reuses caller authentication, current source envelopes and read-only
+source-revision/cursor binding. Its audit records counts, caller and correlation,
+not raw search text or Proposal contents. No new role, credential or mutation
+route is introduced.
+
 ## Read Before Write
 
 1. Read `GET /v1/proposals/{proposal_id}/projection`.
@@ -115,6 +146,14 @@ source version.
   `GET /v1/proposals/{proposal_id}/history`.
 - Read one event from
   `GET /v1/proposals/{proposal_id}/events/{event_id}`.
+- Follow `next_cursor` using the same history route's `cursor` query. Pages
+  remain bound to the exact Proposal ID and source version; a changed version
+  requires refresh rather than combining inconsistent history.
+- New `disposition-recorded` events optionally include `decision`, the exact
+  accepted disposition command. Never replace an old event with current notes
+  or route. Legacy events retain their original summary without fabricated
+  decision detail. Repository confirmations, implementation reconciliation and
+  failed applications are original events too.
 - History includes only structured comments authored by the authenticated OOS
   OpenProject service user.
 - If the state mutation succeeded but event journaling failed, retry the exact
@@ -140,9 +179,10 @@ Do not retry blindly when OOS reports:
 
 ## Deferred Boundaries
 
-Console adapter wiring, Prototype application, realtime
-push, and governed AI assistance remain separate governed work. Delivery
-application is live only through the authenticated OOS application route.
+Realtime push and further AI assistance remain separate governed work. Console
+adapter wiring and Prototype target application have their own admitted contracts;
+see the [Proposal target application surface](proposal-target-application-operator-surface.md).
+Delivery application remains behind the authenticated OOS application route.
 
 See [Proposal Workflow Contract V1](../contracts/proposal-workflow-v1.md) for
 the machine contract and [OpenAPI](../api/openapi.json) for exact route shapes.
@@ -164,3 +204,18 @@ before the existing public Studio route can publish metadata. Private/internal,
 archived, mismatched or unknown sources cannot use that publication route.
 Private-capable Delivery retains its own approved source access and controls.
 Repository onboarding does not grant private Studio import or model context export.
+
+## Capture response recovery
+
+Console capture reuses the existing `/v1/ideas/lookup` source-identity lookup.
+Check the same integration, surface, native reference and context reference
+before `/v1/ideas/capture`. Reuse an identical saved title/body; fail rather than
+send a new capture when lookup is unavailable or the saved content conflicts.
+After an interrupted response, keep the original details and request identity,
+check the result, and offer an identical retry only after a not-found read.
+This is original-intent recovery, not a new global exactly-once guarantee.
+
+The Console shows pending, failure and recorded-result feedback without gaining
+workflow authority. Its forms and advisor draft limits use the existing 2,000
+character command bounds. Existing source-version, deterministic replay,
+repository readiness, target review and approval checks remain authoritative.

@@ -950,3 +950,14 @@ test("repository use is denied when the authoritative readiness reader is missin
  const service=createProposalWorkflowService({openProjectClient:{}});
  await assert.rejects(service.verifyRepositoryForUse({callerId:'console',ownerRepo:'repo:todo'}),{code:'proposal_repository_readiness_unavailable'});
 });
+
+
+test("new disposition event retains its original notes and route after a later source update",async()=>{
+ const h=createHarness({currentRecord:record({status:"triaged"})});
+ const command=triageCommand({command_id:"proposal-command:851:decision-original",source:{record_ref:"openproject://work_packages/851",record_version:"version-17",projection_state:"current",status:"triaged"},command:{type:"disposition",outcome:"accepted",notes:"Original reviewed decision",route:readyDeliveryState().route}});const result=await h.service.applyCommand({callerId:command.operator.id,proposalId:command.proposal_id,command});
+ assert.deepEqual(result.event.decision,command.command);
+ const original=structuredClone(result.event);
+ const later=createHarness({currentRecord:record({status:"parked",lockVersion:19,operatorDecisionNotes:"Later changed notes"}),activities:[{comment:encodeProposalEvent(original),createdAt:NOW,id:401,userRef:AUTOMATION_USER_REF,version:18}]});
+ const history=await later.service.getHistory({callerId:command.operator.id,proposalId:command.proposal_id});
+ assert.deepEqual(history.events.find(event=>event.event_id===original.event_id).decision,original.decision);
+});

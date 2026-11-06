@@ -101,6 +101,9 @@
     "occurred_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "decision": {
+      "$ref": "command.schema.json#/$defs/disposition_command"
     }
   },
   "example": {
@@ -150,5 +153,21 @@
         "implemented"
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "const": "disposition-recorded"
+          }
+        }
+      }
+    }
+  ]
 }

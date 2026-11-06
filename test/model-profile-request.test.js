@@ -94,6 +94,58 @@ function fulfillment(revision, state, minute, overrides = {}) {
   };
 }
 
+test('recorded review evidence is atomic, exact, durable and readable only by its owner or approved fulfiller',async t=>{
+ const {root,service}=await fixture(t),auth={callerId:consoleCaller,operatorId,requestId:request().request_id};
+ await service.create({...auth,input:request()});
+ await assert.rejects(service.get({callerId:platformCaller,requestId:auth.requestId}),e=>e.statusCode===404);
+ await service.command({...auth,input:command(1,'submit',0)});await service.command({...auth,input:command(2,'start-review',0)});
+ const input=command(3,'approve',0,{reason:'I accept this exact request for implementation.'});
+ const approved=await service.recordReview({...auth,input});
+ assert.equal(approved.review_state,'approved');assert.match(approved.decision_ref.uri,/^oos:\/\/model-profile-requests\/model-profile-request%3A1203-demo\/decisions\//);
+ const artifact=await service.decision({...auth,digest:approved.decision_ref.digest});
+ assert.equal(modelProfileDigest(artifact,'digest'),artifact.digest);assert.equal(artifact.request_revision,3);assert.equal(artifact.reason,input.reason);
+ const restarted=createModelProfileRequestService({store:createModelProfileRequestStore({root}),operatorBindings:{[consoleCaller]:operatorId},fulfillmentCallerIds:new Set([platformCaller])});
+ assert.deepEqual((await restarted.recordReview({...auth,input})).decision_ref,approved.decision_ref);
+ assert.equal((await restarted.get({callerId:platformCaller,requestId:auth.requestId})).review_state,'approved');
+ assert.equal((await restarted.decision({callerId:platformCaller,requestId:auth.requestId,digest:artifact.digest})).digest,artifact.digest);
+ await assert.rejects(restarted.decision({callerId:'other',requestId:auth.requestId,digest:artifact.digest}),e=>e.statusCode===404);
+ await assert.rejects(restarted.recordReview({...auth,input:{...input,reason:'Different input with the same command.'}}),e=>e.statusCode===409);
+ await assert.rejects(restarted.command({callerId:platformCaller,operatorId,requestId:auth.requestId,input:command(4,'withdraw',0)}),e=>e.statusCode===403);
+});
+
+test('activation acceptance has a separate explicit role and candidate binding; revision invalidates it',async t=>{
+ const {root}=await fixture(t),store=createModelProfileRequestStore({root}),make=roles=>createModelProfileRequestService({clock:()=>new Date(at(0)),store,operatorBindings:{[consoleCaller]:operatorId},fulfillmentCallerIds:new Set([platformCaller]),securityOperatorIds:new Set(roles)});
+ const auth={callerId:consoleCaller,operatorId,requestId:request().request_id};
+ const input=request({intent:'activate',profile_intent:{...request().profile_intent,profile_id:'existing-profile',source:{registry_ref:artifact('source'),source_version:'a'.repeat(40)}}});
+ const context={candidate_digest:'sha256:'+'b'.repeat(64),candidate:{intent:'activate'}};
+ const service=make([]);await service.create({...auth,input,lifecycleContext:context});
+ await service.command({...auth,input:command(1,'submit',0)});await service.command({...auth,input:command(2,'start-review',0)});
+ await assert.rejects(service.recordReview({...auth,input:command(3,'approve',0,{reason:'Approve activation.'})}),e=>e.code==='model_profile_request_security_acceptance_required');
+ const acceptance={command_id:'model-profile-security:test',expected_revision:3,reason:'I reviewed the exact source, data boundary and candidate.'};
+ await assert.rejects(service.acceptSecurity({...auth,input:acceptance}),e=>e.statusCode===403);
+ const authorized=make([operatorId]),result=await authorized.acceptSecurity({...auth,input:acceptance});
+ assert.equal(result.request.revision,4);assert.equal(result.request.latest_receipt.request_revision,4);assert.equal(result.decision.candidate_digest,context.candidate_digest);
+ assert.equal((await authorized.acceptSecurity({...auth,input:acceptance})).reference.digest,result.reference.digest);
+ assert.equal((await authorized.securityStatus(auth)).authorized,true);
+ await authorized.command({...auth,input:command(4,'request-changes',0,{reason:'Revise the reason.',requirements:[{requirement_id:'change:one',summary:'Explain benefit.',owner_repo:'operator-orchestration-service',next_action:'Revise justification.'}]})});
+ await authorized.command({...auth,input:command(5,'revise',0,{reason:'Clearer benefit.',revised_profile_intent:{...input.profile_intent,operator_justification:'Clearer benefit.'}})});
+ const revised=await authorized.lifecycle(auth);assert.equal(revised.security_acceptance,null);assert.deepEqual(revised.context,context);
+});
+
+test('same native request cannot silently replace its private owner-prepared candidate',async t=>{
+ const {service}=await fixture(t),auth={callerId:consoleCaller,operatorId};
+ await service.create({...auth,input:request(),lifecycleContext:{candidate_digest:'first'}});
+ await assert.rejects(service.create({...auth,input:request(),lifecycleContext:{candidate_digest:'different'}}),e=>e.code==='model_profile_request_idempotency_conflict');
+});
+
+test('pre-existing native records remain revisable without lifecycle metadata',async t=>{
+ const {root,service}=await fixture(t),auth={callerId:consoleCaller,operatorId,requestId:request().request_id};
+ await service.create({...auth,input:request()});
+ const oldStore=createModelProfileRequestStore({root});await oldStore.transact(async transaction=>{const record=transaction.get(auth.requestId);for(const key of ['lifecycle_context','lifecycle_context_digest','decision_records','security_acceptance'])delete record[key];await transaction.put(record);});
+ const result=await service.command({...auth,input:command(1,'revise',0,{reason:'Clarify the request wording.',revised_profile_intent:{...request().profile_intent,operator_justification:'Clarify the request benefit.'}})});
+ assert.equal(result.revision,2);assert.equal(result.review_state,'draft');assert.equal((await service.lifecycle(auth)).context,null);
+});
+
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "oos-model-profile-request-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -344,6 +396,20 @@ test("model-profile request list is caller-scoped and cursor bounded", async (t)
   assert.equal(second.next_cursor, null);
 });
 
+test("summary history is bounded, caller-scoped and omits full request evidence",async t=>{
+ const{root,service}=await fixture(t);
+ for(const suffix of ['A','a-b','a_b'])await service.create({callerId:consoleCaller,operatorId,input:request({request_id:'model-profile-request:summary-'+suffix,idempotency_key:'summary-'+suffix})});
+ const first=await service.list({callerId:consoleCaller,limit:2,view:'summary'});
+ assert.equal(first.requests.length,2);assert.equal(first.next_cursor,'model-profile-request:summary-a-b');
+ assert.deepEqual(Object.keys(first.requests[0]).sort(),['display_name','fulfillment_state','next_action','requested_at','request_id','review_state','revision'].sort());
+ assert.equal(JSON.stringify(first).includes('admitted_context_ref'),false);assert.equal(JSON.stringify(first).includes('receipt_ref'),false);
+ const second=await service.list({callerId:consoleCaller,cursor:first.next_cursor,limit:2,view:'summary'});assert.equal(second.requests[0].request_id,'model-profile-request:summary-a_b');assert.equal(second.next_cursor,null);
+ assert.deepEqual((await service.list({callerId:'another-caller',view:'summary'})).requests,[]);
+ assert.equal((await service.get({callerId:consoleCaller,requestId:first.requests[0].request_id})).history.length,1);
+ const headers=await createModelProfileRequestStore({root}).list({summary:true});assert.equal('history' in headers[0],false);assert.equal('admitted_context_ref' in headers[0].request.profile_intent,false);
+ await assert.rejects(service.list({callerId:consoleCaller,view:'unsafe'}),error=>error.statusCode===400);
+});
+
 async function invoke(app, {
   body,
   caller = consoleCaller,
@@ -372,6 +438,15 @@ async function invoke(app, {
   });
   return { code, body: output ? JSON.parse(output) : null };
 }
+
+test("automatic setup HTTP routes keep authenticated caller/operator binding",async()=>{
+ const calls=[],service={options:async value=>{calls.push(value);return{schema_version:1,workflows:[]};},submitPrepared:async value=>{calls.push(value);return{request_id:value.input.request_id};}};
+ const config=loadConfig({CALLER_ALLOWED_IDS:consoleCaller,CALLER_AUTH_SECRETS_JSON:JSON.stringify({[consoleCaller]:"console-secret"})});const app=createApp({config,modelProfileRequestService:service});
+ assert.equal((await invoke(app,{url:"/v1/model-profile-requests/options"})).code,200);
+ assert.equal((await invoke(app,{method:"POST",url:"/v1/model-profile-requests/submit-prepared",body:{request_id:"model-profile-request:sample"}})).code,202);
+ assert.equal(calls[0].operatorId,operatorId);assert.equal(calls[1].callerId,consoleCaller);
+ const count=calls.length;assert.equal((await invoke(app,{url:"/v1/model-profile-requests/options",operator:null})).code,400);assert.equal((await invoke(app,{url:"/v1/model-profile-requests/options",secret:"wrong"})).code,401);assert.equal(calls.length,count);
+});
 
 test("model-profile HTTP surface preserves caller, operator and fulfillment boundaries", async () => {
   const calls = [];
@@ -409,6 +484,8 @@ test("model-profile HTTP surface preserves caller, operator and fulfillment boun
   assert.deepEqual(calls.map(([name]) => name), ["create", "list", "get", "command", "fulfill"]);
   assert.equal(calls[0][1].operatorId, operatorId);
   assert.equal(calls[1][1].limit, 25);
+  assert.equal((await invoke(app,{url:"/v1/model-profile-requests?limit=25&view=summary"})).code,200);
+  assert.equal(calls.at(-1)[1].view,"summary");
   assert.equal(calls[4][1].callerId, platformCaller);
 
   assert.equal((await invoke(app, {
@@ -473,6 +550,9 @@ test("model-profile digest is deterministic across object key order", () => {
   assert.deepEqual(Object.keys(modelProfileRequestManifest.files).sort(), [
     "command.schema.json",
     "fulfillment.schema.json",
+    "lifecycle.schema.json",
+    "options.schema.json",
+    "prepared.schema.json",
     "projection.schema.json",
     "receipt.schema.json",
     "request.schema.json",

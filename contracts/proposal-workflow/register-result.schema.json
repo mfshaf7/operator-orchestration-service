@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/register-result.schema.json",
+  "title": "Bounded Proposal Register V1",
+  "description": "Read-only collection metadata. summaryOnly means details and history are not loaded, not that history is empty. Read the selected canonical snapshot before workflow review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workflow_id",
+    "selector",
+    "records",
+    "source_total",
+    "next_cursor"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "workflow_id": {
+      "const": "proposal-register"
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "status",
+        "ingress"
+      ],
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "enum": [
+            "all",
+            "captured",
+            "triaged",
+            "parked",
+            "done",
+            "retired",
+            "ready-to-route",
+            "waiting-on-repository",
+            "waiting-on-source"
+          ]
+        },
+        "ingress": {
+          "enum": [
+            "all",
+            "console",
+            "agent",
+            "api",
+            "system"
+          ]
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "createdAt",
+          "projection",
+          "history",
+          "summaryOnly"
+        ],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creationKnown": {
+            "type": "boolean"
+          },
+          "summaryOnly": {
+            "const": true
+          },
+          "projection": {
+            "$ref": "projection.schema.json"
+          },
+          "history": {
+            "$ref": "history.schema.json"
+          },
+          "deliveryLink": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "recordRef",
+              "status",
+              "observedAt",
+              "sourceState"
+            ],
+            "properties": {
+              "recordRef": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "status": {
+                "enum": [
+                  "new",
+                  "ready",
+                  "in-progress",
+                  "blocked",
+                  "done",
+                  "parked",
+                  "retired",
+                  null
+                ]
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "sourceState": {
+                "enum": [
+                  "current",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "source_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 600,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      ]
+    }
+  },
+  "example": {
+    "schema_version": 1,
+    "workflow_id": "proposal-register",
+    "selector": {
+      "query": "",
+      "status": "all",
+      "ingress": "all"
+    },
+    "records": [],
+    "source_total": 0,
+    "next_cursor": null
+  }
+}

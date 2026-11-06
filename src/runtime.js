@@ -313,6 +313,8 @@ export function createRuntime({
   const modelProfileRequestService = createModelProfileRequestRuntime({
     audit,
     config: config.modelProfileRequest,
+    modelOperationsConfig: config.modelOperations, fetchImpl,
+    platformOperationConfig:config.platformOperation,
   });
   const modelOperationsService = createModelOperationsRuntime({ audit, config: config.modelOperations, fetchImpl });
   const productPublicationService = createProductPublicationRuntime({
