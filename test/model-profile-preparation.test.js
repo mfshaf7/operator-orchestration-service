@@ -6,7 +6,7 @@ const input={schema_version:1,request_id:'model-profile-request:prepared-test',w
 async function fixture(options={}){
  const root=await mkdtemp(join(tmpdir(),'profile-preparation-')),store=createModelProfileRequestStore({root}),calls=[];
  const service=createModelProfileRequestService({store,operatorBindings:{console:auth.operatorId},fulfillmentCallerIds:new Set(['platform']),clock:()=>new Date('2026-01-01T00:00:00Z')});
- const preparation=createModelProfilePreparation({service,operatorBindings:{console:auth.operatorId},contextBaseUrl:'http://context.test',clock:()=>new Date('2026-01-01T00:00:00Z'),platform:{profileRequestOptions:async()=>{if(options.ownerFail)throw Error('owner unavailable');return{schema_version:1,workflows:[setup]};}},fetchImpl:async(url,init)=>{calls.push({url:String(url),body:JSON.parse(init.body)});if(options.fail)throw Error('offline');return Response.json({artifact_id:'artifact-sample',artifact_digest:sha,admission_decision:{raw_projection:options.raw?'allowed':'denied',redaction_safe:true},raw_artifact_path:'/must-not-leak'});}});
+ const preparation=createModelProfilePreparation({service,operatorBindings:{console:auth.operatorId},contextBaseUrl:'http://context.test',clock:()=>new Date('2026-01-01T00:00:00Z'),platform:{profileRequestOptions:async()=>{if(options.ownerFail)throw Error('owner unavailable');return{schema_version:1,workflows:[setup]};}},fetchImpl:async(url,init)=>{calls.push({url:String(url),body:JSON.parse(init.body)});if(options.fail)throw Error('offline');return Response.json({artifact_id:'artifact-sample',artifact_digest:sha,admission_decision:{raw_projection:options.raw?'allowed':options.projection??'not_requested',redaction_safe:options.unsafe!==true},raw_artifact_path:'/must-not-leak'});}});
  return{root,service,preparation,calls,close:()=>rm(root,{recursive:true,force:true})};
 }
 test('workflow setup and admitted context build one native submitted request without granting approval',async()=>{
@@ -22,7 +22,7 @@ test('caller, setup version, workflow and environment are checked before context
  }finally{await f.close();}
 });
 test('failed or unsafe context admission does not create a profile request',async()=>{
- for(const options of [{fail:true},{raw:true},{ownerFail:true}]){const f=await fixture(options);try{await assert.rejects(f.preparation.submit({...auth,input}));assert.equal((await f.service.list({callerId:auth.callerId})).requests.length,0);}finally{await f.close();}}
+ for(const options of [{fail:true},{raw:true},{projection:'allowed-raw'},{projection:'unknown'},{unsafe:true},{ownerFail:true}]){const f=await fixture(options);try{await assert.rejects(f.preparation.submit({...auth,input}));assert.equal((await f.service.list({callerId:auth.callerId})).requests.length,0);}finally{await f.close();}}
 });
 test('concurrent original submissions retain one native request and history',async()=>{
  const f=await fixture();try{const first=await Promise.allSettled([f.preparation.submit({...auth,input}),f.preparation.submit({...auth,input})]);assert.ok(first.some(x=>x.status==='fulfilled'));const result=await f.preparation.submit({...auth,input});assert.equal(result.history.length,2);assert.equal((await f.service.list({callerId:auth.callerId})).requests.length,1);}finally{await f.close();}
@@ -33,4 +33,8 @@ test('rules retain native length and total limits before context effects',async(
  await assert.rejects(f.preparation.submit({...auth,input:{...input,additional_expectations:Array.from({length:19},(_,i)=>'Rule '+i)}}));assert.equal(f.calls.length,0);
  const result=await f.preparation.submit({...auth,input:{...input,additional_expectations:Array.from({length:18},(_,i)=>'Rule '+i)}});assert.equal(result.request.profile_intent.operational_expectations.length,20);
  }finally{await f.close();}
+});
+
+test('both native CGG safe projection decisions preserve the same admission boundary',async()=>{
+ for(const projection of ['not_requested','denied']){const f=await fixture({projection});try{const result=await f.preparation.submit({...auth,input});assert.equal(result.review_state,'submitted');assert.equal(result.fulfillment_state,'not-started');assert.equal(f.calls.length,1);}finally{await f.close();}}
 });

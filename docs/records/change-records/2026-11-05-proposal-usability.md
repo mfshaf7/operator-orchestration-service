@@ -252,3 +252,28 @@ actual preparation exists. Request text is not capability code or AI instruction
 The normal form supplies source-backed behavior guidance and allows operating
 limits to be requested together with creation. Lifecycle/preparation deployment
 flags remain off pending exact composition acceptance and an operating witness.
+
+
+## Native context-admission commissioning correction
+
+The real CGG admission for the disposable Console profile witness returned
+`raw_projection: not_requested` with `redaction_safe: true`. This is CGG's normal
+safe response when no raw data was requested and no sensitive finding requires
+an explicit denial. The new profile adapter incorrectly accepted only `denied`.
+Align it with the existing Agent Console, Work Design and Refinement consumers:
+accept exactly `not_requested` or `denied`, still requiring a valid owned
+artifact identity/digest and `redaction_safe: true`. Raw-allowed, unknown and
+unsafe decisions remain rejected before any profile request is created.
+
+The existing preparation fixture now models the native clean admission rather
+than always forcing denial. Regression checks cover both valid states and
+unsafe/unknown decisions. The original failed live admission is retained
+privately; no real profile was created by that failed attempt.
+
+Required owner maintenance Landing Unit decision `child_isolated_landing_unit`,
+`maintenance-profile-context-admission-oos`, branch
+`maintenance/profile-context-admission`, base
+`972cf6150f10d9d29521d53b3368a7c1e62346dc`. The prior batch source has merged;
+this is its bounded commissioning repair, with no new ART item, subsystem,
+AI permission or context export. Exact composed Security acceptance and normal
+runtime activation must precede the resumed actual Console operating witness.

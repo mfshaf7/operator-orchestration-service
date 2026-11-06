@@ -21,7 +21,7 @@ export function createModelProfilePreparation({service,platform,lifecycleProvide
       value=JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if(!response.ok)throw Error('unavailable');
     }catch{throw fail('context_preparation_unavailable','The context service could not prepare this request. No profile request was submitted.',503);}
-    if(typeof value.artifact_id!=='string'||!/^artifact-[A-Za-z0-9._-]{1,200}$/.test(value.artifact_id)||!/^sha256:[0-9a-f]{64}$/.test(value.artifact_digest??'')||value.admission_decision?.raw_projection!=='denied'||value.admission_decision?.redaction_safe!==true)throw fail('context_preparation_unverified','The context service did not return a verified safe context reference.',502);
+    if(typeof value.artifact_id!=='string'||!/^artifact-[A-Za-z0-9._-]{1,200}$/.test(value.artifact_id)||!/^sha256:[0-9a-f]{64}$/.test(value.artifact_digest??'')||!['not_requested','denied'].includes(value.admission_decision?.raw_projection)||value.admission_decision?.redaction_safe!==true)throw fail('context_preparation_unverified','The context service did not return a verified safe context reference.',502);
     return {uri:new URL('/v1/context/packets/'+value.artifact_id,base).toString(),digest:value.artifact_digest};
   }
   async function submit({callerId,operatorId,input}){
