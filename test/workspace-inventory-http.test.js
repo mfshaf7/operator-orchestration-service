@@ -99,7 +99,9 @@ test("private instance Registry listing requires its dedicated Console identity 
   const other = createApp({ config: loadConfig({ CALLER_ALLOWED_IDS: "registry-reader", CALLER_AUTH_SECRETS_JSON: JSON.stringify({ "registry-reader": "reader-secret" }) }), workspaceInventoryService: service });
   assert.equal((await invoke(other, { url, method: "GET", body: "", callerId: "registry-reader", secret: "reader-secret" })).code, 403);
   assert.equal((await invoke(app, { url, method: "POST" })).code, 404);
-  assert.equal(calls.length, 1);
+  assert.equal((await invoke(app,{url:url+"&limit=100",method:"GET",body:""})).code,200);
+  assert.equal(calls.at(-1).input.limit,"100");
+  assert.equal(calls.length,2);
   const missing = createApp({ config: config(), workspaceInventoryService: {} });
   assert.equal((await invoke(missing, { url, method: "GET", body: "" })).code, 503);
 });

@@ -162,9 +162,9 @@ export function createPrototypeLandingSourceClient({ authorityRoot, python = "py
 
   return {
     branch,
-    async records() {
+    async records(selection = null) {
       await requireRecordAuthorityFreshness({ authorityRoot, git, ownerRepo: "workspace-prototype-studio", clock });
-      return readPrototypeRecords({ git, authorityRoot, revision: await provider.mainRevision(), minimumRevision, snapshotCache: recordSnapshot });
+      return readPrototypeRecords({ git, authorityRoot, revision: await provider.mainRevision(), minimumRevision, snapshotCache: recordSnapshot, selection });
     },
     state,
     prepare,

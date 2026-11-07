@@ -929,3 +929,23 @@ function normalizedRequest() {
     callerId: "governance-operations-console",
   });
 }
+
+test("run pages follow Temporal continuation without projecting older unselected runs", async () => {
+  const projection = completedProjection(), calls = [], projected = [];
+  const adapter = createTemporalAdapter({ config: { namespace: "synthetic" }, clientFactory: async () => ({ workflow: {
+    workflowService: { async listWorkflowExecutions(input) {
+      calls.push(input);
+      return { executions: [{ execution: { workflowId: projection.workflow_id, runId: "retained-run" }, status: 2 }],
+        nextPageToken: input.nextPageToken ? new Uint8Array() : Buffer.from("next-page") };
+    } },
+    getHandle(id) { projected.push(id);return { async result() { return projection; } }; },
+  } }) });
+  const first = await adapter.listRunPage({ limit: 25 });
+  assert.equal(first.runs.length, 1);assert.ok(first.next_cursor);
+  const second = await adapter.listRunPage({ limit: 25, cursor: first.next_cursor });
+  assert.equal(second.next_cursor, null);assert.equal(projected.length, 2);
+  assert.equal(calls[0].namespace, "synthetic");assert.equal(calls[0].pageSize, 25);
+  assert.equal(Buffer.from(calls[1].nextPageToken).toString(), "next-page");
+  await assert.rejects(adapter.listRunPage({ limit: 100 }), /Invalid orchestration page/);
+  await assert.rejects(adapter.listRunPage({ cursor: "../invalid" }), /Invalid orchestration page/);
+});

@@ -717,7 +717,7 @@
           "Durable Orchestration"
         ],
         "summary": "List aggregate orchestration runs",
-        "description": "Returns bounded OOS aggregate run projections from the configured durable runtime to the authenticated Governance Operations Console. A disabled runtime returns an empty list instead of claiming live run truth; the generic development auth bypass is rejected.",
+        "description": "Returns bounded OOS aggregate run projections from the configured durable runtime to the authenticated Governance Operations Console. A disabled runtime returns an empty list instead of claiming live run truth; the generic development auth bypass is rejected. Register mode returns at most25 runs and next_cursor; older records remain reachable without loading their projections first.",
         "operationId": "listOrchestrationRuns",
         "security": [
           {
@@ -736,6 +736,29 @@
               "maximum": 100,
               "default": 50
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "register"
+              ]
+            },
+            "description": "Use bounded pages with an opaque Temporal continuation. Omit for the retained legacy bounded list."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "description": "Opaque continuation returned by register mode; keep the same caller and limit."
           }
         ],
         "responses": {
@@ -2745,10 +2768,31 @@
             "schema": {
               "type": "string",
               "enum": [
-                "console"
+                "console",
+                "register"
               ]
             },
-            "description": "Complete global package register with full active and parked execution trees. Done and retired child graphs are explicitly deferred to exact owner inspection. This view always includes every root, independently of include_done/include_inactive; default reads preserve the original filter semantics. No mutation authority."
+            "description": "console retains the complete global overview and active/parked child graphs. register reads a native root page with only its scoped active graphs; exact closed child graphs remain independently inspectable. Neither read grants mutation authority."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "description": "Native root continuation with previous-page identity/total anchor; requires view=register."
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            },
+            "description": "Inspect one exact root independently; requires view=register and excludes cursor."
           }
         ],
         "responses": {
@@ -24627,6 +24671,39 @@
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
         "x-oos-workflow-family": "prototype-landing",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "register"
+              ]
+            },
+            "description": "Read only the selected immutable project page and its referenced owner evidence."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "description": "Opaque continuation bound to the exact owner revision; requires view=register."
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
+            },
+            "description": "Inspect one exact original independently; requires view=register and excludes cursor."
+          }
+        ],
         "operationId": "listCanonicalPrototypes",
         "summary": "Read current canonical Prototype registry and captured entries",
         "responses": {
@@ -28183,6 +28260,28 @@
               "minimum": 1,
               "maximum": 100,
               "default": 25
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "register"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
             }
           }
         ],
@@ -34995,6 +35094,20 @@
               ],
               "default": "inventory"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                25,
+                50,
+                100
+              ],
+              "default": 25
+            }
           }
         ],
         "responses": {
@@ -40737,6 +40850,13 @@
             "items": {
               "$ref": "#/components/schemas/OrchestrationRunProjection"
             }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
           }
         },
         "additionalProperties": false,
@@ -83416,6 +83536,57 @@
           },
           "canonical_mutation": {
             "const": false
+          },
+          "page": {
+            "type": "object",
+            "required": [
+              "ids",
+              "total",
+              "next_cursor",
+              "source_revision",
+              "selected_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "next_cursor": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "selected_id": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -89156,43 +89327,101 @@
         ]
       },
       "OwnerBootstrapList": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "schema_version": {
-            "const": 1
-          },
-          "workflow_id": {
-            "const": "repository-owner-bootstrap-list"
-          },
-          "owner_repo": {
-            "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]*$"
-          },
-          "pending_request": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/OwnerBootstrapProjection"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
               },
-              {
-                "type": "null"
+              "workflow_id": {
+                "const": "repository-owner-bootstrap-list"
+              },
+              "owner_repo": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "pending_request": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OwnerBootstrapProjection"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "records": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/OwnerBootstrapProjection"
+                }
               }
+            },
+            "required": [
+              "schema_version",
+              "workflow_id",
+              "owner_repo",
+              "pending_request",
+              "records"
             ]
           },
-          "records": {
-            "type": "array",
-            "maxItems": 100,
-            "items": {
-              "$ref": "#/components/schemas/OwnerBootstrapProjection"
-            }
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "workflow_id": {
+                "const": "repository-owner-bootstrap-list"
+              },
+              "owner_repo": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "pending_request": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OwnerBootstrapProjection"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "records": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/OwnerBootstrapProjection"
+                }
+              },
+              "next_cursor": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "schema_version",
+              "workflow_id",
+              "owner_repo",
+              "pending_request",
+              "records",
+              "next_cursor"
+            ]
           }
-        },
-        "required": [
-          "schema_version",
-          "workflow_id",
-          "owner_repo",
-          "pending_request",
-          "records"
         ]
       },
       "OwnerBootstrapDraft": {
@@ -91513,6 +91742,38 @@
           },
           "mutation_authority": {
             "const": "none"
+          },
+          "register_page": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "next_cursor",
+              "source_total",
+              "scope"
+            ],
+            "properties": {
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 2048
+              },
+              "source_total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "scope": {
+                "enum": [
+                  "root-scan-page",
+                  "exact-package"
+                ]
+              },
+              "selected_id": {
+                "type": "string",
+                "pattern": "^delivery-[1-9][0-9]*$"
+              }
+            }
           }
         }
       },
@@ -95652,7 +95913,7 @@
               },
               "records": {
                 "type": "array",
-                "maxItems": 25,
+                "maxItems": 100,
                 "items": {
                   "type": "object",
                   "required": [
@@ -95841,7 +96102,7 @@
               },
               "eligible_promotions": {
                 "type": "array",
-                "maxItems": 25,
+                "maxItems": 100,
                 "items": {
                   "type": "object",
                   "required": [

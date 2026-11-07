@@ -41,7 +41,7 @@ export function instanceInventoryPageSchema(record, candidate) {
       after: nullable(text), next_after: nullable(text), projected_at: date, projection_digest: digest,
       counts: object({ intake: object({ "out-of-scope": { type: "integer", minimum: 0 }, proposed: { type: "integer", minimum: 0 }, admitted: { type: "integer", minimum: 0 } }),
         inventory: object({ active: { type: "integer", minimum: 0 }, suspended: { type: "integer", minimum: 0 }, retired: { type: "integer", minimum: 0 } }) }),
-      records: { type: "array", maxItems: 25, items: extend(record) }, eligible_promotions: { type: "array", maxItems: 25, items: extend(candidate) },
+      records: { type: "array", maxItems: 100, items: extend(record) }, eligible_promotions: { type: "array", maxItems: 100, items: extend(candidate) },
     }),
   ] };
 }

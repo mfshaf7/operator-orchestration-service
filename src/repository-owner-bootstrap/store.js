@@ -78,14 +78,15 @@ export function createRepositoryOwnerBootstrapStore({ root }) {
       }
       return pending;
     },
-    list({ callerId, ownerRepo = null, limit = 25 } = {}) {
+    list({ callerId, operatorId = null, ownerRepo = null, limit = 25, after = null, lookAhead = false } = {}) {
       if (!ID.test(callerId ?? "") || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw failure("list_invalid", "Bootstrap listing requires a caller and bounded page size.");
       const records = [];
       for (const record of scan()) {
-        if (record.caller_id !== callerId || (ownerRepo !== null && record.binding.owner_repo !== ownerRepo)) continue;
+        if (record.caller_id !== callerId || (operatorId !== null && record.operator_id !== operatorId) || (ownerRepo !== null && record.binding.owner_repo !== ownerRepo)) continue;
+        if (after && (record.created_at > after.created_at || record.created_at === after.created_at && record.request.request_id.localeCompare(after.request_id) <= 0)) continue;
         records.push(record);
         records.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.request.request_id.localeCompare(b.request.request_id));
-        if (records.length > limit) records.pop();
+        if (records.length > limit + (lookAhead ? 1 : 0)) records.pop();
       }
       return records;
     },

@@ -223,6 +223,31 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       }
     },
 
+    async listRunPage({ limit = 25, cursor = null } = {}) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 25 || cursor !== null &&
+          (typeof cursor !== "string" || cursor.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(cursor))) {
+        throw new TypeError("Invalid orchestration page selection.");
+      }
+      const client = await getClient();
+      const page = await client.workflow.workflowService.listWorkflowExecutions({
+        namespace: config.namespace,
+        query: `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}'`,
+        pageSize: limit,
+        ...(cursor ? { nextPageToken: Buffer.from(cursor, "base64url") } : {}),
+      });
+      if (!Array.isArray(page.executions) || page.executions.length > limit) throw new Error("Invalid Temporal run page.");
+      const runs = [];
+      const statuses = { 1:"RUNNING", 2:"COMPLETED", 3:"FAILED", 4:"CANCELED", 5:"TERMINATED", 6:"CONTINUED_AS_NEW", 7:"TIMED_OUT" };
+      for (const execution of page.executions) {
+        if (!execution.execution?.workflowId || !execution.execution.runId) throw new Error("Invalid Temporal run identity.");
+        const handle = client.workflow.getHandle(execution.execution.workflowId, execution.execution.runId);
+        runs.push(await readRetainedProjection(handle, statuses[execution.status]));
+      }
+      const next = page.nextPageToken?.length ? Buffer.from(page.nextPageToken).toString("base64url") : null;
+      if (next && (next === cursor || next.length > 4096)) throw new Error("Temporal continuation did not advance or exceeded its read budget.");
+      return { runs, next_cursor: next };
+    },
+
     async listRuns({ limit = 50 } = {}) {
       const client = await getClient();
       const projections = [];

@@ -85,8 +85,10 @@ export const ownerBootstrapSchemas = {
   OwnerBootstrapRequest: closed({ schema_version: { const: 1 }, request_id: id, preparation_input: ref("OwnerBootstrapPreparationInput"),
     expected_preparation_digest: digest, workflow_approval_ref: nullable(id), requested_at: timestamp }),
   OwnerBootstrapProjection: closed(projectionFields, basicProjectionFields),
-  OwnerBootstrapList: closed({ schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap-list" }, owner_repo: owner,
-    pending_request: nullable(ref("OwnerBootstrapProjection")), records: { type: "array", maxItems: 100, items: ref("OwnerBootstrapProjection") } }),
+  OwnerBootstrapList: {oneOf:[
+    closed({schema_version:{const:1},workflow_id:{const:"repository-owner-bootstrap-list"},owner_repo:owner,pending_request:nullable(ref("OwnerBootstrapProjection")),records:{type:"array",maxItems:100,items:ref("OwnerBootstrapProjection")}}),
+    closed({schema_version:{const:1},workflow_id:{const:"repository-owner-bootstrap-list"},owner_repo:owner,pending_request:nullable(ref("OwnerBootstrapProjection")),records:{type:"array",maxItems:100,items:ref("OwnerBootstrapProjection")},next_cursor:nullable({type:"string",minLength:1,maxLength:2048,pattern:"^[A-Za-z0-9_-]+$"})}),
+  ]},
   OwnerBootstrapDraft: closed({ schema_version: { const: 1 }, workflow_id: { const: "repository-owner-bootstrap-draft" }, request_id: id,
     revision: timestamp, digest, change_set: ref("OwnerBootstrapChangeSet") }),
   OwnerBootstrapStart: closed({ schema_version: { const: 1 }, command_id: id, source_intent_ref: sourceIntent, requested_at: timestamp }),
@@ -151,7 +153,7 @@ const paths = {
   "/v1/repository-owner-bootstrap/requests": {
     post: { ...post("Create", "OwnerBootstrapRequest", request, "OwnerBootstrapProjection", projection, "201"), parameters: [] },
     get: { ...common, operationId: "ownerBootstrapList", summary: "List caller-bound bootstrap metadata and original pending owner request", description: "No source payloads, checkout or credentials are loaded or created by this bounded read.",
-      parameters: [{ name: "owner_repo", in: "query", required: true, schema: owner }, { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 25 } }],
+      parameters: [{ name: "owner_repo", in: "query", required: true, schema: owner }, { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, { name:"view",in:"query",required:false,schema:{type:"string",enum:["register"]} }, { name:"cursor",in:"query",required:false,schema:{type:"string",minLength:1,maxLength:2048,pattern:"^[A-Za-z0-9_-]+$"} }],
       responses: responses("OwnerBootstrapList", { schema_version: 1, workflow_id: "repository-owner-bootstrap-list", owner_repo: ownerName, pending_request: projection, records: [projection] }) },
   },
   "/v1/repository-owner-bootstrap/requests/{request_id}": { get: { ...common, operationId: "ownerBootstrapRead", summary: "Recover one original bootstrap request", description: "Read retained commands and source evidence without a write or credential effect.", parameters: parameter, responses: responses("OwnerBootstrapProjection", projection) } },

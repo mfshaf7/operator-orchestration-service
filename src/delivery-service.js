@@ -1105,8 +1105,33 @@ export function createDeliveryService({
       }
     },
 
-    async listDeliveryConsoleOverview({ callerId, correlationId }) {
-      const targets = await openProjectClient.listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata: true });
+    async listDeliveryRegisterPage({ callerId, correlationId, cursor = null, deliveryId = null }) {
+      if(deliveryId!==null){
+        const id=parseDeliveryId(deliveryId);
+        if(!id||cursor!==null)throw new HttpError(400,"delivery_register_selection_invalid","Select one exact Delivery package.");
+        const targets=await openProjectClient.listPrototypeDeliveryApplicationTargets({includeOverviewMetadata:true,recordIds:[id]});
+        if(targets.length!==1||targets[0].recordId!==id)throw new HttpError(404,"delivery_register_original_missing","The selected original Delivery package is unavailable.");
+        return {...await this.listDeliveryConsoleOverview({callerId,correlationId,targets}),register_page:{next_cursor:null,source_total:1,scope:"exact-package",selected_id:deliveryId}};
+      }
+      let previous = null;
+      if(cursor !== null){
+        try{
+          if(cursor.length>2048||!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();
+          previous=JSON.parse(Buffer.from(cursor,"base64url").toString());
+          if(Object.keys(previous).sort().join(",")!=="anchor,offset,total"||!Number.isSafeInteger(previous.offset)||previous.offset<1||!Number.isSafeInteger(previous.total)||previous.total<0||typeof previous.anchor!=="string"||previous.anchor.length>512)throw Error();
+        }catch{throw new HttpError(400,"delivery_register_page_invalid","Refresh the first Delivery register page.");}
+        const anchor=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope:"history",limit:25,page:previous.offset});
+        if(anchor.page.total!==previous.total||anchor.page.anchor!==previous.anchor)throw new HttpError(409,"delivery_register_changed","Delivery source changed. Refresh the first register page.");
+      }
+      const page=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope:"history",limit:25,page:previous?previous.offset+1:1});
+      if(previous&&page.page.total!==previous.total)throw new HttpError(409,"delivery_register_changed","Delivery source changed. Refresh the first register page.");
+      const overview=await this.listDeliveryConsoleOverview({callerId,correlationId,targets:page.targets});
+      const next=page.page.has_more?Buffer.from(JSON.stringify({offset:page.page.number,total:page.page.total,anchor:page.page.anchor})).toString("base64url"):null;
+      return {...overview,register_page:{next_cursor:next,source_total:page.page.total,scope:"root-scan-page"}};
+    },
+
+    async listDeliveryConsoleOverview({ callerId, correlationId, targets: scopedTargets = null }) {
+      const targets = scopedTargets ?? await openProjectClient.listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata: true });
       if (!Array.isArray(targets) || targets.length > 8192) throw new HttpError(502, "delivery_overview_limit", "Delivery overview exceeds its bounded root limit.");
       const seen = new Set();
       const roots = targets.map(target => {

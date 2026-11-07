@@ -135,6 +135,13 @@ export function createOrchestrationService({
       }
     },
 
+    async listRunPage({ limit, cursor, callerId }) {
+      assertOperatorCockpitCaller(callerId, config);
+      if (!config.orchestration.runtimeEnabled) return { runs: [], next_cursor: null };
+      assertRuntimeReadable(config);
+      return activeAdapter().listRunPage({ limit, cursor });
+    },
+
     async listRuns({ limit, callerId }) {
       assertOperatorCockpitCaller(callerId, config);
       if (!config.orchestration.runtimeEnabled) {
