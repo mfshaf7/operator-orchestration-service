@@ -226,7 +226,7 @@ test("optional Console overview and Proposal snapshot preserve source envelope n
   const denied=await executeRequest(app,{headers:{},method:'GET',url});assert.equal(denied.statusCode,401);
  }
  assert.deepEqual(calls,[['overview','openclaw-telegram-enhanced'],['snapshot','openclaw-telegram-enhanced']]);
- for(const url of ['/v1/delivery-initiatives?view=register','/v1/proposals/idea-851/projection?include_history=anything']){
+ for(const url of ['/v1/delivery-initiatives?view=invalid','/v1/proposals/idea-851/projection?include_history=anything']){
   const response=await executeRequest(app,{headers,method:'GET',url});assert.equal(response.statusCode,400);
  }
 });
@@ -5249,4 +5249,39 @@ test("Delivery work-session routes fail closed for shared credentials and unavai
     unavailable.body.error,
     "delivery_art_work_session_executor_unavailable",
   );
+});
+
+
+test("native register HTTP reads bind authenticated callers and reject duplicate query scopes", async () => {
+  const calls = [];
+  const config = createBaseConfig();
+  config.callerAuth.callerSecrets = { "openclaw-telegram-enhanced": "test-secret" };
+  const app = createApp({ config, ideaService: {}, openProjectClient: {},
+    deliveryService: { async listDeliveryRegisterPage(input) { calls.push(["delivery", input]); return { schema_version: 1, roots: [], register_page: { next_cursor: null } }; } },
+    orchestrationService: { async listRunPage(input) { calls.push(["runs", input]); return { runs: [], next_cursor: null }; } },
+    prototypeLandingService: {
+      async records(input) { calls.push(["prototype", input]); return { page: { ids: ["sample"], next_cursor: null }, canonical_mutation: false }; },
+      async list(input) { calls.push(["landing", input]); return []; },
+    },
+    prototypeMaturityService: { async list(input) { calls.push(["maturity", input]); return []; } },
+    prototypeClosureService: { async list(input) { calls.push(["closure", input]); return []; } },
+  });
+  const headers = { "x-oos-caller-id": "openclaw-telegram-enhanced", "x-oos-caller-secret": "test-secret" };
+  for (const url of ["/v1/delivery-initiatives?view=register&cursor=abc", "/v1/orchestration/runs?view=register&cursor=abc", "/v1/prototypes?view=register&cursor=abc"]) {
+    assert.equal((await executeRequest(app, { method: "GET", url, headers: {} })).statusCode, 401);
+    assert.equal((await executeRequest(app, { method: "GET", url: url + "&view=register", headers })).statusCode, 400);
+    assert.equal((await executeRequest(app, { method: "GET", url, headers })).statusCode, 200);
+  }
+  assert.deepEqual(calls.map(([kind]) => kind), ["delivery", "runs", "prototype", "landing", "maturity", "closure"]);
+  assert.equal(calls[0][1].cursor, "abc");
+  assert.equal(calls[0][1].includeDone, true);
+  assert.equal(calls[0][1].includeInactive, true);
+  assert.equal(calls[1][1].limit, 25);
+  assert.equal(calls[1][1].cursor, "abc");
+  assert.deepEqual(calls[2][1], { cursor: "abc", id: null });
+  for (const [, input] of calls.filter(([kind]) => kind !== "prototype")) assert.equal(input.callerId, "openclaw-telegram-enhanced");
+  for (const [kind, input] of calls.slice(3)) {
+    assert.deepEqual(input.prototypeIds, ["prototype:sample"]);
+    assert.equal(input.latestOnly, kind !== "closure");
+  }
 });

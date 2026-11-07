@@ -495,8 +495,8 @@ export function createPrototypeMaturityService({
 
   return {
     prepare,
-    async list({ callerId }) {
-      return (await store.list(callerId)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
+    async list({ callerId, prototypeIds, latestOnly = false }) {
+      return (await store.list(callerId,prototypeIds ? {prototypeIds,latestOnly} : null)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
     },
     submit,
     decide,

@@ -288,3 +288,30 @@ test("active verification retains one Inventory-bound request through source app
   assert.equal(complete.state, "succeeded"); assert.equal(complete.app_acceptance, false);
   assert.equal(h.calls.apply, 1); assert.equal(h.calls.cleanup, 1); assert.equal(h.calls.stop, 1);
 });
+
+test("request history pages reach retained originals while caller/operator/owner scope and pending protection remain global", async t => {
+  const h=harness(t);await h.service.create({callerId,operatorId,input:h.input});
+  const seed=h.store.get(args.requestId);
+  assert.equal(Object.hasOwn(h.service.list({callerId,operatorId,ownerRepo:owner}),"next_cursor"),false);
+  for(let index=0;index<61;index++){
+    const id=`bootstrap-request:history-${index}`,created=new Date(Date.parse(NOW)+(index+1)*1000).toISOString();
+    const actor=index===60?"operator:previous-binding":operatorId;
+    const request={...structuredClone(seed.request),request_id:id};
+    const record={...structuredClone(seed),request,operator_id:actor,state:"cancelled",created_at:created,updated_at:created};
+    record.request_digest=canonicalDigest({caller_id:callerId,operator_id:actor,request});
+    h.store.transact(id,transaction=>transaction.put(record));
+  }
+  h.store.readArtifact=()=>{throw Error("History must not load source bytes");};const before={...h.calls};
+  let cursor=null,seen=[],firstCursor;
+  do{
+    const page=h.service.list({callerId,operatorId,view:"register",ownerRepo:owner,cursor});
+    assert.ok(page.records.length<=25);assert.equal(page.pending_request.request_id,args.requestId);
+    seen.push(...page.records.map(row=>row.request_id));cursor=page.next_cursor;firstCursor??=cursor;
+  }while(cursor);
+  assert.equal(seen.length,61);assert.equal(new Set(seen).size,61);assert.ok(seen.includes(args.requestId));assert.ok(!seen.includes("bootstrap-request:history-60"));
+  assert.throws(()=>h.service.list({callerId,operatorId,view:"register",ownerRepo:"different-owner",cursor:firstCursor}),/page changed|another scope/);
+  assert.throws(()=>h.service.list({callerId,operatorId,view:"register",ownerRepo:owner,limit:10,cursor:firstCursor}),/page changed|another scope/);
+  assert.throws(()=>h.service.list({callerId,operatorId:"operator:other",view:"register",ownerRepo:owner,cursor:firstCursor}),/not bound/);
+  assert.throws(()=>h.service.list({callerId,operatorId,view:"register",ownerRepo:owner,cursor:"invalid-cursor"}),/page changed|another scope/);
+  assert.deepEqual(h.calls,before);
+});

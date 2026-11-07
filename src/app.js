@@ -1649,17 +1649,19 @@ async function handleListDeliveryInitiatives({
   const includeInactive = parseBooleanQuery(
     url.searchParams.get("include_inactive"),
     "include_inactive",
-  ) ?? false;
+  ) ?? (url.searchParams.get("view")==="register");
 
   const view = url.searchParams.get("view");
-  if (view !== null && view !== "console") {
-    throw new HttpError(400, "delivery_view_invalid", "The optional view must be console.");
+  if (view !== null && !["console","register"].includes(view)) {
+    throw new HttpError(400, "delivery_view_invalid", "The optional view must be console or register.");
   }
-  const record = await deliveryService[view === "console" ? "listDeliveryConsoleOverview" : "listDeliveryInitiatives"]({
+  if(view === "register" && (!includeDone || !includeInactive || [...url.searchParams.keys()].some(key=>!["view","cursor","id","include_done","include_inactive"].includes(key)||url.searchParams.getAll(key).length!==1)))throw new HttpError(400,"delivery_register_selection_invalid","Select one complete-status Delivery root page.");
+  const record = await deliveryService[view === "register" ? "listDeliveryRegisterPage" : view === "console" ? "listDeliveryConsoleOverview" : "listDeliveryInitiatives"]({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     includeDone,
     includeInactive,
+    ...(view === "register" ? {cursor:url.searchParams.get("cursor"),deliveryId:url.searchParams.get("id")} : {}),
   });
 
   sendSourceProjection(response, request, record, () => ({
@@ -3760,7 +3762,7 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
     if (typeof workspaceInventoryService.instanceRegistry !== "function") throw new HttpError(503, "instance_registry_unavailable", "The internal registry protocol is unavailable.");
     const parameters = new URL(request.url, "http://localhost").searchParams;
     const keys = [...parameters.keys()];
-    if (new Set(keys).size !== keys.length || keys.some(key => !["after", "query", "scope"].includes(key))) {
+    if (new Set(keys).size !== keys.length || keys.some(key => !["after", "query", "scope", "limit"].includes(key))) {
       throw new HttpError(400, "instance_registry_query_invalid", "Select one bounded internal registry page.");
     }
     const result = await workspaceInventoryService.instanceRegistry({ callerId: caller.id, input: Object.fromEntries(parameters) });
@@ -3867,15 +3869,15 @@ async function handleRepositoryOwnerBootstrap({ action, config, repositoryOwnerB
   try {
   if (["list", "read", "draft"].includes(action)) {
     const query = [...url.searchParams.keys()];
-    if ((action !== "list" && query.length) || new Set(query).size !== query.length || query.some(key => !["owner_repo", "limit"].includes(key))) {
+    if ((action !== "list" && query.length) || new Set(query).size !== query.length || query.some(key => !["owner_repo", "limit", "cursor", "view"].includes(key))) {
       throw new HttpError(400, "repository_owner_bootstrap_query_invalid", "Use only the exact owner and bounded list limit.");
     }
-    const args = action === "list" ? { callerId: caller.id, ownerRepo: url.searchParams.get("owner_repo"), limit: Number(url.searchParams.get("limit") ?? "25") }
+    const args = action === "list" ? { callerId: caller.id, ownerRepo: url.searchParams.get("owner_repo"), limit: Number(url.searchParams.get("limit") ?? "25"), cursor: url.searchParams.get("cursor"), view: url.searchParams.get("view") }
       : { callerId: caller.id, requestId };
     const result = await repositoryOwnerBootstrapService[action](args);
     const times = action === "list" ? result.records.map(record => record.updated_at).sort() : [];
     sendSourceProjection(response, request, result, () => ({ sourceOwner: "operator-orchestration-service", sourceRevision: sourceRevisionDigest(result),
-      sourceRef: sourceReadViewRef(url, action === "list" ? { owner_repo: args.ownerRepo, limit: args.limit } : {}),
+      sourceRef: sourceReadViewRef(url, action === "list" ? { owner_repo: args.ownerRepo, limit: args.limit, ...(args.cursor ? {cursor:args.cursor} : {}), ...(args.view ? {view:args.view} : {}) } : {}),
       sourceTimestamp: action === "list" ? times.at(-1) ?? new Date().toISOString() : result.revision ?? result.updated_at,
       recordRef: action === "list" ? `oos://repository-owner-bootstrap/${args.ownerRepo}` : `oos://repository-owner-bootstrap/requests/${requestId}${action === "draft" ? "/draft" : ""}` }));
     return;
@@ -3920,19 +3922,22 @@ async function handlePrototypeSource({ action, config, prototypeAuthoringService
   }
 }
 
-async function handlePrototypeLanding({ action, config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response, requestId }) {
+async function handlePrototypeLanding({ action, config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response, requestId, url }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Prototype Landing");
   if (!prototypeLandingService) {
     throw new HttpError(503, "prototype_landing_not_active", "Prototype Landing is not activated.");
   }
   if (action === "records") {
-    const source = await prototypeLandingService.records();
+    const params=url?.searchParams??new URLSearchParams();
+    if([...params.keys()].some(key=>!["view","cursor","id"].includes(key)||params.getAll(key).length!==1)||params.has("view")&&params.get("view")!=="register"||!params.has("view")&&(params.has("cursor")||params.has("id")))throw new HttpError(400,"prototype_register_page_invalid","Select one Prototype page or exact original.");
+    const source = await prototypeLandingService.records(params.get("view")==="register"?{cursor:params.get("cursor"),id:params.get("id")}:null);
+    const prototypeIds=source.page?.ids.map(id=>`prototype:${id}`);
     const workflows = {};
     const workflowSources = {};
     for (const [family, service] of Object.entries({ landing: prototypeLandingService, maturity: prototypeMaturityService, closure: prototypeClosureService })) {
       workflowSources[family] = typeof service?.list === "function" ? "available" : "unavailable";
-      workflows[family] = typeof service?.list === "function" ? await service.list({ callerId: caller.id }) : [];
+      workflows[family] = typeof service?.list === "function" ? await service.list({ callerId: caller.id, ...(prototypeIds ? {prototypeIds,latestOnly:family!=="closure"} : {}) }) : [];
     }
     const result = { ...source, workflows, workflow_sources: workflowSources };
     if (Buffer.byteLength(JSON.stringify(result)) > 4 * 1024 * 1024) {
@@ -5523,7 +5528,17 @@ async function handleListOrchestrationRuns({
     parsePositiveInteger(url.searchParams.get("limit"), "limit", {
       min: 1,
       max: 100,
-    }) ?? 50;
+    }) ?? (url.searchParams.get("view") === "register" ? 25 : 50);
+  if (url.searchParams.get("view") === "register") {
+    if ([...url.searchParams.keys()].some(key => !["view", "cursor", "limit"].includes(key) || url.searchParams.getAll(key).length !== 1) || limit > 25) {
+      throw new HttpError(400, "orchestration_page_invalid", "Select one run page with a limit from1 to25.");
+    }
+    const cursor = url.searchParams.get("cursor");
+    if (cursor !== null && (!/^[A-Za-z0-9_-]+$/.test(cursor) || cursor.length > 4096)) throw new HttpError(400, "orchestration_page_invalid", "The run continuation is invalid.");
+    const page = await orchestrationService.listRunPage({ limit, cursor, callerId: caller.id });
+    sendJson(response, 200, { schema_version: 1, ...page });
+    return;
+  }
   const runs = await orchestrationService.listRuns({
     limit,
     callerId: caller.id,
@@ -6357,7 +6372,7 @@ export function createApp({
       }
 
       if (request.method === "GET" && url.pathname === "/v1/prototypes") {
-        await handlePrototypeLanding({ action: "records", config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response });
+        await handlePrototypeLanding({ action: "records", config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response, url });
         return;
       }
       if (request.method === "POST" && url.pathname === "/v1/repository-owner-bootstrap/preparations") {

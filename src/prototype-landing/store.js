@@ -1,3 +1,4 @@
+import { selectPrototypeWorkflowRecords } from "../prototype-workflow-register.js";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
@@ -80,9 +81,9 @@ export function createPrototypeLandingStore({ root }) {
   }
   return {
     transact,
-    async list(callerId) {
+    async list(callerId, selection = null) {
       await initialize();
-      const records = Object.values((await load()).records).filter((record) => record.caller_id === callerId);
+      const records = selectPrototypeWorkflowRecords(Object.values((await load()).records).filter((record) => record.caller_id === callerId),selection);
       if (records.length > 512) throw prototypeLandingError("records_unavailable", "Prototype Landing register exceeds its bounded read limit.", 503);
       return structuredClone(records);
     },

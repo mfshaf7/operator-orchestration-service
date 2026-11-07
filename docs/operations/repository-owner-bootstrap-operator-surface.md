@@ -273,3 +273,13 @@ Repo Control and the primary attention queue. This does not change the first
 standalone source-only proof into private Proposal/Studio/Catalog operation.
 Those workflows retain their actual authority until separately migrated;
 private project files must not be copied into public Studio records.
+
+## Retained request pages
+
+The existing caller/operator/owner-bound request read accepts `view=register` and an optional cursor,
+and returns `next_cursor`. The default read retains its existing closed response
+shape for older clients. Each page remains bounded (25 by default, at most100);
+the original pending owner request is included independently of the visible page.
+Cursors bind caller, operator, owner and page size. A changed or mismatched cursor
+requires refreshing the first page; paging never reads source artifacts or grants
+new source authority. Older requests remain available through their exact reads.

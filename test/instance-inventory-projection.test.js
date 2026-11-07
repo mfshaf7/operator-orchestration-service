@@ -30,3 +30,10 @@ test("Private registry projection preserves native namespace, real lineage and t
   assert.equal(page.authority.kind, "internal-instance-record");
   await assert.rejects(project({ input: { scope: "all" } }), { statusCode: 400 });
 });
+
+test('private Registry size presets reach the native catalog without changing its signed projection or reader boundary',async()=>{
+ const calls=[];const project=createInstanceInventoryProjection({reader:{catalog:async input=>{calls.push(input);return {authority:{kind:'internal-instance-record',instance_id:instanceId},records:[],selection:{query:input.query,scope:input.scope},next_after:null,counts};}},clock:()=>new Date(at)});
+ for(const limit of [25,50,100]){const page=await project({input:{limit:String(limit),scope:'inventory',query:'project'}});assert.equal(calls.at(-1).limit,limit);assert.equal(page.projection_digest,intakeDigest(page,'projection_digest'));}
+ for(const limit of ['0','24','101','all','25.5'])await assert.rejects(project({input:{limit}}),{statusCode:400});
+ assert.equal(calls.length,3);
+});

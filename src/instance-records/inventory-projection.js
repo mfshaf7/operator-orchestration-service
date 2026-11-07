@@ -40,8 +40,9 @@ export function projectInstanceRegistryRecord({ record: entry, receipt }, author
 
 export function createInstanceInventoryProjection({ reader, clock = () => new Date() }) {
   return async ({ input = {} } = {}) => {
-    if (Object.keys(input).some(key => !["after", "query", "scope"].includes(key)) || !["inventory", "eligible"].includes(input.scope ?? "inventory")) throw new HttpError(400, "instance_registry_query_invalid", "Select one internal registry page.");
-    const page = await reader.catalog({ after: input.after ?? null, query: input.query ?? "", scope: input.scope ?? "inventory", limit: 25 });
+    if (Object.keys(input).some(key => !["after", "query", "scope", "limit"].includes(key)) || !["inventory", "eligible"].includes(input.scope ?? "inventory")) throw new HttpError(400, "instance_registry_query_invalid", "Select one internal registry page.");
+    const limit=Number(input.limit??25);if(![25,50,100].includes(limit))throw new HttpError(400,"instance_registry_query_invalid","Choose 25, 50 or 100 records.");
+    const page = await reader.catalog({ after: input.after ?? null, query: input.query ?? "", scope: input.scope ?? "inventory", limit });
     const projected = page.records.map(value => projectInstanceRegistryRecord(value, page.authority)).filter(Boolean);
     const body = { schema_version: 1, mode: "current", artifact_type: "instance-repository-registry-page", authority: page.authority,
       selection: page.selection, after: input.after ?? null, next_after: page.next_after, counts: page.counts,

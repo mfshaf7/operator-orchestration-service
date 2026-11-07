@@ -1,3 +1,4 @@
+import { selectPrototypeRecordPage, readPrototypePageDocuments } from "./record-page-selection.js";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { parse as parseYaml } from "yaml";
@@ -13,7 +14,7 @@ const ROOTS = [
 
 // Immutable Git reads only. The provider revision must already be available in
 // the deployment-owned trusted ref; neither this reader nor WGCF fetches Git.
-export async function readPrototypeRecords({ git, authorityRoot, revision, minimumRevision, snapshotCache = null }) {
+export async function readPrototypeRecords({ git, authorityRoot, revision, minimumRevision, snapshotCache = null, selection = null }) {
   try {
     if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error("invalid revision");
     await git(authorityRoot, "merge-base", "--is-ancestor", minimumRevision, revision);
@@ -21,19 +22,32 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
     // Content-addressed owner records are immutable. Membership and current
     // authority admission are still checked on every request; mutable workflow
     // journals are joined separately and never stored in this parsed snapshot.
-    if (snapshotCache?.revision === revision) return structuredClone(snapshotCache.value);
+    if (!selection && snapshotCache?.revision === revision) return structuredClone(snapshotCache.value);
     const files = (await git(authorityRoot, "ls-tree", "-r", "-z", revision, "--", "prototypes.yaml", "schemas/prototype-registry.schema.json", ...ROOTS))
       .split("\0").filter(Boolean).map((line) => {
         const match = /^(100644) blob [0-9a-f]{40}\t([^\0]+)$/.exec(line);
         if (!match) throw new Error("non-regular owner record");
         return match[2];
       }).filter((name) => /\.(?:json|yaml)$/.test(name));
-    if (files.length > 512 || !files.includes("prototypes.yaml") || !files.includes("schemas/prototype-registry.schema.json")) {
+    if ((!selection && files.length > 512) || !files.includes("prototypes.yaml") || !files.includes("schemas/prototype-registry.schema.json")) {
       throw new Error("missing or oversized registry");
     }
     let total = 0;
+    let page = null;
     const documents = {};
-    const ordered = files.sort();
+    let ordered = files.sort();
+    if (selection) {
+      const [rawRegistry,rawSchema]=await Promise.all([git(authorityRoot,"show",`${revision}:prototypes.yaml`),git(authorityRoot,"show",`${revision}:schemas/prototype-registry.schema.json`)]);
+      if(Buffer.byteLength(rawRegistry)>2*1024*1024||Buffer.byteLength(rawSchema)>262144)throw Error("Prototype index exceeds its read budget.");
+      const registry=parseYaml(rawRegistry,{maxAliasCount:0,uniqueKeys:true}),schema=JSON.parse(rawSchema);
+      const ajv=new Ajv2020({allErrors:true,strict:false});addFormats(ajv);
+      if(!ajv.compile(schema)(registry)||new Set(registry.prototypes.map(row=>row.id)).size!==registry.prototypes.length)throw Error("Invalid owner registry.");
+      page=selectPrototypeRecordPage({registry,files,revision,selection});
+      Object.assign(documents,await readPrototypePageDocuments({git,authorityRoot,revision,registry,files,page}));
+      documents["prototypes.yaml"]={...registry,prototypes:registry.prototypes.filter(row=>page.ids.includes(row.id))};
+      documents["schemas/prototype-registry.schema.json"]=schema;
+      ordered=[];
+    }
     for (let offset = 0; offset < ordered.length; offset += 4) {
       const batch = ordered.slice(offset, offset + 4);
       const values = await Promise.all(batch.map(name => git(authorityRoot, "show", `${revision}:${name}`)));
@@ -73,10 +87,12 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
       schema_version: 1, workflow_id: "prototype-records",
       authority_revision: revision, authority_sequence: sequence,
       registry, captures, documents, canonical_mutation: false,
+      ...(page ? {page} : {}),
     };
-    if (snapshotCache) { snapshotCache.revision = revision;snapshotCache.value = structuredClone(result); }
+    if (snapshotCache && !selection) { snapshotCache.revision = revision;snapshotCache.value = structuredClone(result); }
     return result;
-  } catch {
+  } catch (error) {
+    if(["prototype_landing_page_invalid","prototype_landing_record_not_found"].includes(error.code))throw error;
     throw prototypeLandingError("records_unavailable", "Current canonical Prototype records are unavailable; no fixture fallback is permitted.", 503);
   }
 }

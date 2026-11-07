@@ -6833,7 +6833,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
     },
 
-    async listDeliveryRegisterPage({ limit = 25, page = 1, scope = "history", search = "", recordId = null } = {}) {
+    async listDeliveryRegisterPage({ limit = 25, page = 1, scope = "history", search = "", recordId = null, includeOverviewMetadata = false } = {}) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 || !Number.isSafeInteger(page) || page < 1 || page > 100000 ||
           !["current", "history"].includes(scope) || typeof search !== "string" || search.length > 200 ||
           (recordId !== null && (!Number.isSafeInteger(recordId) || recordId < 1))) {
@@ -6859,14 +6859,22 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           !Number.isSafeInteger(payload.total) || !Number.isSafeInteger(payload.pageSize) || payload.pageSize < 1) {
         throw new OpenProjectError("backend_contract_drift", "Delivery page metadata is invalid.", 502, "delivery_page_invalid");
       }
+      if(includeOverviewMetadata && (limit>25||payload.offset!==page||payload.pageSize!==limit||payload.count!==payload._embedded.elements.length||
+        payload._embedded.elements.some((row,index,rows)=>!Number.isSafeInteger(row.id)||row.id<1||index>0&&row.id<=rows[index-1].id)))throw new OpenProjectError("backend_contract_drift","Delivery register continuation metadata is invalid.",502,"delivery_page_invalid");
       // The native Parent filter does not admit an empty-parent query. Retain
       // explicit local root/type checks; never label the candidate total as a
       // verified top-level package count. Each request still reads one page.
       const roots = payload._embedded.elements.filter(item => !parseWorkPackageIdFromHref(item?._links?.parent?.href) && workPackageTypeName(item) === "Epic");
       let fieldMap = null;
       if (roots.length) fieldMap = buildDeliveryInitiativeFieldEntryMap(await getWorkPackageFormPayload(roots[0].id, roots[0].lockVersion));
-      return { targets: roots.map(item => mapWorkPackageToPrototypeDeliveryTarget(config, item, fieldMap)),
-        page: { number: page, has_more: page * payload.pageSize < payload.total }, scope };
+      return { targets: roots.map(item => {
+          const target=mapWorkPackageToPrototypeDeliveryTarget(config,item,fieldMap);
+          if(!includeOverviewMetadata)return target;
+          const metadata=mapWorkPackageToDeliveryInitiative(config,item,fieldMap);
+          return {...target,overview:{target_pi:metadata.targetPi,architecture_anchor_ref:metadata.architectureAnchorRef,required_upstream_ref:metadata.requiredUpstreamRef,initiative_family:metadata.initiativeFamily,lineage_role:metadata.lineageRole}};
+        }),
+        page: { number: page, has_more: page * payload.pageSize < payload.total,
+          ...(includeOverviewMetadata?{total:payload.total,anchor:payload._embedded.elements.map(row=>row.id).join(",")}:{}), }, scope };
     },
 
     async listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata = false, recordIds = null } = {}) {

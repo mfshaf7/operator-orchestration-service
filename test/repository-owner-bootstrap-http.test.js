@@ -25,13 +25,16 @@ test("bootstrap APIs preserve real caller/operator and encoded original request 
   const service = Object.fromEntries(["create", "read", "draft", "start", "materializeExisting", "cancelUnapplied", "accept", "recover", "publish", "review", "merge", "close"].map(method => [method, async input => {
     calls.push({ method, ...input }); return structuredClone(ownerBootstrapExamples.projection);
   }]));
-  service.list = async input => { calls.push({ method: "list", ...input }); return { schema_version: 1, workflow_id: "repository-owner-bootstrap-list", owner_repo: "example-owner-source", pending_request: null, records: [] }; };
+  service.list = async input => { calls.push({ method: "list", ...input }); return { schema_version: 1, workflow_id: "repository-owner-bootstrap-list", owner_repo: "example-owner-source", pending_request: null, records: [], ...(input.view === "register" ? {next_cursor:null} : {}) }; };
   const facade = createRepositoryOwnerBootstrapFacade({ service, operatorBindings: { [caller]: operator },
     preparations: { prepare: async input => { calls.push({ method: "prepare", ...input }); return ownerBootstrapExamples.preparation; } } });
   const app = createApp({ config: config(), repositoryOwnerBootstrapService: facade });
   assert.equal((await invoke(app)).code, 200);
   assert.equal((await invoke(app, { url: "/v1/repository-owner-bootstrap/requests" })).code, 201);
   assert.equal((await invoke(app, { method: "GET", body: "", url: "/v1/repository-owner-bootstrap/requests?owner_repo=example-owner-source" })).code, 200);
+  const cursor=Buffer.from(JSON.stringify({synthetic:"cursor"})).toString("base64url");
+  assert.equal((await invoke(app,{method:"GET",body:"",url:`/v1/repository-owner-bootstrap/requests?owner_repo=example-owner-source&view=register&cursor=${cursor}`})).code,200);
+  assert.equal(calls.at(-1).cursor,cursor);assert.equal(calls.at(-1).view,"register");
   const root = "/v1/repository-owner-bootstrap/requests/request%3Atest";
   assert.equal((await invoke(app, { method: "GET", body: "", url: root })).code, 200);
   assert.equal((await invoke(app, { method: "GET", body: "", url: `${root}/draft` })).code, 200);
@@ -40,7 +43,7 @@ test("bootstrap APIs preserve real caller/operator and encoded original request 
   }
   assert.ok(calls.every(call => call.callerId === caller && call.operatorId === operator));
   assert.ok(calls.filter(call => !["create", "prepare", "list"].includes(call.method)).every(call => call.requestId === "request:test"));
-  assert.equal(calls.length, 14);
+  assert.equal(calls.length, 15);
 });
 
 test("inactive source, wrong credentials, shared fallback, duplicate fields, oversize input and unknown query options fail closed", async () => {

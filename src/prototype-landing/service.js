@@ -244,11 +244,11 @@ export function createPrototypeLandingService({ store, readinessClient, sourceCl
   }
 
   return {
-    async list({ callerId }) {
-      return (await store.list(callerId)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
+    async list({ callerId, prototypeIds, latestOnly = false }) {
+      return (await store.list(callerId,prototypeIds ? {prototypeIds,latestOnly} : null)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
     },
-    async records() {
-      return sourceClient.records();
+    async records(selection = null) {
+      return sourceClient.records(selection);
     },
     prepare,
     submit,

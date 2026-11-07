@@ -119,3 +119,36 @@ test("invalid canonical captures, duplicate identities and non-object documents 
   await git(root, "update-ref", "refs/remotes/origin/main", await commit());
   await assert.rejects(client.records(), /canonical Prototype records are unavailable/);
 });
+
+test("Prototype pages read selected evidence past the former whole-owner file ceiling", async t => {
+  const {root,client,commit}=await fixture(t);
+  await mkdir(path.join(root,'records/design-baselines/unrelated'),{recursive:true});
+  for(let i=0;i<530;i++)await writeFile(path.join(root,`records/design-baselines/unrelated/${i}.json`),'unselected malformed content');
+  const rows=Array.from({length:79},(_,i)=>({id:`sample-${String(i).padStart(3,'0')}`}));
+  await writeFile(path.join(root,'prototypes.yaml'),JSON.stringify({schema_version:1,studio:{},prototypes:rows}));
+  const revision=await commit();await git(root,'update-ref','refs/remotes/origin/main',revision);
+  const ids=[];let cursor=null;
+  do{
+    const page=await client.records({cursor});
+    assert.equal(page.page.total,80);assert.ok(page.page.ids.length<=25);
+    ids.push(...page.page.ids);cursor=page.page.next_cursor;
+    assert.ok(Object.keys(page.documents).every(name=>!name.includes('unrelated')));
+  }while(cursor);
+  assert.equal(ids.length,80);assert.equal(new Set(ids).size,80);
+  const selected=await client.records({id:'proposal-51'});
+  assert.deepEqual(selected.page.ids,['proposal-51']);assert.equal(selected.captures.length,1);
+  assert.equal(selected.page.next_cursor,null);
+});
+
+test("Prototype continuation binds immutable source revision and never silently switches an exact original", async t => {
+  const {root,client,commit}=await fixture(t);
+  const rows=Array.from({length:29},(_,i)=>({id:`sample-${String(i).padStart(3,'0')}`}));
+  await writeFile(path.join(root,'prototypes.yaml'),JSON.stringify({schema_version:1,studio:{},prototypes:rows}));
+  let revision=await commit();await git(root,'update-ref','refs/remotes/origin/main',revision);
+  const first=await client.records({});assert.ok(first.page.next_cursor);
+  await mkdir(path.join(root,'records/design-baselines'),{recursive:true});
+  await writeFile(path.join(root,'records/design-baselines/new.json'),JSON.stringify({synthetic:true}));
+  revision=await commit();await git(root,'update-ref','refs/remotes/origin/main',revision);
+  await assert.rejects(client.records({cursor:first.page.next_cursor}),{code:'prototype_landing_page_invalid',statusCode:400});
+  await assert.rejects(client.records({id:'does-not-exist'}),{code:'prototype_landing_record_not_found',statusCode:404});
+});

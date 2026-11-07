@@ -449,8 +449,8 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
 
   return {
     prepare, submit, decide, advance,
-    async list({ callerId }) {
-      return (await store.list(callerId)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
+    async list({ callerId, prototypeIds, latestOnly = false }) {
+      return (await store.list(callerId,prototypeIds ? {prototypeIds,latestOnly} : null)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
     },
     async project(requestId, { callerId }) {
       const record = await store.get(requestId);

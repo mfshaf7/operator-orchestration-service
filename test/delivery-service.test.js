@@ -2731,3 +2731,18 @@ test("thousands of archived roots do not cause per-project execution scans or hi
   client.listDeliveryScopedInitiatives=async()=>Array(3).fill(result.operational_initiatives[0]);
   await assert.rejects(service.listDeliveryConsoleOverview({}),/changed/);
 });
+
+test("Delivery register scopes child graph reads to the native root page and rejects shifted continuation", async () => {
+  const sourceRoots=Array.from({length:31},(_,i)=>({recordId:i+1,recordRef:`openproject://work_packages/${i+1}`,title:`Retained ${i+1}`,status:"done",ownerRepo:null,recordVersion:"1",overview:{target_pi:null,architecture_anchor_ref:null,required_upstream_ref:null}}));
+  let changed=false;const reads=[];
+  const service=createDeliveryService({config:{},audit:{emit(){}},openProjectClient:{
+    async listDeliveryRegisterPage({page}){
+      reads.push(page);const start=(page-1)*25,targets=sourceRoots.slice(start,start+25);
+      return {targets,page:{number:page,total:sourceRoots.length,has_more:start+25<sourceRoots.length,anchor:changed?'changed':targets.map(row=>row.recordId).join(',')}};
+    },
+    async listDeliveryScopedInitiatives(){throw Error('Terminal register rows must not load their old child trees.');},
+  }});
+  const first=await service.listDeliveryRegisterPage({callerId:'synthetic'});assert.equal(first.roots.length,25);assert.ok(first.register_page.next_cursor);
+  const second=await service.listDeliveryRegisterPage({callerId:'synthetic',cursor:first.register_page.next_cursor});assert.equal(second.roots.length,6);assert.equal(second.register_page.next_cursor,null);assert.deepEqual(reads,[1,1,2]);
+  changed=true;await assert.rejects(service.listDeliveryRegisterPage({cursor:first.register_page.next_cursor}),/source changed/);
+});

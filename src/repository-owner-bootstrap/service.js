@@ -388,13 +388,29 @@ export function createRepositoryOwnerBootstrapService({ callerOperatorBindings, 
       return { schema_version: 1, workflow_id: "repository-owner-bootstrap-draft", request_id: record.request.request_id,
         revision: source.revision, digest: attempt.change_set_digest, change_set: structuredClone(attempt.change_set) };
     },
-    list({ callerId, operatorId, ownerRepo, limit = 25 }) {
+    list({ callerId, operatorId, ownerRepo, limit = 25, cursor = null, view = null }) {
       identity(callerId, operatorId);
       if (!/^[a-z0-9][a-z0-9._-]*$/.test(ownerRepo ?? "")) throw fail("list_invalid", "Select one exact owner for cold bootstrap recovery.", { statusCode: 400 });
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw fail("list_invalid", "Choose a bounded request page.", {statusCode:400});
+      if(view!==null&&view!=="register"||cursor!==null&&view!=="register")throw fail("list_invalid", "Choose the register view before continuing older requests.", {statusCode:400});
+      const scope = canonicalDigest({callerId,operatorId,ownerRepo,limit,view});
+      let after = null;
+      if (cursor !== null) {
+        try {
+          if(typeof cursor!=="string"||cursor.length>2048||!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();
+          const decoded=JSON.parse(Buffer.from(cursor,"base64url").toString());
+          if(Object.keys(decoded).sort().join(",")!=="after,scope"||decoded.scope!==scope||Object.keys(decoded.after).sort().join(",")!=="created_at,request_id")throw Error();
+          const original=store.get(decoded.after.request_id);
+          if(!original||original.caller_id!==callerId||original.operator_id!==operatorId||original.binding.owner_repo!==ownerRepo||original.created_at!==decoded.after.created_at)throw Error();
+          after=decoded.after;
+        }catch{throw fail("list_cursor_invalid", "The request page changed or belongs to another scope. Refresh the first page.", {statusCode:400});}
+      }
       const pending = store.pendingForOwner(ownerRepo);
+      const candidates = store.list({callerId,operatorId,ownerRepo,limit,after,lookAhead:view==="register"}),records=candidates.slice(0,limit),last=records.at(-1);
+      const next_cursor=candidates.length>limit&&last?Buffer.from(JSON.stringify({scope,after:{created_at:last.created_at,request_id:last.request.request_id}})).toString("base64url"):null;
       return { schema_version: 1, workflow_id: "repository-owner-bootstrap-list", owner_repo: ownerRepo,
         pending_request: pending?.caller_id === callerId && pending.operator_id === operatorId ? projection(pending, { detailed: false }) : null,
-        records: store.list({ callerId, ownerRepo, limit }).filter(record => record.operator_id === operatorId).map(record => projection(record, { detailed: false })) };
+        records: records.map(record => projection(record, { detailed: false })),...(view==="register"?{next_cursor}:{}) };
     },
   };
 }
