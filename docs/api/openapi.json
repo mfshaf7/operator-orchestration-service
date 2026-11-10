@@ -24678,10 +24678,11 @@
             "required": false,
             "schema": {
               "enum": [
-                "register"
+                "register",
+                "overview"
               ]
             },
-            "description": "Read only the selected immutable project page and its referenced owner evidence."
+            "description": "Register reads a bounded project page and its owner evidence. Overview reads a compact whole-workspace count projection without retained evidence documents; cursor/id are forbidden."
           },
           {
             "name": "cursor",
@@ -24717,7 +24718,14 @@
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PrototypeRecordCollection"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PrototypeRecordCollection"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PrototypeOverview"
+                    }
+                  ]
                 },
                 "example": {
                   "schema_version": 1,
@@ -36965,6 +36973,441 @@
           },
           "503": {
             "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-source-requests/{request_id}/assist": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "tags": [
+          "Prototype Source Authoring"
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "prototype-source-authoring",
+        "operationId": "prototypeSourceSourceAssistant",
+        "summary": "Ask about selected source or propose inert file edits",
+        "description": "Explicit caller-bound selected files and unsaved buffers enter CGG and the configured source-authoring model. Replies cannot save, accept or apply source. Original retries retain immutable input and owner evidence.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Stable caller-bound source assistant request with selected unsaved text and the exact owner revision/draft digest. No source action is performed.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceEditorAssistantRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "assistant:sample",
+                "snapshot_id": "snapshot:sample",
+                "expected_revision": "2026-10-25T00:00:00Z",
+                "expected_change_set_digest": null,
+                "mode": "ask",
+                "prompt": "Explain this selected source file.",
+                "conversation": [],
+                "files": [
+                  {
+                    "path": "app/example.js",
+                    "content": "export const sample = true;\n",
+                    "expected_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound private source state; inert text only. Documentation examples are not operating evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceEditorAssistantReply"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "assistant:sample",
+                  "snapshot_id": "snapshot:sample",
+                  "session_id": "source-session:sample",
+                  "revision": "2026-10-25T00:00:00Z",
+                  "message": "Selected source explanation; no edits requested.",
+                  "created_paths": [],
+                  "edits": [],
+                  "evidence": {
+                    "profile_id": "source-realization-v1",
+                    "audit_ref": "audit:sample",
+                    "context_ref": "/v1/context/lifecycle/projections/sample"
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded source input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Invalid bounded source input.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Authentication required.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller/operator or owner scope is not authorized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Caller/operator or owner scope is not authorized.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No retained source draft exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "No retained source draft exists.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Source session/base/revision/digest or lifecycle conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Source session/base/revision/digest or lifecycle conflicts.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Existing source/file/wire budget exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Existing source/file/wire budget exceeded.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The isolated source owner returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "The isolated source owner returned invalid output.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "The source owner is unavailable.",
+                  "details": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/realization/assist": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "tags": [
+          "Delivery ART"
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-source-realization",
+        "operationId": "deliveryArtSourceSourceAssistant",
+        "summary": "Ask about selected source or propose inert file edits",
+        "description": "Explicit caller-bound selected files and unsaved buffers enter CGG and the configured source-authoring model. Replies cannot save, accept or apply source. Original retries retain immutable input and owner evidence.",
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Accountable operator admitted for this authenticated caller."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Stable caller-bound source assistant request with selected unsaved text and the exact owner revision/draft digest. No source action is performed.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "realization": {
+                    "$ref": "#/components/schemas/SourceEditorAssistantRequest"
+                  }
+                },
+                "required": [
+                  "realization"
+                ]
+              },
+              "example": {
+                "realization": {
+                  "schema_version": 1,
+                  "request_id": "assistant:sample",
+                  "snapshot_id": "snapshot:sample",
+                  "expected_revision": "2026-10-25T00:00:00Z",
+                  "expected_change_set_digest": null,
+                  "mode": "ask",
+                  "prompt": "Explain this selected source file.",
+                  "conversation": [],
+                  "files": [
+                    {
+                      "path": "app/example.js",
+                      "content": "export const sample = true;\n",
+                      "expected_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound private source state; inert text only. Documentation examples are not operating evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceEditorAssistantReply"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "assistant:sample",
+                  "snapshot_id": "snapshot:sample",
+                  "session_id": "source-session:sample",
+                  "revision": "2026-10-25T00:00:00Z",
+                  "message": "Selected source explanation; no edits requested.",
+                  "created_paths": [],
+                  "edits": [],
+                  "evidence": {
+                    "profile_id": "source-realization-v1",
+                    "audit_ref": "audit:sample",
+                    "context_ref": "/v1/context/lifecycle/projections/sample"
+                  },
+                  "replayed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded source input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Invalid bounded source input.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Authentication required.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller/operator or owner scope is not authorized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Caller/operator or owner scope is not authorized.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No retained source draft exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "No retained source draft exists.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Source session/base/revision/digest or lifecycle conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Source session/base/revision/digest or lifecycle conflicts.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Existing source/file/wire budget exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "Existing source/file/wire budget exceeded.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The isolated source owner returned invalid output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "The isolated source owner returned invalid output.",
+                  "details": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source owner is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "source_owner_rejected",
+                  "message": "The source owner is unavailable.",
+                  "details": null
+                }
+              }
+            }
           }
         }
       }
@@ -86155,6 +86598,15 @@
                 "type": "string",
                 "pattern": "^record://[A-Za-z0-9._:/-]+$",
                 "maxLength": 512
+              },
+              "embedding_origins": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^http://(?:localhost|127\\.0\\.0\\.1):[1-9][0-9]{3,4}$"
+                }
               }
             }
           }
@@ -97591,6 +98043,307 @@
             "maxItems": 128
           }
         }
+      },
+      "PrototypeOverview": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "authority_revision",
+          "counts",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-overview"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "counts": {
+            "type": "object",
+            "required": [
+              "total",
+              "exploring",
+              "candidate",
+              "baselineApproved",
+              "graduating",
+              "graduated",
+              "retired",
+              "blocked",
+              "movementReady"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "exploring": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "candidate": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "baselineApproved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "graduating": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "graduated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "retired": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "blocked": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "movementReady": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
+          }
+        }
+      },
+      "SourceEditorAssistantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "expected_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expected_change_set_digest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "mode": {
+            "enum": [
+              "ask",
+              "edit"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "conversation": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "enum": [
+                    "operator",
+                    "assistant"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 12000
+                }
+              },
+              "required": [
+                "role",
+                "text"
+              ]
+            }
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 48,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 65536
+                },
+                "expected_digest": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "path",
+                "content",
+                "expected_digest"
+              ]
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "snapshot_id",
+          "expected_revision",
+          "expected_change_set_digest",
+          "mode",
+          "prompt",
+          "conversation",
+          "files"
+        ]
+      },
+      "SourceEditorAssistantReply": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "edits": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "content"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                },
+                "content": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 65536
+                }
+              }
+            }
+          },
+          "created_paths": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 240
+            }
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "profile_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "audit_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "context_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effective_selection": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "profile_id",
+              "audit_ref",
+              "context_ref"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "snapshot_id",
+          "session_id",
+          "revision",
+          "message",
+          "edits",
+          "created_paths",
+          "evidence",
+          "replayed"
+        ]
       }
     }
   }

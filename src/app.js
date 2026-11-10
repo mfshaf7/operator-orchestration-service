@@ -1,3 +1,4 @@
+import { summarizePrototypeOverview } from "./prototype-landing/overview.js";
 import { createDeliveryHistoryReader } from "./delivery-history-reader.js";
 import { SavedWorkError } from "./saved-work/store.js";
 import { randomUUID } from "node:crypto";
@@ -2095,7 +2096,7 @@ async function handleDeliveryArtSourceRealization({
   const body = await readDeliveryArtJsonBody(request);
   assertDeliveryMutationAuthority(caller);
   assertObject(body, "source realization request");
-  if (action === "saveDraft" && Object.keys(body).some(key => key !== "realization")) {
+  if (["saveDraft", "assist"].includes(action) && Object.keys(body).some(key => key !== "realization")) {
     throw new HttpError(400, "delivery_art_source_draft_request_invalid", "A draft save accepts only its exact realization command, not caller-selected source authority.");
   }
   assertObject(body.realization, "realization");
@@ -3911,7 +3912,7 @@ async function handlePrototypeSource({ action, config, prototypeAuthoringService
       return;
     }
     assertDeliveryMutationAuthority(caller);
-    const input = await readJsonBody(request, { canonical: true, maxBytes: action === "saveDraft" ? 1024 * 1024 : 65_536 });
+    const input = await readJsonBody(request, { canonical: true, maxBytes: ["saveDraft", "assist"].includes(action) ? 1024 * 1024 : 65_536 });
     sendJson(response, 200, await prototypeAuthoringService[action]({ callerId: caller.id, requestId, input }));
   } catch (error) {
     if (error instanceof DeliveryArtLifecycleContextUpstreamError || error instanceof DeliveryArtSourceRealizationError || error instanceof DeliveryArtSourceExecutorError) {
@@ -3930,8 +3931,13 @@ async function handlePrototypeLanding({ action, config, prototypeLandingService,
   }
   if (action === "records") {
     const params=url?.searchParams??new URLSearchParams();
-    if([...params.keys()].some(key=>!["view","cursor","id"].includes(key)||params.getAll(key).length!==1)||params.has("view")&&params.get("view")!=="register"||!params.has("view")&&(params.has("cursor")||params.has("id")))throw new HttpError(400,"prototype_register_page_invalid","Select one Prototype page or exact original.");
-    const source = await prototypeLandingService.records(params.get("view")==="register"?{cursor:params.get("cursor"),id:params.get("id")}:null);
+    if([...params.keys()].some(key=>!["view","cursor","id"].includes(key)||params.getAll(key).length!==1)||params.has("view")&&!["register","overview"].includes(params.get("view"))||params.get("view")!=="register"&&(params.has("cursor")||params.has("id")))throw new HttpError(400,"prototype_register_page_invalid","Select one Prototype page or exact original.");
+    const source = await prototypeLandingService.records(params.get("view")==="overview"?{overview:true}:params.get("view")==="register"?{cursor:params.get("cursor"),id:params.get("id")}:null);
+    if(params.get("view")==="overview"){
+      const result=await summarizePrototypeOverview(source,{callerId:caller.id,landing:prototypeLandingService,maturity:prototypeMaturityService});
+      sendSourceProjection(response,request,result,()=>({recordRef:"repo://workspace-prototype-studio/prototypes",sourceRef:"repo://workspace-prototype-studio@main",sourceOwner:"workspace-prototype-studio",sourceRevision:sourceRevisionDigest(result),sourceTimestamp:new Date().toISOString()}));
+      return;
+    }
     const prototypeIds=source.page?.ids.map(id=>`prototype:${id}`);
     const workflows = {};
     const workflowSources = {};
@@ -6115,6 +6121,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "POST" && /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization\/assist$/.test(url.pathname)) {
+        await handleDeliveryArtSourceRealization({ action: "assist", config, deliveryArtWorkSessionService, request, response, url, workItemId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+
       if (
         request.method === "GET" &&
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/realization$/.test(url.pathname)
@@ -6437,6 +6447,9 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/session$/.test(url.pathname)) {
         await handlePrototypeSource({ action: "startSession", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/assist$/.test(url.pathname)) {
+        await handlePrototypeSource({ action: "assist", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;
       }
       if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/generate$/.test(url.pathname)) {
         await handlePrototypeSource({ action: "generate", config, prototypeAuthoringService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[3]) }); return;

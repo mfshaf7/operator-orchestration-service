@@ -1,4 +1,4 @@
-import { selectPrototypeWorkflowRecords } from "../prototype-workflow-register.js";
+import { selectPrototypeWorkflowRecords, latestPrototypeWorkflowRecords } from "../prototype-workflow-register.js";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
@@ -81,6 +81,12 @@ export function createPrototypeLandingStore({ root }) {
   }
   return {
     transact,
+    async overview(callerId, project) {
+      await initialize();
+      const records=latestPrototypeWorkflowRecords(Object.values((await load()).records).filter(record=>record.caller_id===callerId));
+      if(records.length>20000)throw new Error("Prototype progress exceeds its overview index budget.");
+      return records.map(project);
+    },
     async list(callerId, selection = null) {
       await initialize();
       const records = selectPrototypeWorkflowRecords(Object.values((await load()).records).filter((record) => record.caller_id === callerId),selection);

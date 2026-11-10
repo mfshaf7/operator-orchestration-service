@@ -8,6 +8,7 @@ import addFormats from "ajv-formats";
 
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "../source-authoring/bounded-actions.js";
+import { createEditorAssistant, editorContext } from "../source-authoring/editor-assistant.js";
 import { createOperatorDraftEditor } from "../source-authoring/operator-drafts.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
@@ -623,7 +624,26 @@ export function createDeliveryArtSourceRealizationService({
       change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
       operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
   }
-  return { configured, read, start, cancel: bind("cancel"), continue: bind("continue"),
+  const assist = createEditorAssistant({ enabled: modelConfigured, gatewayClient,
+    fail: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
+    async binding(args) {
+      const session = sessionFor(args.workItemId); assertIdentity(session, args.callerId, args.operatorId);
+      const value = await read(args), record = readRecord(session), attempt = record?.attempts.at(-1);
+      return { session, args, sessionId: session.session_id, revision: value.revision, state: value.state,
+        draftDigest: value.attempt?.change_set?.digest ?? null, base: session.landing_unit.base_commit,
+        objective: attempt?.objective ?? attempt?.request?.objective ?? args.input.prompt,
+        objectiveDigest: attempt?.objective_digest ?? canonicalDigest(args.input.prompt), operatorId: args.operatorId,
+        profileId, modelCaller: "operator-orchestration-service/source-realization", workflow: "source-realization", scope: null };
+    },
+    withLock: (bound, operation) => store.withLock(`source-realization:${bound.sessionId}`, operation),
+    readArtifact: (bound, key) => store.readArtifact(bound.session, key),
+    writeArtifact: (bound, key, value) => store.writeArtifact(bound.session, key, value),
+    capture: (bound, paths) => sourceAdapter.captureRealizationContext(bound.session, { requestedPaths: paths, treeOnly: paths.length === 0 }),
+    projectContext: (bound, input, capture) => lifecycleContext.project({ callerId: bound.args.callerId, operatorId: bound.operatorId, workItemId: bound.args.workItemId,
+      request: { schema_version: 1, request_id: `editor-assistant-context:${input.request_id}`, execution_id: input.request_id, operation: "continue", mode: "packet", budget_tokens: 8000, fallback_reason: null },
+      sourceRealization: { objective: bound.objective, objective_digest: bound.objectiveDigest, repository_context: capture, editor_context: { ...editorContext(input), new_files_allowed: !capture.tree.truncated } } }),
+  });
+  return { configured, read, start, assist: args => assist({ ...args, input: args.request }), cancel: bind("cancel"), continue: bind("continue"),
     saveDraft: args => save({ ...args, subjectRef: args.workItemId }), files, draft,
     recover: bind("recover"), readCompletedCommand: bind("readCompletedCommand") };
 }

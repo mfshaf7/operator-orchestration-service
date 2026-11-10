@@ -59,3 +59,23 @@ indexed catalog already supports 100. The owner signs the actual requested page;
 the Console must not combine smaller signed pages and reuse a digest for different
 content. Search/scope/caller controls and canonical counts remain unchanged.
 Publish this owner support before its Console consumer uses larger Registry pages.
+
+## Prototype whole-workspace overview
+
+Use GET `/v1/prototypes?view=overview` for compact whole-workspace counts. This
+view forbids `cursor` and `id`; those remain register/exact-original options.
+The response is `prototype-overview` with one Studio authority revision, complete
+lifecycle totals, explicit current-phase blocked count and accepted-baseline
+movement count. The usual caller authentication and source envelope apply.
+
+The reader validates current registry and Proposal capture identity/digests,
+then joins only caller-owned latest workflow metadata. Missing source or workflow
+authority is unavailable, not a successful empty overview. Counts are not
+readiness, approval, delivery acceptance or authority to mutate. Detailed
+records, source references and full histories remain lazy page/original reads.
+
+Immutable index facts are cached by source revision; current authority freshness
+is checked on every read and mutable workflow metadata is not cached with that
+index. Index/capture read budgets and the existing journal storage model remain
+explicit installation limits. This extension is in the operator-review batch;
+source tests do not establish live commissioning.

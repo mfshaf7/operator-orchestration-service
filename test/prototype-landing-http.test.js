@@ -59,3 +59,17 @@ test("Prototype Landing denies inactive runtime, wrong credentials and shared-se
   const shared = loadConfig({ CALLER_ALLOWED_IDS: caller, CALLER_AUTH_SHARED_SECRET: "test-secret" });
   assert.equal((await invoke(createApp({ config: shared, prototypeLandingService: { submit() { throw new Error("must not execute"); } } }))).code, 403);
 });
+
+test("compact Prototype overview is authenticated and rejects register selection parameters",async()=>{
+  const calls=[];
+  const service={records:async selection=>{calls.push(selection);return {workflow_id:"prototype-overview-index",authority_revision:"a".repeat(40),records:[]};},overview:async()=>[]};
+  const app=createApp({config:config(),prototypeLandingService:service,prototypeMaturityService:{overview:async()=>[]}});
+  const request={url:"/v1/prototypes?view=overview",method:"GET",body:""};
+  const result=await invoke(app,request);
+  assert.equal(result.code,200);assert.equal(result.body.workflow_id,"prototype-overview");assert.equal(result.body.counts.total,0);
+  assert.deepEqual(calls,[{overview:true}]);
+  assert.equal((await invoke(app,{...request,secret:"wrong"})).code,401);
+  for(const suffix of ["&cursor=abc","&id=sample","&view=register"])
+    assert.equal((await invoke(app,{...request,url:request.url+suffix})).code,400);
+  assert.equal(calls.length,1);
+});

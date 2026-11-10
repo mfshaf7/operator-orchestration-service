@@ -610,7 +610,7 @@ export function createDeliveryArtWorkSessionService({
     if (sourceIntentRef !== null && (typeof sourceIntentRef !== "string" || !SOURCE_INTENT_PATTERN.test(sourceIntentRef))) {
       throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_invalid", "Source realization requires an exact source-intent reference.", { statusCode: 400 });
     }
-    if (!sourceRealization || !["start", "continue", "cancel", "recover", "saveDraft"].includes(action)) {
+    if (!sourceRealization || !["start", "continue", "cancel", "recover", "saveDraft", "assist"].includes(action)) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_source_realization_unavailable",
         "The requested Delivery source-realization action is unavailable.",

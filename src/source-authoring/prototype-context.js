@@ -47,7 +47,7 @@ function source({ id, sourceClass, sourceRef, revision, capturedAt, value }) {
     captured_at: capturedAt, availability: "available", content, content_digest: textDigest(content), unavailable_reason: null };
 }
 
-export function buildPrototypeContextRequest({ record, capture, executionId, budgetTokens, capturedAt }) {
+export function buildPrototypeContextRequest({ record, capture, executionId, budgetTokens, capturedAt, editorContext = null }) {
   assertPrototypeSourceCapture(record, capture);
   assertSourceCredentialTimestamp(capturedAt, "captured_at");
   if (!ID.test(executionId ?? "") || !Number.isInteger(budgetTokens) || budgetTokens < 1 || budgetTokens > 8000) {
@@ -59,7 +59,8 @@ export function buildPrototypeContextRequest({ record, capture, executionId, bud
       subject, source_request_id: record.request.request_id, request_digest: record.request_digest,
       objective: record.request.objective, objective_digest: canonicalDigest(record.request.objective),
       model_source_scope: record.binding.model_source_scope,
-      source_context: { context_digest: capture.context_digest, head_commit: capture.head_commit, tree: capture.tree },
+      source_context: { context_digest: capture.context_digest, head_commit: capture.head_commit, tree: editorContext ? { selected_paths: editorContext.files.map(file => file.path), new_files_allowed: !capture.tree.truncated } : capture.tree },
+      ...(editorContext ? { editor_assistance: { ...editorContext, files: editorContext.files.map(({content, ...file}) => file) } } : {}),
       authority: { may_mutate_registry: false, may_approve_baseline: false, may_activate_runtime: false },
     } })];
   // Chunk file payloads to the existing CGG source size, not to a fixed app
@@ -71,7 +72,7 @@ export function buildPrototypeContextRequest({ record, capture, executionId, bud
       revision: capture.head_commit, capturedAt, value: { files } }));
     files = [];
   };
-  for (const file of capture.files) {
+  for (const file of (editorContext ? editorContext.files.map(file => ({ ...file, size_bytes: Buffer.byteLength(file.content), content_digest: textDigest(file.content) })) : capture.files)) {
     if (Buffer.byteLength(canonicalStringify({ files: [...files, file] })) > CHUNK_BYTES) append();
     files.push(file);
   }

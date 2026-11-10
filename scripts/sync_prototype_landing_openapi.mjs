@@ -43,6 +43,8 @@ const prototypeRecordPage = object({
   source_revision:commit,selected_id:nullable(text),
 });
 const schemas = {
+  PrototypeOverview: object({schema_version:{const:1},workflow_id:{const:"prototype-overview"},authority_revision:commit,
+    counts:object(Object.fromEntries(["total","exploring","candidate","baselineApproved","graduating","graduated","retired","blocked","movementReady"].map(key=>[key,{type:"integer",minimum:0,maximum:10000}]))),canonical_mutation:{const:false}}),
   PrototypeRecordCollection: object({
     schema_version: { const: 1 }, workflow_id: { const: "prototype-records" },
     authority_revision: commit, authority_sequence: { type: "integer", minimum: 1 },
@@ -130,12 +132,12 @@ const common = {
 const requestId = { name: "request_id", in: "path", required: true, schema: text };
 source = upsertOpenApiPath(source, "/v1/prototypes", { get: {
   ...common, parameters:[
-    {name:"view",in:"query",required:false,schema:{enum:["register"]},description:"Read only the selected immutable project page and its referenced owner evidence."},
+    {name:"view",in:"query",required:false,schema:{enum:["register","overview"]},description:"Register reads a bounded project page and its owner evidence. Overview reads a compact whole-workspace count projection without retained evidence documents; cursor/id are forbidden."},
     {name:"cursor",in:"query",required:false,schema:{type:"string",maxLength:512},description:"Opaque continuation bound to the exact owner revision; requires view=register."},
     {name:"id",in:"query",required:false,schema:{type:"string",pattern:"^[a-z0-9][a-z0-9._-]{0,185}$"},description:"Inspect one exact original independently; requires view=register and excludes cursor."},
   ], operationId: "listCanonicalPrototypes", summary: "Read current canonical Prototype registry and captured entries",
   description: "Read-only bounded collection from one exact provider main revision already present in the deployment-owned Studio trusted ref. Includes owner registry, validated captures and related owner record documents. No Git fetch, source execution, fixture fallback or mutation.",
-  responses: { "200": { description: "One immutable Studio record snapshot.", content: { "application/json": { schema: ref("PrototypeRecordCollection"), example: {
+  responses: { "200": { description: "One immutable Studio record snapshot.", content: { "application/json": { schema: {oneOf:[ref("PrototypeRecordCollection"),ref("PrototypeOverview")]}, example: {
     schema_version: 1, workflow_id: "prototype-records", authority_revision: "a".repeat(40), authority_sequence: 1,
     registry: { schema_version: 1, studio: {}, prototypes: [] }, captures: [], documents: {}, canonical_mutation: false,
     workflows: { landing: [], maturity: [], closure: [] }, workflow_sources: { landing: "available", maturity: "available", closure: "available" },

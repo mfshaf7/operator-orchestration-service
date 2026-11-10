@@ -128,3 +128,47 @@ validation, Gary PR publication, exact-head human review/merge, final evidence
 and scoped credential/worktree/branch cleanup. Saving/importing is not evidence
 that any of those delivery actions occurred. Source preparation checks, browser
 fixtures and CI are distinct from actual Console operating proof.
+
+## Staged source-editor assistant
+
+The shared editor extension has **Files**, **Editor/diff** and **AI assistant**
+areas. Select a file to edit, add a file or import local text. Selected context
+is visible before sending; unsaved buffers are included only when the operator
+sends an assistant request. Files, conversation and model output remain inert.
+The assistant can propose new files without requiring the operator to create empty files first. OOS proves absence in the complete owner tree and rejects sibling scopes, unsafe/control paths and replacements of unselected existing files. The assistant cannot select credentials, run tools, save drafts or accept,
+commit, publish, review, merge or activate source.
+
+Use **Ask / explain** for questions; replies in this mode cannot contain edits.
+Use **Propose edits** for requested changes. Inspect proposed files against the
+selected current text, then apply the proposal to local buffers or reject it.
+A later selected-file edit or owner revision makes the old proposal inapplicable rather
+than overwriting newer work. Follow-up revisions include the unaccepted proposal
+only while the original local snapshot remains unchanged. Undo preserves later
+edits and saves. Normal private draft saves and exact acceptance remain separate.
+
+The owner APIs add `POST <base>/assist` to both domains in the table above.
+Prototype accepts `SourceEditorAssistantRequest`; Delivery wraps it in
+`{realization: request}`. It carries stable request/snapshot identities, the
+expected owner revision/draft digest, ask/edit mode, prompt, up to8 conversation
+turns and up to48 selected UTF-8 files within the existing256KiB read budget.
+Each file binds its actual baseline digest or an owner-proven absent path.
+The browser cannot provide source coordinates, source scope, identity or a
+permission profile. Trusted owner preparations remain inspect-only.
+
+OOS validates the real session, current revision, allowed paths and baseline
+through its existing source reader, then admits honestly labelled operator
+buffers through CGG. Truncated or denied context fails with no raw fallback.
+The governed gateway uses `source_editor_assistance` under the existing
+Prototype or Delivery source profile. Its route inherits that profile's source-generation override until explicitly configured otherwise; model, native
+reasoning effort, fallback and data-permission checks remain enforced.
+
+Private owner storage retains immutable original requests and replies, including
+model audit and context evidence. A response never changes the source revision.
+Retry uses the same request identity and input. Stopping a browser wait does not
+claim that provider execution stopped; a late reply is never auto-applied.
+Any explicit replacement request remains inert and cannot apply an older result.
+
+This extension is staged source in operator review. Fresh composed Security
+acceptance and Platform activation are required before live model qualification.
+An isolated UI sample or passing model-policy tests do not prove a real account,
+provider invocation, delivered source or application readiness.
