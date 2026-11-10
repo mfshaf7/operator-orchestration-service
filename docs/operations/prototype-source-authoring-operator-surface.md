@@ -202,3 +202,23 @@ stops/revokes exact owned credentials. Preserve non-secret workflow history,
 private drafts, source commits and PRs. A merged source receipt is not Preview,
 Candidate/Baseline, Delivery handoff, graduation or real application evidence.
 Those existing owner gates remain separate and visible in the Console.
+
+## Optional editor embedding in Preview preparation
+
+The existing `preview-profile` owner intent accepts optional
+`embedding_origins`: up to eight unique exact HTTP loopback Console origins,
+with explicit unprivileged ports. Omit it for the existing browser-only
+behaviour. An empty list explicitly retains framing denial. Wildcards,
+external hosts, credentials and URL paths/queries/fragments are rejected.
+
+The Console offers this as Allow this Console and supplies its current origin;
+the user does not need to construct a URL. OOS binds the choice into the
+immutable source request and rechecks the native Studio plan digest. Studio
+emits `embedding.allowed_origins` in the existing reviewed profile change.
+This is source preparation only: no model control, approval bypass, runtime
+start, app build or automatic draft application. The source executor still
+re-renders and compares the owner plan before applying exact approved bytes.
+
+This maintenance extension requires the matching Studio owner schema/runtime
+and fresh composed Security acceptance before live activation. An isolated
+editor sample is not qualification of the admitted native workflow.

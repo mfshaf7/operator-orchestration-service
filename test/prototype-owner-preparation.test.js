@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePrototypeOwnerPreparation, assertPrototypeOwnerChangeSet } from "../src/source-authoring/prototype-owner-preparation.js";
+import { normalizePrototypeOwnerPreparation, assertPrototypeOwnerChangeSet, prototypeOwnerChangeSet } from "../src/source-authoring/prototype-owner-preparation.js";
 import { prototypeDeliveryPreparationRequest, prototypeDeliveryOwnerChangeSet } from "../src/source-authoring/prototype-delivery-preparation.js";
 import { loadOpenApiSpec, validateValueAgainstSchema } from "../scripts/api_contract_tools.mjs";
+
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 
 const intent = () => ({ kind: "delivery-packet", work: { title: "Synthetic continuation", objective: "Deliver the accepted design.",
   included_scope: ["Preserve accepted source"], excluded_scope: [], remaining_work: ["Owner validation"] },
@@ -48,4 +50,33 @@ test("native packet plan is bounded to one exact packet and the existing registr
   }
   for (const malformed of [null, {}, { operations: { length: 2 } }]) assert.throws(() => assertPrototypeOwnerChangeSet(malformed, selected),
     { code: "prototype_source_authoring_owner_change_set_invalid" });
+});
+
+
+test("Preview embedding is optional, closed and included in the exact owner request digest", () => {
+  const base = { kind: "preview-profile", port: 18199, support_profile: "interactive", runtime_activation: true,
+    ttl_seconds: 3600, decision_ref: "record://decisions/preview" };
+  const spec = loadOpenApiSpec();
+  for (const extra of [{}, { embedding_origins: ["http://localhost:4317"] }, { embedding_origins: [] }]) {
+    const preparation = { ...base, ...extra };
+    assert.deepEqual(normalizePrototypeOwnerPreparation(preparation), preparation);
+    assert.deepEqual(validateValueAgainstSchema(spec, spec.components.schemas.PrototypeOwnerPreparation, preparation), []);
+    const selected = { ...session(), owner_preparation: preparation };
+    const { kind, decision_ref, ...settings } = preparation;
+    const request = { schema_version: 1, prototype_id: selected.prototype_id, source_revision: selected.subject.source_revision,
+      operator: { id: selected.operator.id, decision_ref }, ...settings };
+    const body = { schema_version: 1, status: "preparation-only", subject: selected.subject,
+      request_digest: canonicalDigest(request), operator: request.operator,
+      changes: [{ operation: "write", path: "records/prototype-preview-profiles/sample.yaml", expected_content_digest: null, content: "# owner rendered profile\n" }],
+      authority: { may_apply_source: false, may_invoke_model: false, may_approve_baseline: false, may_activate_runtime: false } };
+    const plan = { ...body, plan_digest: canonicalDigest(body) };
+    assert.equal(prototypeOwnerChangeSet(plan, selected).operations.length, 1);
+    const substituted = { ...selected, owner_preparation: { ...preparation, embedding_origins: ["http://localhost:3317"] } };
+    assert.throws(() => prototypeOwnerChangeSet(plan, substituted), { code: "prototype_source_authoring_owner_plan_invalid" });
+  }
+  for (const origins of [null, ["http://localhost:80"], ["http://localhost:99999"], ["http://localhost:4317/"] ,
+    ["http://localhost:4317", "http://localhost:4317"], ["https://example.com"], ["http://user@localhost:4317"]]) {
+    assert.throws(() => normalizePrototypeOwnerPreparation({ ...base, embedding_origins: origins }),
+      { code: "prototype_source_authoring_owner_preparation_invalid" });
+  }
 });

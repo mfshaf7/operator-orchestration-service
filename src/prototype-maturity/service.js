@@ -495,6 +495,19 @@ export function createPrototypeMaturityService({
 
   return {
     prepare,
+    async overview({callerId}) {
+      return store.overview(callerId, record=>{
+        assertCaller(record,callerId);
+        const result=record.evaluation.request;
+        if(record.status==="succeeded") {
+          const receipt=assertPrototypeMaturityArtifact(record.receipt), readback=assertPrototypeMaturityArtifact(record.readback);
+          if(receipt.outcome!=="succeeded" || receipt.prototype_id!==(result.prototype_id ?? result.prototype.id) || readback.prototype_id!==receipt.prototype_id || receipt.resulting_lifecycle!==readback.observed_lifecycle)
+            throw prototypeMaturityError("overview_unavailable","Prototype completion evidence is incomplete or inconsistent.",503);
+        }
+        return {prototype_id:result.prototype_id ?? result.prototype.id,transition:result.transition ?? "landing",status:record.status,
+          source_accepted:record.status==="succeeded"};
+      });
+    },
     async list({ callerId, prototypeIds, latestOnly = false }) {
       return (await store.list(callerId,prototypeIds ? {prototypeIds,latestOnly} : null)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
     },

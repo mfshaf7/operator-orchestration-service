@@ -125,6 +125,7 @@ export function buildDeliveryArtLifecycleSources(
             source_realization: {
               objective: sourceRealization.objective,
               objective_digest: sourceRealization.objective_digest,
+              ...(sourceRealization.editor_context ? { editor_assistance: { ...sourceRealization.editor_context, files: sourceRealization.editor_context.files.map(({content, ...file}) => file) } } : {}),
             },
           }
         : {}),
@@ -143,7 +144,7 @@ export function buildDeliveryArtLifecycleSources(
           repository: projection.agent_source?.repository ?? null,
           source: projection.source,
           ...(sourceRealization
-            ? { source_realization_context: sourceRealization.repository_context }
+            ? { source_realization_context: sourceRealization.editor_context ? { source_base: { session_id: sourceRealization.repository_context.session_id, head_commit: sourceRealization.repository_context.head_commit, context_digest: sourceRealization.repository_context.context_digest }, baseline_files: sourceRealization.repository_context.files.map(({content, ...metadata}) => metadata), operator_editor_context: sourceRealization.editor_context } : sourceRealization.repository_context }
             : {}),
         },
         revision: projection.source.head_commit ?? revision,

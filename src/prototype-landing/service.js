@@ -244,6 +244,19 @@ export function createPrototypeLandingService({ store, readinessClient, sourceCl
   }
 
   return {
+    async overview({callerId}) {
+      return store.overview(callerId, record=>{
+        assertCaller(record,callerId);
+        const result=record.evaluation.request;
+        if(record.status==="succeeded") {
+          const receipt=assertPrototypeLandingArtifact(record.receipt), readback=assertPrototypeLandingArtifact(record.readback);
+          if(receipt.outcome!=="succeeded" || receipt.prototype_id!==(result.prototype_id ?? result.prototype.id) || readback.prototype_id!==receipt.prototype_id)
+            throw prototypeLandingError("overview_unavailable","Prototype completion evidence is incomplete or inconsistent.",503);
+        }
+        return {prototype_id:result.prototype_id ?? result.prototype.id,transition:result.transition ?? "landing",status:record.status,
+          source_accepted:record.status==="succeeded"};
+      });
+    },
     async list({ callerId, prototypeIds, latestOnly = false }) {
       return (await store.list(callerId,prototypeIds ? {prototypeIds,latestOnly} : null)).map((record) => { assertCaller(record, callerId); return publicResult(record); });
     },

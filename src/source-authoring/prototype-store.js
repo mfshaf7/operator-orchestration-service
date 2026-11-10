@@ -76,6 +76,20 @@ export function createPrototypeAuthoringStore({ root }) {
       }
       return values;
     },
+    readAssistantArtifact(requestId, name) {
+      id(requestId);
+      if (!/^editor-assistant-[a-f0-9]{64}\.json$/.test(name)) throw prototypeAuthoringError("artifact_ref_invalid", "Use the exact owner assistance artifact name.", 400);
+      const entry = files.read(path.join(artifacts, key(requestId), name), "Source assistance artifact", { maxBytes: MAX_ARTIFACT_BYTES });
+      if (!entry) return null;
+      if (canonicalDigest(entry.value) !== entry.digest) throw prototypeAuthoringError("artifact_corrupt", "Private source assistance failed integrity validation.", 503);
+      return entry.value;
+    },
+    writeAssistantArtifact(requestId, name, value) {
+      id(requestId);
+      if (!/^editor-assistant-[a-f0-9]{64}\.json$/.test(name) || Buffer.byteLength(JSON.stringify(value)) > MAX_ARTIFACT_BYTES) throw prototypeAuthoringError("artifact_ref_invalid", "Use bounded source assistance artifacts.", 400);
+      const directory = path.join(artifacts, key(requestId)); mkdirSync(directory, { recursive: true, mode: 0o700 });
+      files.write(path.join(directory, name), { value, digest: canonicalDigest(value) });
+    },
     writeArtifact(requestId, value) {
       id(requestId);
       if (Buffer.byteLength(JSON.stringify(value)) > MAX_ARTIFACT_BYTES) throw prototypeAuthoringError("artifact_oversized", "Source payload exceeds the bounded private artifact limit.", 400);

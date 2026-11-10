@@ -1,4 +1,5 @@
 import { selectPrototypeRecordPage, readPrototypePageDocuments } from "./record-page-selection.js";
+import { readPrototypeOverviewIndex } from "./overview.js";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { parse as parseYaml } from "yaml";
@@ -22,6 +23,7 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
     // Content-addressed owner records are immutable. Membership and current
     // authority admission are still checked on every request; mutable workflow
     // journals are joined separately and never stored in this parsed snapshot.
+    if (selection?.overview && snapshotCache?.overview?.revision === revision) return structuredClone(snapshotCache.overview.value);
     if (!selection && snapshotCache?.revision === revision) return structuredClone(snapshotCache.value);
     const files = (await git(authorityRoot, "ls-tree", "-r", "-z", revision, "--", "prototypes.yaml", "schemas/prototype-registry.schema.json", ...ROOTS))
       .split("\0").filter(Boolean).map((line) => {
@@ -42,6 +44,11 @@ export async function readPrototypeRecords({ git, authorityRoot, revision, minim
       const registry=parseYaml(rawRegistry,{maxAliasCount:0,uniqueKeys:true}),schema=JSON.parse(rawSchema);
       const ajv=new Ajv2020({allErrors:true,strict:false});addFormats(ajv);
       if(!ajv.compile(schema)(registry)||new Set(registry.prototypes.map(row=>row.id)).size!==registry.prototypes.length)throw Error("Invalid owner registry.");
+      if(selection.overview){
+        const result=await readPrototypeOverviewIndex({git,authorityRoot,revision,registry,files});
+        if(snapshotCache)snapshotCache.overview={revision,value:structuredClone(result)};
+        return result;
+      }
       page=selectPrototypeRecordPage({registry,files,revision,selection});
       Object.assign(documents,await readPrototypePageDocuments({git,authorityRoot,revision,registry,files,page}));
       documents["prototypes.yaml"]={...registry,prototypes:registry.prototypes.filter(row=>page.ids.includes(row.id))};

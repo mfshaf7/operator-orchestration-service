@@ -24,6 +24,7 @@ export function createPrototypeAuthoringFacade({ authoringService, realizationSe
     saveDraft: args => realizationService.saveDraft(identity(args)),
     startSession: args => realizationService.startSession(identity(args)),
     generate: args => realizationService.generate(identity(args)),
+    assist: args => realizationService.assist(identity(args)),
     accept: args => realizationService.continue(identity(args)),
     recover: args => realizationService.recover(identity(args)),
     cancelAttempt: args => realizationService.cancelAttempt(identity(args)),

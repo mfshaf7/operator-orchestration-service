@@ -10,7 +10,15 @@ export function selectPrototypeWorkflowRecords(records, selection = null) {
   const wanted=new Set(ids.map(normalized));
   const selected=records.filter(record=>wanted.has(identity(record)));
   if(!selection.latestOnly)return selected;
+  return latestPrototypeWorkflowRecords(selected);
+}
+
+// The owner store has already applied caller isolation before this aggregate.
+export function latestPrototypeWorkflowRecords(records) {
+  const normalized=value=>typeof value==="string"?value.replace(/^prototype:/,""):null;
+  const identity=record=>normalized(record.request?.prototype_id??record.evaluation?.request?.prototype_id??record.evaluation?.request?.prototype?.id);
   const request=record=>record.request??record.evaluation?.request;
+  const selected=[...records];
   selected.sort((a,b)=>String(a.history?.[0]?.at).localeCompare(String(b.history?.[0]?.at))||String(request(a)?.request_id).localeCompare(String(request(b)?.request_id)));
   const latest=new Map();
   for(const row of selected)latest.set(`${identity(row)}:${request(row)?.transition??request(row)?.action??"landing"}`,row);

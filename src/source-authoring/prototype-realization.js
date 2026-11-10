@@ -1,3 +1,4 @@
+import { createEditorAssistant, editorContext } from "./editor-assistant.js";
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { assertPrototypeChangeSet } from "./prototype-change-set.js";
@@ -327,7 +328,25 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
     nextRevision: record => new Date(Math.max(clock().getTime(), Date.parse(record.revision) + 1)).toISOString(),
     project: record => project(record, configured), clock, error: fail,
   });
-  return { configured, read, startSession, generate, continue: apply("continue"), recover: apply("recover"),
+  const assist = createEditorAssistant({ enabled: modelConfigured, fail, gatewayClient,
+    async binding(args) {
+      const metadata = retainedSession(args), value = read(args), realization = value.realization;
+      if (metadata.session.owner_preparation) throw fail("assistant_scope_denied", "Trusted owner preparations remain inspect-only.", { statusCode: 403 });
+      return { metadata, sessionId: metadata.session.session_id, revision: realization.revision, state: realization.state,
+        draftDigest: realization.attempt?.change_set?.digest ?? null, base: metadata.session.landing_unit.base_commit,
+        objectiveDigest: metadata.session.objective_digest, operatorId: metadata.operator_id, profileId, modelCaller: CALLER,
+        workflow: "prototype-source-authoring", scope: metadata.binding.model_source_scope };
+    },
+    withLock: (bound, operation) => store.withActionLock(bound.sessionId, operation),
+    readArtifact: (bound, key) => store.readAssistantArtifact(bound.metadata.request.request_id, key),
+    writeArtifact: (bound, key, value) => store.writeAssistantArtifact(bound.metadata.request.request_id, key, value),
+    capture: (bound, paths) => run(bound.metadata, `assistant-files:${bound.sessionId}`, () => sourceExecutor.prototypeSource.captureRealizationContext({ ...sourceInput(bound.metadata), requested_paths: paths, tree_only: paths.length === 0 })),
+    async projectContext(bound, input, capture, capturedAt) {
+      const requestRef = lifecycleContext.prepare({ record: bound.metadata, capture, executionId: input.request_id, budgetTokens: 8000, capturedAt, editorContext: editorContext(input, bound.scope) });
+      return lifecycleContext.project({ record: bound.metadata, requestRef });
+    },
+  });
+  return { configured, read, startSession, generate, assist, continue: apply("continue"), recover: apply("recover"),
     saveDraft({ callerId, operatorId, requestId, input }) {
       return save({ callerId, operatorId, subjectRef: { callerId, operatorId, requestId }, request: input });
     },

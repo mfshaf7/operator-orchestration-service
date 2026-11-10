@@ -133,7 +133,7 @@ test("Prototype session and source scope cannot borrow Delivery identity, anothe
 test("trusted owner metadata is re-rendered at the executor and never grants model or arbitrary control writes", async t => {
   const f = setup(t); let plans = 0;
   f.record.request.owner_preparation = { kind: "preview-profile", port: 18199, ttl_seconds: 3600, support_profile: "interactive",
-    runtime_activation: true, decision_ref: "record://operator-decisions/preview-example" };
+    runtime_activation: true, decision_ref: "record://operator-decisions/preview-example", embedding_origins: ["http://localhost:4317"] };
   f.record.request_digest = canonicalDigest(f.record.request);
   const suffix = f.record.request_digest.slice(7, 31);
   f.record.binding.source_start = { landing_unit_id: `prototype-authoring-${suffix}`, branch: `feature/prototype-${suffix}`, fetched_base: f.base };
@@ -143,6 +143,7 @@ test("trusted owner metadata is re-rendered at the executor and never grants mod
     plans++; assert.equal(args[0], path.join(f.repo, "scripts/prototype_authoring.py")); assert.equal(args[3], "plan-preview");
     const request = JSON.parse(readFileSync(args[5], "utf8"));
     assert.equal(request.source_revision, f.base); assert.equal(request.operator.id, f.record.operator_id);
+    assert.deepEqual(request.embedding_origins, ["http://localhost:4317"]);
     const body = { schema_version: 1, status: "preparation-only", subject: session.subject, request_digest: canonicalDigest(request), operator: request.operator,
       changes: [{ operation: "write", path: "records/prototype-preview-profiles/sample.yaml", expected_content_digest: null,
         content: `schema_version: 1\nprototype_id: ${session.prototype_id}\n` }],

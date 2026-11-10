@@ -8,13 +8,19 @@ import { normalizePrototypeDeliveryPreparation, prototypeDeliveryPreparationPath
 export function normalizePrototypeOwnerPreparation(value) {
   if (value?.kind === "delivery-packet") return normalizePrototypeDeliveryPreparation(value);
   const fields = ["kind", "port", "support_profile", "runtime_activation", "ttl_seconds", "decision_ref"];
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== fields.length ||
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(field => ![...fields, "embedding_origins"].includes(field)) ||
       fields.some(field => !Object.hasOwn(value, field)) || value.kind !== "preview-profile" ||
       !Number.isInteger(value.port) || value.port < 1024 || value.port > 65535 ||
       !["interactive", "unattended"].includes(value.support_profile) || typeof value.runtime_activation !== "boolean" ||
       !Number.isInteger(value.ttl_seconds) || value.ttl_seconds < 300 || value.ttl_seconds > 86400 ||
       typeof value.decision_ref !== "string" || value.decision_ref.length > 512 || !/^record:\/\/[A-Za-z0-9._:/-]+$/.test(value.decision_ref)) {
     throw prototypeAuthoringError("owner_preparation_invalid", "Preview preparation requires only its exact reviewed port, support mode, activation intent, TTL and decision reference.", 400);
+  }
+  if (Object.hasOwn(value, "embedding_origins")) {
+    const origins = value.embedding_origins;
+    if (!Array.isArray(origins) || origins.length > 8 || new Set(origins).size !== origins.length || origins.some(origin => {
+      try { const url = new URL(origin); return typeof origin !== "string" || url.origin !== origin || url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) || !url.port || Number(url.port) < 1024; } catch { return true; }
+    })) throw prototypeAuthoringError("owner_preparation_invalid", "Embedded preview requires exact loopback Console origins.", 400);
   }
   return structuredClone(value);
 }
@@ -48,7 +54,7 @@ export function prototypeOwnerChangeSet(plan, session) {
   const intent = normalizePrototypeOwnerPreparation(session.owner_preparation);
   const request = { schema_version: 1, prototype_id: session.prototype_id, source_revision: session.subject.source_revision,
     operator: { id: session.operator.id, decision_ref: intent.decision_ref }, port: intent.port,
-    support_profile: intent.support_profile, runtime_activation: intent.runtime_activation, ttl_seconds: intent.ttl_seconds };
+    support_profile: intent.support_profile, runtime_activation: intent.runtime_activation, ttl_seconds: intent.ttl_seconds, ...(Object.hasOwn(intent, "embedding_origins") ? { embedding_origins: intent.embedding_origins } : {}) };
   const change = plan?.changes?.[0];
   if (digest !== canonicalDigest(body) || plan?.schema_version !== 1 || plan.status !== "preparation-only" ||
       canonicalDigest(plan.subject) !== canonicalDigest(session.subject) || plan.request_digest !== canonicalDigest(request) ||
