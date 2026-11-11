@@ -118,8 +118,8 @@ function assertSourceCurrent(request, source) {
 
 function taskInstruction(kind) {
   return kind === "context_advice"
-    ? "Review the current Work Design context decision. Return bounded advice only; do not approve or apply changes."
-    : "Review the current Work Design draft tree. Return bounded advice only; do not approve or apply changes.";
+    ? "Explain the architecture of the system under design before ART work decomposition. Identify the actual target from the admitted source and operator request; Work Design, Console and ART are not that target unless the work is specifically about them. Treat work records and starter cards as scope or prompts, not inspected system components. Distinguish verified current behavior, proposed changes and unknowns. Explain relevant actors, responsibilities, interactions and boundaries, including data ownership, access, failure and recovery where applicable. For non-runtime work, explain rules, information and handoffs without inventing services. A runtime request/data/response sequence can explain architecture; a plan/code/test/review task sequence alone cannot. Reuse accepted architecture when unchanged and focus on the relevant delta. Use only admitted evidence; name missing evidence or ask a focused question rather than claiming repository or runtime inspection. Keep the explanation proportionate: no required diagram format, component count or keyword test. Answer questions without edits; draft or revise only on an explicit request. Return bounded advice only; do not approve, finalize or apply changes."
+    : "Review the current Work Design draft tree. Use the accepted system context to decompose delivery outcomes into ART work; this is the work-breakdown task, separate from explaining system architecture. Return bounded advice only; do not approve or apply changes.";
 }
 
 function assertProjection(request, projection, projectedRequest, contextCallerId) {
