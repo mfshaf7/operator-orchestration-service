@@ -404,6 +404,39 @@ test("Work Design local draft scope enters digest-bound CGG content and keeps th
   }
 });
 
+test("context and tree advice send distinct task purposes without widening evidence or draft authority", async () => {
+  const invocations = [];
+  const runtime = service({ gatewayClient: { async invoke(input) {
+    invocations.push(input);
+    const result = gatewayResult();
+    return { ...result, task: input.task,
+      effective_selection: { ...result.effective_selection, task: `delivery-work-design-advisor-v1/${input.task.kind}` },
+      output: { ...result.output, affected_node_id: null, patch_proposal: null,
+        text: JSON.stringify({ intent: "answer", message: "Review the supplied system evidence; no edit requested.", edits: [] }) } };
+  } } });
+  for (const kind of ["context_advice", "tree_advice"]) {
+    const request = assistRequest(kind);
+    request.operator_prompt = kind === "context_advice"
+      ? "Does this plan/code/test diagram explain our system? Answer only; do not edit."
+      : "Review the ART work breakdown against the accepted architecture.";
+    const original = structuredClone(request);
+    const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
+    assert.deepEqual(request, original);
+    assert.deepEqual(JSON.parse(result.text).edits, []);
+    assert.equal(invocations.at(-1).input.operator_prompt, request.operator_prompt);
+  }
+  const context = invocations[0].input.task_instruction;
+  const tree = invocations[1].input.task_instruction;
+  assert.match(context, /system under design/);
+  assert.match(context, /current behavior, proposed changes and unknowns/);
+  assert.match(context, /plan\/code\/test\/review task sequence alone cannot/);
+  assert.match(context, /without inventing services/);
+  assert.match(context, /no required diagram format, component count or keyword test/);
+  assert.match(context, /Answer questions without edits/);
+  assert.match(tree, /decompose delivery outcomes into ART work/);
+  assert.notEqual(context, tree);
+});
+
 test("native fractional canvas coordinates remain exact JSON advice without relaxing ART canonical numbers", async () => {
   const request = assistRequest();
   request.task.kind = "context_advice";

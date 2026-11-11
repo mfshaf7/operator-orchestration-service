@@ -19,6 +19,19 @@ Provide one provider-neutral protocol for two Work Design assist tasks:
 - `context_advice`
 - `tree_advice`
 
+`context_advice` explains the architecture of the system being designed:
+current evidence, intended changes, responsibilities, interactions and relevant
+boundaries, plus explicit unknowns. Work records constrain the scope; they are
+not automatically system components. A runtime interaction sequence is valid
+architectural context, while an implementation task list alone is insufficient.
+Non-runtime work may describe rules and information handoffs without services.
+The advisor cannot claim repository/runtime inspection beyond admitted evidence.
+
+`tree_advice` uses the accepted context to propose the ART work breakdown. The
+two tasks retain their existing schemas, profile and authority. Context has no
+mandatory diagram notation, component count or semantic keyword gate. Questions
+remain answer-only; edits require the existing explicit draft request.
+
 The same contract separately defines operator-approved application of an
 accepted Work Design draft to canonical Delivery through OOS. A read-only
 projection returns the current source revision and durable application history
