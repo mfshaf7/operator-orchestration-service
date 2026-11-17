@@ -172,6 +172,12 @@ export function createCatalogBackendClient({
   }
 
   return {
+    projectMemberships(context, query) {
+      return request(`/v1/delivery-memberships/projection?${new URLSearchParams({ ...query, ...context })}`);
+    },
+    mutateMembership(input) {
+      return request("/v1/delivery-memberships/mutations", { method: "POST", body: input });
+    },
     mutate(catalogItemId, mutation) {
       return request(`/v1/delivery-catalog/${encodeURIComponent(catalogItemId)}/mutations`, {
         body: mutation,

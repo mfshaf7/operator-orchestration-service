@@ -4,7 +4,7 @@ import path from "node:path";
 import { createPrivateFileTransactions } from "../persistence/private-file-transactions.js";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const kinds = new Set(["work-design", "refinement", "orchestration"]);
+const kinds = new Set(["work-design", "refinement", "orchestration", "advisor-conversation"]);
 const hash = text => createHash("sha256").update(text).digest("hex");
 const digest = text => `sha256:${hash(text)}`;
 const stable = value => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
@@ -15,6 +15,7 @@ export class SavedWorkError extends Error {
 const fail = (code, message, status) => { throw new SavedWorkError(code, message, status); };
 
 export function savedWorkStorageKey(kind, subjectId) {
+  if (kind === "advisor-conversation") return `advisor-conversation:${subjectId}:v1`;
   return kind === "work-design" ? `delivery-work-design-session:${subjectId}:v2`
     : kind === "refinement" ? `delivery-refinement-session:${subjectId}:v1`
       : `orchestration-definition-design:${subjectId}:v1`;
@@ -28,6 +29,25 @@ function payloadFor(kind, subjectId, raw) {
     fail("saved_work_payload_invalid", "Saved work must be bounded UTF-8 JSON text.");
   let value;
   try { value = JSON.parse(raw); } catch { fail("saved_work_payload_invalid", "Saved work is not valid JSON."); }
+  if (kind === "advisor-conversation") {
+    exact(value, ["schemaVersion", "conversationId", "binding", "sourceRevision", "turns", "pending", ...(Object.hasOwn(value ?? {}, "draftPrompt") ? ["draftPrompt"] : [])]);
+    exact(value.binding, ["role", "ref", "sourceRef"]);
+    if (value.schemaVersion !== 1 || value.conversationId !== subjectId ||
+        ![value.binding.role, value.binding.ref, value.binding.sourceRef].every(item => typeof item === "string" && item.length > 0 && item.length <= 2048) ||
+        subjectId !== `chat:${hash(JSON.stringify([value.binding.role, value.binding.ref, value.binding.sourceRef]))}` ||
+        value.sourceRevision !== null && (typeof value.sourceRevision !== "string" || value.sourceRevision.length > 512) ||
+        value.draftPrompt !== undefined && (typeof value.draftPrompt !== "string" || !value.draftPrompt.isWellFormed() || value.draftPrompt.length > 8000) ||
+        !Array.isArray(value.turns) || value.turns.length > 1000 ||
+        value.turns.some(turn => !turn || Object.keys(turn).sort().join() !== "createdAt,id,role,sourceRevision,text" ||
+          !["operator", "advisor"].includes(turn.role) || typeof turn.id !== "string" || !turn.id ||
+          typeof turn.text !== "string" || !turn.text.isWellFormed() || turn.text.length > 64000 ||
+          turn.sourceRevision !== null && (typeof turn.sourceRevision !== "string" || turn.sourceRevision.length > 512) ||
+          typeof turn.createdAt !== "string" || !Number.isFinite(Date.parse(turn.createdAt))) ||
+        new Set(value.turns.map(turn => turn.id)).size !== value.turns.length ||
+        value.pending !== null && (!value.pending || typeof value.pending !== "object" || Array.isArray(value.pending)))
+      fail("saved_work_payload_invalid", "Conversation must retain its exact scope and complete bounded working messages.");
+    return value;
+  }
   if (!value || typeof value !== "object" || Array.isArray(value) || value.schemaVersion !== (kind === "work-design" ? 2 : 1) ||
       (kind === "orchestration" ? value.draftId : value.packageId) !== subjectId)
     fail("saved_work_subject_mismatch", "The saved-work kind, schema and subject must agree.");

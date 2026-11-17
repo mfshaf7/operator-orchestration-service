@@ -308,6 +308,116 @@ test("Agent Console orders CGG before governed AI and seals deterministic replay
   assert.equal(calls.length, 2);
 });
 
+test("Agent Console persists the validated native draft envelope and fails closed on missing structure", async () => {
+  const scope = { role: "proposal-triage", ref: "proposal:1", fields: [{ key: "summary", value: "Manual draft" }] };
+  const native = { intent: "draft", message: "Requested summary", edits: [{ field: "summary", value_type: "text",
+    text_value: "Suggested summary", board_patch: null, tree_patch: null }] };
+  const input = invocationRequest({ prompt: "Draft a summary", candidate: candidate(JSON.stringify({ operator_draft: scope })) });
+  const { service } = await harness({ gatewayClient: { async invoke(request) {
+    return gatewayFor(request, { output: { text: "Outer summary", draft_reply: native } });
+  } } });
+  await createSession(service);
+  const completed = await invoke(service, input);
+  assert.equal(completed.latest_invocation.state, "completed");
+  assert.deepEqual(JSON.parse(completed.latest_invocation.result.text).edits, [{ field: "summary", value: "Suggested summary" }]);
+  assert.equal("draft_reply" in completed.latest_invocation.result, false);
+  const replay = await invoke(service, input);
+  assert.equal(replay.latest_invocation.replayed, true);
+  assert.deepEqual(replay.latest_invocation.result, completed.latest_invocation.result);
+
+  const broken = await harness();
+  await createSession(broken.service);
+  const failed = await invoke(broken.service, input);
+  assert.equal(failed.latest_invocation.state, "failed");
+  assert.equal(failed.latest_invocation.failure.code, "advisor_draft_output_invalid");
+  assert.equal(failed.latest_invocation.result, null);
+});
+
+const sharedDraftAdvisors = [
+  ["proposal-triage", "summary"],
+  ["proposal-disposition", "notes"],
+  ["prototype-candidate", "objective"],
+  ["prototype-baseline", "baselineStatement"],
+  ["execution-tree", "title"],
+  ["execution-architecture", "sectionJson"],
+  ["work-design-blocker", "justification"],
+  ["refinement-blocker", "justification"],
+  ["definition-design", "identityOwnership.purpose"],
+];
+
+for(const content of [{conversation:[{role:"operator",text:"Earlier working decision"}]},{selected_project:{selection:{kind:"proposal",id:"idea-851"},observations:{body:"Selected current facts"}}}])test("shortened conversation or selected-project facts stop before inference",async()=>{
+  let modelCalls=0;
+  const {service}=await harness({contextClient:{async project(request){const response=projectionFor(request);response.budget.truncated=true;return response;}},
+    gatewayClient:{async invoke(request){modelCalls++;return gatewayFor(request);}}});
+  await createSession(service);
+  const result=await invoke(service,invocationRequest({candidate:candidate(JSON.stringify(content))}));
+  assert.equal(result.latest_invocation.state,"failed");assert.equal(modelCalls,0);
+});
+
+test("budget-trimmed draft context stops before model dispatch while ordinary bounded overview remains available", async () => {
+  for (const draft of [false, true]) {
+    let gatewayCalls = 0;
+    const { service } = await harness({
+      contextClient: { async project(request) { const response = projectionFor(request); response.budget.truncated = true; return response; } },
+      gatewayClient: { async invoke(request) { gatewayCalls += 1;
+        assert.match(request.input.task_instruction, /Console workflow orientation:/);
+        assert.match(request.input.task_instruction, /Work Design explains architecture/);
+        return gatewayFor(request); } },
+    });
+    await createSession(service);
+    const input = invocationRequest(draft ? { candidate: candidate(JSON.stringify({ operator_draft: {
+      role: "proposal-triage", ref: "proposal:1", fields: [{ key: "summary", value: "Manual draft" }] } })) } : {});
+    const result = await invoke(service, input);
+    assert.equal(result.latest_invocation.state, draft ? "failed" : "completed");
+    assert.equal(gatewayCalls, draft ? 0 : 1);
+    if (draft) assert.equal(result.latest_invocation.failure.code, "agent_console_advisor_context_incomplete");
+  }
+});
+
+for (const [role, field] of sharedDraftAdvisors) {
+  test(`${role}: native drafting, replay and explanation retain their scope; legacy text fails without blocking the next request`, async () => {
+    const scope = { role, ref: `${role}:selected-record`, sourceRef: "audit:source", sourceRevision: "version-1",
+      fields: [{ key: field, label: "Selected explanatory draft", maxLength: 100, value: "Retained manual draft" }] };
+    const input = invocationRequest({ prompt: "Draft the selected explanatory field", candidate: candidate(JSON.stringify({ operator_draft: scope })) });
+    const native = { intent: "draft", message: "Requested local draft", edits: [{ field, value_type: "text",
+      text_value: "Suggested explanatory draft", board_patch: null, tree_patch: null }] };
+    let output = { text: "Outer summary", draft_reply: native }, gatewayCalls = 0;
+    const { service } = await harness({ gatewayClient: { async invoke(request) {
+      gatewayCalls += 1;
+      assert.ok(request.input.task_instruction.includes(`role=${role}.`), "The real gateway request must carry the selected workflow guide.");
+      return gatewayFor(request, { output });
+    } } });
+    await createSession(service);
+    const completed = await invoke(service, input);
+    assert.equal(completed.latest_invocation.state, "completed");
+    assert.deepEqual(JSON.parse(completed.latest_invocation.result.text), { intent: "draft", message: native.message,
+      edits: [{ field, value: "Suggested explanatory draft" }] });
+    const replay = await invoke(service, input);
+    assert.equal(replay.latest_invocation.replayed, true);
+    assert.deepEqual(replay.latest_invocation.result, completed.latest_invocation.result);
+    assert.equal(gatewayCalls, 1, "An identical retry must use its retained result.");
+
+    output = { text: JSON.stringify({ intent: "draft", message: "Legacy nested edit envelope", edits: [{ field, value: "Unvalidated draft" }] }) };
+    const brokenInput = { ...input, invocation_id: "invocation-broken", correlation_id: "correlation-broken", idempotency_key: "invocation-key-broken" };
+    const failed = await invoke(service, brokenInput);
+    assert.equal(failed.latest_invocation.state, "failed");
+    assert.equal(failed.latest_invocation.failure.code, "advisor_draft_output_invalid");
+    assert.equal(failed.latest_invocation.result, null);
+    const failedReplay = await invoke(service, brokenInput);
+    assert.equal(failedReplay.latest_invocation.replayed, true);
+    assert.equal(failedReplay.latest_invocation.state, "failed");
+    assert.equal(gatewayCalls, 2, "A failed request replay must not silently make a new model call.");
+
+    output = { text: "Summary", draft_reply: { intent: "answer", message: "Explanation only; the draft stays intact.", edits: [] } };
+    const answered = await invoke(service, { ...input, prompt: "Explain this field without changing it",
+      invocation_id: "invocation-answer", correlation_id: "correlation-answer", idempotency_key: "invocation-key-answer" });
+    assert.equal(answered.latest_invocation.state, "completed", "Malformed output must release the invocation reservation.");
+    assert.deepEqual(JSON.parse(answered.latest_invocation.result.text).edits, []);
+    assert.equal(scope.fields[0].value, "Retained manual draft");
+    assert.equal(gatewayCalls, 3);
+  });
+}
+
 test("Agent Console accepts CGG whole-second precision and rejects projections beyond its bounded tolerance", async () => {
   const accepted = await harness({
     contextClient: {

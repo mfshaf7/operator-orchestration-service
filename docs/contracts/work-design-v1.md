@@ -14,6 +14,13 @@ and its adjacent JSON Schemas.
 
 ## Purpose
 
+The approved preview repair adds a schema-constrained provider `draft_reply`.
+It is validated against the selected field types before OOS emits the existing
+client text envelope. Legacy format strings in admitted draft data cannot
+override the native provider schema. The public Work Design source, CGG, profile,
+caller and explicit canonical Apply contracts remain unchanged. Exact paired
+source qualification is required before claiming this repair live.
+
 Provide one provider-neutral protocol for two Work Design assist tasks:
 
 - `context_advice`

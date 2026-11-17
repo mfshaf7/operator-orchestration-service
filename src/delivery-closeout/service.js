@@ -259,6 +259,7 @@ export function createDeliveryCloseoutService({
   deliveryService,
   openProjectClient,
   workspaceIntakeService = null,
+  registryReader = null,
 } = {}) {
   let automationUserRefPromise = null;
   const inFlightCommands = new Map();
@@ -514,6 +515,22 @@ export function createDeliveryCloseoutService({
     }
 
     const impact = structuredClone(command.operation.payload.impact);
+    if (impact.kind === "existing_product_change") {
+      if (typeof registryReader !== "function") throw new DeliveryCloseoutServiceError(
+        "delivery_closeout_product_registry_unavailable", "Current product registration cannot be verified; no closeout was applied.", { statusCode: 503 });
+      let registry;
+      try { registry = await registryReader({ callerId }); }
+      catch { throw new DeliveryCloseoutServiceError("delivery_closeout_product_registry_unavailable", "Current product registration could not be read; no closeout was applied.", { statusCode: 503 }); }
+      if (!Array.isArray(registry?.records)) throw new DeliveryCloseoutServiceError(
+        "delivery_closeout_product_registry_unavailable", "Current product registration could not be verified; no closeout was applied.", { statusCode: 503 });
+      const matches = registry.records.filter(record => record.kind === "product" && record.id === `product:${impact.active_product.product_id}`);
+      const product = matches[0];
+      if (matches.length !== 1 || product.posture !== "active" || String(product.version) !== impact.active_product.registry_version ||
+          !Array.isArray(product.owner_refs) || !product.owner_refs.includes(impact.product_owner_ref)) {
+        throw new DeliveryCloseoutServiceError("delivery_closeout_product_changed",
+          "The product registration or responsible repository changed. Select the current registered product and review the impact again.", { statusCode: 409 });
+      }
+    }
     const outcomeRef = `oos://delivery-closeout-outcomes/${command.command_id}`;
     const intentReceipt = {
       ref: `oos://delivery-closeout-intents/${command.command_id}`,

@@ -2700,7 +2700,8 @@ test("createDeliveryWorkItem returns null when the backend reports not found", a
 
 test("Delivery global overview retains every root and batches only operational trees, including parked work", async () => {
   const targets = ["done", "parked", "retired", "in-progress"].map((status, i) => ({ recordId: i + 1,
-    recordRef: `openproject://work_packages/${i + 1}`, title: `Package ${i + 1}`, status, ownerRepo: "sample-owner" }));
+    recordRef: `openproject://work_packages/${i + 1}`, title: `Package ${i + 1}`, status, ownerRepo: "sample-owner",
+    overview: { initiative_family: i === 0 ? "governed-ai-control-plane" : null } }));
   const service = createDeliveryService({ audit: createAudit(), openProjectClient: {
     async listPrototypeDeliveryApplicationTargets() { return structuredClone(targets); },
     async listDeliveryScopedInitiatives({ recordIds }) {
@@ -2711,6 +2712,8 @@ test("Delivery global overview retains every root and batches only operational t
   } });
   const all = await service.listDeliveryConsoleOverview({});
   assert.equal(all.roots.length, 4);assert.equal(all.mutation_authority, "none");
+  assert.equal(all.roots[0].initiative_family, "governed-ai-control-plane");
+  assert.equal(all.roots[1].initiative_family, null);
   assert.ok(all.roots.every(p => !("open_child_count" in p) && !("workflow_phase" in p)));
   assert.deepEqual(all.deferred_history_refs, [targets[0].recordRef,targets[2].recordRef]);
   targets.push(targets[0]);

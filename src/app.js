@@ -3649,6 +3649,20 @@ async function handleCatalogProjection({ catalogService, config, request, respon
   }));
 }
 
+async function handleCatalogMembership({ membershipService, config, request, response, query = null }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Project membership management");
+  assertDeliveryMutationAuthority(caller);
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  if (!membershipService) throw new HttpError(503, "membership_unavailable", "Project membership management is not configured.");
+  if (query) {
+    if (new Set(query.keys()).size !== [...query.keys()].length) throw new HttpError(400, "membership_query_invalid", "Repeated query fields are not supported.");
+    sendJson(response, 200, await membershipService.project({ callerId: caller.id, operatorId, query: Object.fromEntries(query) }));
+  } else {
+    sendJson(response, 200, await membershipService.mutate({ callerId: caller.id, operatorId, command: await readJsonBody(request, { canonical: true, maxBytes: 8192 }) }));
+  }
+}
+
 async function handleCatalogRepositoryReadiness({
   catalogService,
   config,
@@ -5706,6 +5720,7 @@ async function handlePlatformOperation({
 }
 
 export function createApp({
+  membershipService = null,
   savedWorkService = null,
   agentConsoleService = null,
   audit = null,
@@ -5765,7 +5780,8 @@ export function createApp({
               sourceRef: `oos://operator-saved-work/${identity.kind}/${identity.subjectId}${url.searchParams.has("recovery_id") ? `?recovery_id=${url.searchParams.get("recovery_id")}` : ""}`,
               sourceTimestamp: new Date().toISOString() }));
           } else {
-            assertDeliveryMutationAuthority(caller);
+            // Saving one's own inert conversation grants no Delivery mutation.
+            if (identity.kind !== "advisor-conversation") assertDeliveryMutationAuthority(caller);
             const input = await readJsonBody(request, { canonical: true, maxBytes: 4 * 1024 * 1024 });
             if (url.searchParams.get("action") === "preserve") sendJson(response, 200, await savedWorkService.preserve(identity, input));
             else if (!url.searchParams.has("action")) sendJson(response, 200, await savedWorkService.save(identity, input));
@@ -6746,6 +6762,15 @@ export function createApp({
           request,
           response,
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/delivery-memberships/projection") {
+        await handleCatalogMembership({ membershipService, config, request, response, query: url.searchParams });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/delivery-memberships/mutations") {
+        await handleCatalogMembership({ membershipService, config, request, response });
         return;
       }
 

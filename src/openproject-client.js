@@ -60,6 +60,7 @@ import {
 } from "./idea-model.js";
 import { validatePlanApplyInput } from "./work-item-create-preflight.js";
 import { isRefinementMetadataTarget, REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
+import { deliveryExecutionNavigation } from "./delivery-execution-navigation.js";
 
 function joinUrl(baseUrl, path) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -4355,6 +4356,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return {
         available: true,
         issue: null,
+        formPayload,
       };
     } catch (error) {
       if (
@@ -4365,6 +4367,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         return {
           available: false,
           issue: "The live OpenProject form does not allow transition to done from the current status.",
+          formPayload,
         };
       }
       throw error;
@@ -4450,6 +4453,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       attachment_count: attachmentEntries.length,
       attachment_filenames: attachmentEntries.map((entry) => entry.filename),
       blocked: blockerActive || normalizedStatus === DELIVERY_BLOCKED_STATUS,
+      blocker: blockerActive ? readDeliveryBlockerValues(payload, fieldMap) : null,
       blocker_fields: blockerActive ? blockerFields : null,
       business_objective: readDeliveryFieldValue(payload, fieldMap, "Business Objective"),
       business_objective_present: Boolean(
@@ -5073,6 +5077,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         children: [],
       },
       execution_tree: filteredTree,
+      execution_navigation: deliveryExecutionNavigation(fullTree),
       inactive_items: inactiveItems.map((node) => ({ ...node, children: [] })),
       initiative_review: initiativeReview,
       open_descendants: openDescendants.map((node) => ({ ...node, children: [] })),
@@ -12067,12 +12072,20 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         state,
       });
 
-      return {
-        continuationContext: buildDeliveryContinuationContext({
+      const continuationContext = buildDeliveryContinuationContext({
           initiativeSummary,
           recordId,
           state,
-        }),
+        });
+      if (targetNode.type === "PI Objective") {
+        const formPayload = completionStatusTransition.formPayload;
+        const entry = buildCustomFieldSchemaMap(formPayload).get("PI Objective Review Outcome");
+        const choices = entry ? await buildCustomOptionLinkMap({ baseUrl: config.baseUrl, executeRequest: executeRequestWithRetry,
+          fieldId: entry.fieldId, formPayload, requestHeaders }) : new Map();
+        continuationContext.target_item.pi_objective_review_outcome_options = [...new Set([...choices.values()].map(value => value.title))];
+      }
+      return {
+        continuationContext,
         deliveryRecordId: initiativeRecordId,
         deliveryRecordRef: initiativeSummary.epic.record_ref,
         workItemRecordId: recordId,

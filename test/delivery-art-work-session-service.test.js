@@ -12,6 +12,7 @@ import { loadConfig } from "../src/config.js";
 
 import {
   createDeliveryArtWorkSessionService,
+  projectDeliveryArtWorkSessionResult,
   DeliveryArtWorkSessionServiceError,
 } from "../src/delivery-art/work-session-service.js";
 import { createDeliveryArtWorkSessionStore } from "../src/delivery-art/work-session-store.js";
@@ -19,6 +20,14 @@ import { createDeliveryArtWorkSessionStore } from "../src/delivery-art/work-sess
 function valid() {
   return { errors: [], valid: true };
 }
+
+test("public next actions retain exact prerequisite targets while stripping shell command text", () => {
+  for (const code of ["architecture-prerequisite-required", "architecture-human-gate-required"]) {
+    const result=projectDeliveryArtWorkSessionResult({next_action:{code,authority:"security-architecture",reason:"Review the required work",inputs:{work_item_id:"work-item-1026"},command:"never execute arbitrary text"}});
+    assert.deepEqual(result.next_action.inputs,{work_item_id:"work-item-1026"});
+    assert.equal(result.next_action.command,undefined);
+  }
+});
 
 function createStore(root) {
   return createDeliveryArtWorkSessionStore({

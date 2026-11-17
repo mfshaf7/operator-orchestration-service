@@ -54,14 +54,17 @@ from an apply receipt; do not fabricate their content, authors or approval.
 ## Bounded API
 
 `GET /v1/operator-saved-work/{kind}/{subject_id}` reads one caller/operator-bound
-subject; `recovery_id` selects an original. Kinds are `work-design`, `refinement`
-and `orchestration`. The normal Console source-projection media type is required
+subject; `recovery_id` selects an original. Kinds are `work-design`, `refinement`,
+`orchestration` and `advisor-conversation`. The normal Console source-projection media type is required
 by the BFF. No global draft/history scan is used.
 
 `POST` takes `command_id`, `expected_revision`, `payload_json` and `origin`.
 `action=preserve` instead takes `storage_key` and `raw_value`. Inputs are closed,
 caller-specific credentials and existing operator bindings are required, and
-saves require existing mutation authority. Transport is bounded to4MiB, payload
+saves require existing mutation authority, except an operator's own inert
+`advisor-conversation` input. That exact kind still requires caller-specific
+authentication and the bound operator; it grants no Delivery mutation privilege.
+Transport is bounded to4MiB, payload
 UTF-8 bytes to2MiB, recovery metadata to100 originals per operator/subject.
 Limit failures are explicit; originals are not deleted automatically.
 
@@ -72,6 +75,35 @@ Same latest-command retries reuse acknowledgement; stale/conflicting input retur
 409. Finalized brief versions are append-only under draft saves. A prior complete
 record remains beside the atomic current record; integrity failures preserve
 bytes and return unavailable instead of success.
+
+## Advisor conversations — unpublished maintenance extension
+
+The approved preview source adds private working conversation input using this
+same store. A subject hashes the advisor role, project and source reference;
+caller and operator remain separate storage bindings. Source revision is recorded
+per turn but does not erase a discussion when current project facts change.
+Only operator/advisor turns, source revision, an inert pending-request marker and
+an optional unsent message are accepted. A save is not model evidence, approval
+or a canonical project record; the existing invocation receipts remain separate.
+
+Restore reads the exact subject without inference or automatic edit application.
+An interrupted request is unconfirmed. Source editing can explicitly retry its
+retained original request through the existing idempotent owner path. Another
+operator's browser cache is not imported. The Console retains complete turns and
+selects a bounded recent model window, reporting omissions without cutting text.
+Private storage limits are 1,000 turns and the existing 2MiB payload; limit
+failures remain visible. New conversation clears current working input without
+deleting canonical project records or model activity; it is not a secure purge of
+prior transaction/recovery copies. No automatic retention or purge policy is added.
+
+An unavailable initial owner read blocks history-backed sending. Retry is
+explicit. **Use current context only** permits a temporary discussion without
+server saving; source permissions and context admission still apply. Returning
+to the server conversation preserves that temporary input through the existing
+recovery endpoint before replacing it. Choosing browser input explicitly uses
+the existing conflict/revision path. Saving, restoration and retry errors must
+remain visible; no unknown history is overwritten with an empty conversation.
+Exact composed Security acceptance and operating qualification remain pending.
 
 ## Recovery and rollout
 

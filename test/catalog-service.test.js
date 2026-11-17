@@ -287,17 +287,18 @@ test("Catalog mutation verifies readiness, applies once, and proves canonical re
   );
 });
 
-test("Catalog mutation fails before write when source revision is stale", async () => {
-  const target = service();
-  await assert.rejects(
-    target.instance.mutate({
-      callerId: "operator:workspace-owner",
-      catalogItemId: "owner-repo",
-      request: request({ source_revision: "catalog-version-old" }),
-    }),
-    (error) => error instanceof CatalogServiceError && error.code === "source_revision_stale",
-  );
-  assert.equal(target.calls.some((call) => call.operation === "mutate"), false);
+test("Catalog stale request cannot become a new write through the receipt-replay path", async () => {
+  let attempts=0;
+  const instance=createCatalogService({backendClient:{ async project(){return projection({revision:"newer"});}, async mutate(){attempts++;throw new CatalogUpstreamError("source_revision_stale", "No existing receipt", {statusCode:409});} }});
+  await assert.rejects(instance.mutate({callerId:"operator:workspace-owner",catalogItemId:"owner-repo",request:request()}),error=>error.statusCode===409);
+  assert.equal(attempts,1);
+});
+
+test("Catalog recovers exact canonical receipt after an applied request changes the revision", async () => {
+  const target=service({before:projection({revision:"catalog-version-2",values:[value()]}),mutateResult:result({replayed:true})});
+  const recovered=await target.instance.mutate({callerId:"operator:workspace-owner",catalogItemId:"owner-repo",request:request()});
+  assert.equal(recovered.replayed,true);
+  assert.deepEqual(target.calls.filter(c=>c.operation!=="audit").map(c=>c.operation),["project","mutate"]);
 });
 
 test("Catalog mutation keeps authenticated caller and accepted operator as separate identities", async () => {

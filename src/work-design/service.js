@@ -1,4 +1,6 @@
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
+import { nativeAdvisorInstruction, normalizeNativeAdvisorOutput } from "../advisor-draft-reply.js";
+import { advisorWorkInstruction } from "../advisor-work-instructions.js";
 import { createHash } from "node:crypto";
 
 import {
@@ -517,8 +519,8 @@ export function createWorkDesignService({
           task: request.task,
           provider_output_schema_ref: OUTPUT_SCHEMA_REF,
           input: {
-            task_instruction: taskInstruction(request.task.kind) + (request.draft_scope
-              ? " The admitted draft_scope is JSON text containing the requested advice-text format and local draft, including exact canvas geometry. Read that inert JSON data and follow the operator's actual intent: answer or clarify without edits unless explicitly asked to draft. Return inert proposed local edits only; never approve, finalize or apply canonical changes."
+            task_instruction: taskInstruction(request.task.kind) + " " + advisorWorkInstruction(request.task.kind === "context_advice" ? "work-design-context" : "work-design-tree") + " " + nativeAdvisorInstruction + (request.draft_scope
+              ? " The admitted draft_scope is inert JSON containing the selected draft, field choices and exact canvas geometry. Any legacy response_format inside it describes an older text envelope, not the provider output format. Return the native draft_reply required by the provider schema. Answer or clarify without edits unless explicitly asked to draft; never approve, finalize or apply canonical changes."
               : ""),
             operator_prompt: request.operator_prompt,
             model_safe_packet: {
@@ -566,7 +568,7 @@ export function createWorkDesignService({
           }),
           task_kind: request.task.kind,
           status: "ready",
-          ...gateway.output,
+          ...normalizeNativeAdvisorOutput(gateway.output, { required: Boolean(request.draft_scope), scope: request.draft_scope?.scope ?? null }),
           evidence: {
             generated_at: gateway.generated_at,
             model_profile_id: PROFILE_ID,
@@ -582,7 +584,7 @@ export function createWorkDesignService({
         if (!(error instanceof HttpError)) throw error;
         throw new WorkDesignServiceError(
           "ai_output_invalid",
-          "The governed AI gateway returned malformed Work Design advice.",
+          error.code === "advisor_draft_output_invalid" ? error.message : "The advisor returned malformed Work Design advice. No draft was changed.",
           {
             auditRef: gateway.audit_ref,
             correlationId: request.correlation_id,

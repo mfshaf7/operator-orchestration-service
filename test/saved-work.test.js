@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,6 +15,20 @@ function setup(t) {
 }
 const command = (value = draft(), revision = 0, commandId = "save-1") => ({ command_id: commandId,
   expected_revision: revision, payload_json: JSON.stringify(value), origin: "operator-edit" });
+
+test("private conversation restores full working messages after restart without becoming workflow authority",async t=>{
+  const {root,store}=setup(t),binding={role:"proposal-triage",ref:"idea:1",sourceRef:"proposal:1"};
+  const id=`chat:${createHash("sha256").update(JSON.stringify([binding.role,binding.ref,binding.sourceRef])).digest("hex")}`;
+  const who={...identity,kind:"advisor-conversation",subjectId:id};
+  const value={schemaVersion:1,conversationId:id,binding,sourceRevision:"version:1",turns:[{id:"turn:1",role:"operator",text:"Complete message "+"a".repeat(3000),createdAt:"2026-11-11T00:00:00Z",sourceRevision:"version:1"}],pending:{state:"unconfirmed"}};
+  await store.save(who,command(value));
+  assert.deepEqual(JSON.parse(createSavedWorkStore({root}).read(who).record.payload_json),value);
+  assert.equal(store.read({...who,operatorId:"operator:other"}).record,null);
+  await assert.rejects(store.save({...who,subjectId:id.replace(/.$/,"x")},command(value)),{code:"saved_work_payload_invalid"});
+  await assert.rejects(store.save(who,command({...value,binding:{...binding,ref:"another-project"}},1,"foreign")),{code:"saved_work_payload_invalid"});
+  await assert.rejects(store.save(who,command({...value,turns:[...value.turns,...value.turns]},1,"duplicate")),{code:"saved_work_payload_invalid"});
+  await assert.rejects(store.save(who,command({...value,turns:[{...value.turns[0],role:"system"}]},1,"system")),{code:"saved_work_payload_invalid"});
+});
 
 test("all three saved-work kinds recover exact content after store restart", async t => {
   const { root, store } = setup(t);

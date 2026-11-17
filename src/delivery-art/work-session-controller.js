@@ -1879,6 +1879,7 @@ export function createDeliveryArtWorkSessionController({
         context: current,
         nextAction: {
           code: "architecture-prerequisite-required",
+          inputs: { work_item_id: implementationPrerequisite.work_item_id },
           command:
             `npm run art -- item continuation ${implementationPrerequisite.work_item_id}`,
           reason:
@@ -1900,6 +1901,7 @@ export function createDeliveryArtWorkSessionController({
         context: current,
         nextAction: {
           code: "architecture-human-gate-required",
+          inputs: { work_item_id: implementationGate.gate.authority_work_item_id, gate_id: implementationGate.gate.gate_id },
           command:
             `npm run art -- item continuation ${implementationGate.gate.authority_work_item_id}`,
           reason:

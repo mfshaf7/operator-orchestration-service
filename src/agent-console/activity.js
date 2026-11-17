@@ -4,7 +4,7 @@ import { agentConsoleDigest, agentConsoleError } from "./contracts.js";
 export const activityKinds = Object.freeze([
   "assistant-response", "proposal-triage", "proposal-disposition", "prototype-candidate",
   "prototype-baseline", "work-design-context", "work-design-tree", "refinement-metadata",
-  "execution-tree", "work-design-blocker", "refinement-blocker", "definition-design",
+  "execution-tree", "work-design-blocker", "refinement-blocker", "definition-design", "execution-architecture",
 ]);
 
 function safeReference(value) {

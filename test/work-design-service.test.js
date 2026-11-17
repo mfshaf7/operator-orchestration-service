@@ -205,6 +205,7 @@ function gatewayResult(overrides = {}) {
       confidence: "medium",
       required_operator_action: "review",
       text: "Keep one bounded outcome under the delivery epic.",
+      draft_reply: { intent: "answer", message: "Keep one bounded outcome under the delivery epic.", edits: [] },
       affected_node_id: "feature-1",
       patch_proposal: {
         patch_type: "tree_shape",
@@ -349,6 +350,7 @@ test("Work Design assist binds current source, CGG projection, and governed advi
   );
   assert.equal(projectionRequest.task.model_profile_id, "delivery-work-design-advisor-v1");
   assert.equal(gatewayRequest.profile_id, "delivery-work-design-advisor-v1");
+  assert.match(gatewayRequest.input.task_instruction, /role=work-design-tree\./);
   assert.equal(gatewayRequest.operator_acceptance_state, "not-recorded");
   assert.equal(
     gatewayRequest.input.model_safe_packet.content,
@@ -422,7 +424,7 @@ test("context and tree advice send distinct task purposes without widening evide
     const original = structuredClone(request);
     const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
     assert.deepEqual(request, original);
-    assert.deepEqual(JSON.parse(result.text).edits, []);
+    assert.equal(result.text, "Keep one bounded outcome under the delivery epic.");
     assert.equal(invocations.at(-1).input.operator_prompt, request.operator_prompt);
   }
   const context = invocations[0].input.task_instruction;
@@ -459,7 +461,13 @@ test("native fractional canvas coordinates remain exact JSON advice without rela
       return { ...original, task: input.task, decision_id: request.correlation_id,
         effective_selection: { ...original.effective_selection, task: "delivery-work-design-advisor-v1/context_advice" },
         output: { ...original.output, affected_node_id: null, patch_proposal: null,
-          text: JSON.stringify({ intent: "answer", message: "No draft was changed.", edits: [] }) } };
+          text: "Native structured draft suggestion",
+          draft_reply: { intent: "draft", message: "Add the requested component and retain manual geometry.", edits: [{
+            field: "board", value_type: "board", text_value: null, tree_patch: null,
+            board_patch: { addItems: [{ id: "runner", kind: "component", label: "Runner", detail: "Bounded runtime",
+              x: 440.5, y: 310.125, width: null, height: null, tone: null, diagramType: null }],
+              updateItems: [], removeItemIds: [], addConnections: [], removeConnectionIds: [] },
+          }] } } };
     } },
   });
   const result = await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request });
@@ -470,7 +478,24 @@ test("native fractional canvas coordinates remain exact JSON advice without rela
   assert.equal(admitted.context_digest, `sha256:${createHash("sha256").update(admitted.context).digest("hex")}`);
   assert.equal(result.evidence.model_profile_id, "delivery-work-design-advisor-v1");
   assert.equal(result.task_kind, "context_advice");
+  assert.equal(JSON.parse(result.text).edits[0].value.addItems[0].x, 440.5);
+  assert.equal("draft_reply" in result, false, "The public HTTP envelope stays compatible.");
   assert.deepEqual(request.draft_scope.scope.fields[0].value, board);
+});
+
+test("Work Design rejects malformed native advice before returning ready draft evidence", async () => {
+  const request = assistRequest();
+  request.draft_scope = { response_format: "Legacy inert draft envelope", conversation: [],
+    scope: { role: "work-design-tree", ref: "tree:feature-1", packageRef: request.package_ref,
+      sourceRef: request.source_ref, sourceRevision: request.source_revision, context: "Local tree",
+      fields: [{ key: "tree", label: "Tree", kind: "tree", value: request.tree_draft.tree }] } };
+  for (const native of [undefined, { message: "Missing intent", edits: [] },
+    { intent: "draft", message: "Wrong patch", edits: [{ field: "tree", value_type: "tree", text_value: null, board_patch: null, tree_patch: [{ op: "add" }] }] }]) {
+    const output = { ...gatewayResult().output, draft_reply: native };
+    const runtime = service({ gatewayClient: { async invoke() { return gatewayResult({ output }); } } });
+    await assert.rejects(runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request }),
+      error => error.code === "ai_output_invalid" && error.statusCode === 502 && /No draft was changed/.test(error.message));
+  }
 });
 
 test("Work Design assist rejects stale source and malformed model output", async () => {

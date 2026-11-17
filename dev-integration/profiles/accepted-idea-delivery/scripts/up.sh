@@ -206,6 +206,7 @@ run_platform_admin_capture \
   ISSUE_API_TOKEN=true \
   OPENPROJECT_API_TOKEN_OUTPUT_PATH="${OPENPROJECT_API_TOKEN_FILE}" \
   TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor","Work package structure editor"]' \
+  TARGET_PROJECT_ROLE_NAMES_JSON='{"workspace-delivery-art":["Reader","Work package creator","Work package editor","Work package structure editor","Project membership manager"]}' \
   "${identity_helper}"
 extract_marked_json \
   "${OPENPROJECT_IDENTITY_RAW}" \

@@ -248,7 +248,7 @@ function readyProjection(request) {
         selected_node_ids: request.assist_request.target.selected_node_ids,
       },
       requested_at: request.requested_at,
-      context_digest: request.assist_request_digest,
+      context_digest: canonicalDigest(request.work_context ? { ...request.assist_request, work_context: request.work_context } : request.assist_request),
       budget_tokens: request.budget_tokens,
     },
     artifact_id: "refinement-artifact-1",
@@ -256,7 +256,7 @@ function readyProjection(request) {
     packet_ref: "/v1/context/packets/refinement-packet-1",
     redaction_receipt_ref: "/v1/context/receipts/refinement-receipt-1",
     projection_receipt_ref: "/v1/context/refinement/projections/refinement-projection-1",
-    content: "Model-safe Refinement metadata context.",
+    content: JSON.stringify({ ...request.assist_request, ...(request.work_context ? { work_context: request.work_context } : {}) }),
     admission_decision: {
       profile: "developer",
       raw_projection: "not_requested",
@@ -274,6 +274,7 @@ function readyProjection(request) {
   projection.request_digest = canonicalDigest({
     binding: projection.binding,
     refinement_context: request.assist_request,
+    ...(request.work_context ? { work_context: request.work_context } : {}),
   });
   return projection;
 }
@@ -398,6 +399,45 @@ test("Refinement assist binds CGG projection and governed output to one packet f
   assert.equal(result.suggestion.value, "PI-2026-04");
   assert.equal(result.evidence.effective_selection.attempts[0].effort, false);
   assert.equal(result.required_operator_action, "review");
+});
+
+test("Refinement native request retains complete follow-up conversation through CGG",async()=>{
+  const request=assistRequest();request.conversation=[{role:"operator",text:"Keep the accepted scope local."},{role:"advisor",text:"Understood; this is working context, not approval."}];
+  let captured;
+  await service({contextClient:{async project(input){captured=input;return readyProjection(input);}}}).assist({callerId:"governance-operations-console",packageId:packageRef,request});
+  assert.deepEqual(captured.assist_request.conversation,request.conversation);
+  assert.equal(captured.assist_request_digest,canonicalDigest(request));
+});
+
+test("Refinement carries canonical selected and ancestor narratives, excludes sibling branches and binds their content", async () => {
+  const current = packet();
+  current.target_tree.description = "Accepted architecture: keep project data local and recover the original operation.";
+  current.target_tree.children = [
+    { ...structuredClone(current.target_tree), id: "885", title: "Selected feature", description: "Selected acceptance criteria", children: [] },
+    { ...structuredClone(current.target_tree), id: "886", title: "Unrelated feature", description: "UNRELATED_BRANCH_CONTENT", children: [] },
+  ];
+  current.draft_groups[0].fields[0].target_node_ids = ["885"];
+  current.draft_groups[0].fields[0].target_values = { "885": "PI-2026-03" };
+  const request = assistRequest(); request.target.selected_node_ids = ["885"];
+  let captured;
+  const result = await service({ sourceAdapter: { async projectPacket() { return structuredClone(current); } },
+    contextClient: { async project(input) { captured = input; return readyProjection(input); } },
+  }).assist({ callerId: "governance-operations-console", packageId: packageRef, request });
+  assert.equal(result.required_operator_action, "review");
+  assert.deepEqual(captured.work_context.nodes.map(node => node.id), ["885", "884"]);
+  assert.match(JSON.stringify(captured.work_context), /Accepted architecture/);
+  assert.doesNotMatch(JSON.stringify(captured.work_context), /UNRELATED_BRANCH_CONTENT/);
+  assert.equal(captured.assist_request.operator_prompt, request.operator_prompt, "Knowledge is data, not appended operator instructions.");
+  assert.equal(captured.assist_request_digest, canonicalDigest(request));
+  const projected = readyProjection(captured);
+  assert.equal(projected.binding.context_digest, canonicalDigest({ ...request, work_context: captured.work_context }));
+  current.target_tree.description = "Changed canonical architecture";
+  let changed;
+  await service({ sourceAdapter: { async projectPacket() { return structuredClone(current); } },
+    contextClient: { async project(input) { changed = input; return readyProjection(input); } },
+  }).assist({ callerId: "governance-operations-console", packageId: packageRef, request });
+  assert.notEqual(changed.idempotency_key, captured.idempotency_key);
+  assert.notEqual(readyProjection(changed).binding.context_digest, projected.binding.context_digest);
 });
 
 test("Refinement assist rejects a stale packet before context or model invocation", async () => {

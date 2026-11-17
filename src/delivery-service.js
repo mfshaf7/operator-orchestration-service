@@ -467,6 +467,7 @@ function toDeliveryProjectQualityPackProjection(result) {
 
 export function createDeliveryService({
   openProjectClient,
+  workSessionStore = null,
   audit,
   runtimeContext = {},
   wgcfArtReadinessClient = null,
@@ -1143,6 +1144,7 @@ export function createDeliveryService({
         seen.add(target.recordId);
         return { id: target.recordId, record_ref: target.recordRef, subject: target.title,
           status: target.status, owner_repo: target.ownerRepo ?? null, record_version: target.recordVersion,
+          initiative_family: target.overview?.initiative_family ?? null,
           target_pi: target.overview?.target_pi ?? null, architecture_anchor_ref: target.overview?.architecture_anchor_ref ?? null,
           required_upstream_ref: target.overview?.required_upstream_ref ?? null };
       });
@@ -1160,6 +1162,31 @@ export function createDeliveryService({
           throw new HttpError(502, "delivery_overview_changed", "Delivery package changed during the overview read; refresh canonical truth.");
         }
         activeById.delete(root.id);
+      }
+      // Cheap local custody read, not per-item source/Git/provider inspection.
+      // Only expose sessions belonging to this authenticated broker caller.
+      const sessions = workSessionStore ? workSessionStore.listSessions() : null;
+      if (sessions && sessions.length > 8192) throw new HttpError(502, "delivery_session_overview_limit", "Delivery session overview exceeds its bounded limit.");
+      for (const item of initiatives) {
+        const scoped = sessions?.filter(session => session.delivery_id === toDeliveryId(item.epic.id) && session.caller_id === callerId) ?? [];
+        item.work_sessions = sessions === null ? null : scoped.map(session => ({
+          session_id: session.session_id,
+          work_item_ids: session.covered_work_item_ids,
+          updated_at: session.updated_at,
+          state: "recorded",
+        }));
+        const navigation = item.execution_navigation;
+        if (navigation && scoped.length) {
+          const descendants = new Map();
+          const visit = node => { descendants.set(`work-item-${node.id}`, node); for (const child of node.children ?? []) visit(child); };
+          visit(item.execution_tree);
+          const openSessionTargets = [...new Set(scoped.flatMap(session => session.covered_work_item_ids))]
+            .map(id => descendants.get(id)).filter(node => node && !["done", "retired", "parked"].includes(node.status));
+          if (openSessionTargets.length && !["done", "retired", "parked"].includes(item.epic.status)) {
+            navigation.workflow_phase = "execution";
+            if (["New", "Ready"].includes(navigation.package_posture)) navigation.package_posture = "In Progress";
+          }
+        }
       }
       audit?.emit({ caller: { id: callerId }, correlation_id: correlationId, event_type: "delivery.initiatives.read",
         backend: { result: "read", system: "openproject", target_ref: "openproject://projects/workspace-delivery-art" },

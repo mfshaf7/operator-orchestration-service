@@ -105,6 +105,7 @@ test("retained projection request survives lost acknowledgement and cold reconst
   const cold = createPrototypeLifecycleContext({ store: createPrototypeAuthoringStore({ root }), client: { callerId: "operator-orchestration-service", async project(request) { observed.push(request); return result(request); } } });
   const projected = await cold.project({ record: f.record, requestRef });
   assert.deepEqual(observed[0], observed[1]); assert.equal(projected.content, "redacted packet"); assert.equal(projected.captured_at, NOW);
+  assert.deepEqual(projected.budget, result(observed[1]).budget);
   assert.equal(store.readArtifact(projected.result_ref).packet_ref, projected.packet_ref);
 });
 
@@ -118,4 +119,15 @@ test("CGG subject, content custody, raw fallback and authority mismatches never 
     const requestRef = context.prepare(f);
     await assert.rejects(context.project({ record: f.record, requestRef }), { code: "prototype_source_authoring_context_response_invalid" });
   }
+});
+
+test("Prototype projection preserves a truncated budget for the shared editor's pre-dispatch completeness guard", async t => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-prototype-context-budget-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const f = fixture(), store = createPrototypeAuthoringStore({ root });
+  const context = createPrototypeLifecycleContext({ store, client: { callerId: "operator-orchestration-service", async project(request) {
+    const response = result(request); response.budget.truncated = true; return response;
+  } } });
+  const requestRef = context.prepare(f);
+  const projected = await context.project({ record: f.record, requestRef });
+  assert.equal(projected.budget.truncated, true);
 });
