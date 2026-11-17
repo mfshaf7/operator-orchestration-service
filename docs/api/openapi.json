@@ -33071,7 +33071,8 @@
               "enum": [
                 "work-design",
                 "refinement",
-                "orchestration"
+                "orchestration",
+                "advisor-conversation"
               ]
             }
           },
@@ -33200,7 +33201,8 @@
               "enum": [
                 "work-design",
                 "refinement",
-                "orchestration"
+                "orchestration",
+                "advisor-conversation"
               ]
             }
           },
@@ -37411,6 +37413,259 @@
           }
         }
       }
+    },
+    "/v1/delivery-memberships/projection": {
+      "get": {
+        "operationId": "readDeliveryProjectMembers",
+        "summary": "Read Delivery project membership and accountable recent outcomes",
+        "tags": [
+          "Delivery Catalog"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-surface": "operator-facing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "delivery-catalog",
+        "description": "Read bounded native Delivery project members, grantable project roles and visible existing-account choices. Requires caller-specific authentication and the configured operator binding. No account or membership is changed.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                25,
+                50,
+                100
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "candidate_search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Native project members, roles and visible existing-account choices. No mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryMembershipProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "project_id": 1,
+                  "project_identifier": "workspace-delivery-art",
+                  "project_name": "Example Delivery project",
+                  "members": [
+                    {
+                      "id": 21,
+                      "name": "Example developer",
+                      "kind": "user",
+                      "membership_id": 11,
+                      "role_ids": [
+                        4
+                      ],
+                      "role_names": [
+                        "Member"
+                      ],
+                      "version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "protected": false,
+                      "restriction": null
+                    }
+                  ],
+                  "total": 1,
+                  "page": 1,
+                  "page_size": 25,
+                  "candidates": [],
+                  "candidate_total": 0,
+                  "roles": [
+                    {
+                      "id": 4,
+                      "name": "Member",
+                      "can_assign_work": true,
+                      "manages_members": false
+                    }
+                  ],
+                  "recent_outcomes": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or duplicate request fields."
+          },
+          "401": {
+            "description": "Caller authentication required."
+          },
+          "403": {
+            "description": "Bound operator, caller-specific identity or project permission denied."
+          },
+          "409": {
+            "description": "Stale review, protected/inherited access or conflicting request."
+          },
+          "503": {
+            "description": "Membership authority unavailable; recover the same accepted decision."
+          }
+        }
+      }
+    },
+    "/v1/delivery-memberships/mutations": {
+      "post": {
+        "operationId": "applyDeliveryProjectMembership",
+        "summary": "Apply or recover one explicitly reviewed Delivery membership decision",
+        "tags": [
+          "Delivery Catalog"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "x-oos-surface": "operator-facing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "delivery-catalog",
+        "description": "Apply an explicit existing-user/group membership decision in the server-selected Delivery project. Native services enforce project-role permissions; stale reviews and protected/inherited access fail closed. Exact request replay recovers its original transactional receipt without reapplying it.",
+        "requestBody": {
+          "required": true,
+          "description": "One reviewed add, role-change or removal decision. Project, caller and operator authority are derived server-side. Reuse the complete original command for uncertain-outcome recovery.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryMembershipCommandV1"
+              },
+              "example": {
+                "request_id": "membership-example-1",
+                "operation": "add",
+                "principal_id": 21,
+                "membership_id": null,
+                "role_ids": [
+                  4
+                ],
+                "expected_version": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Native readback and durable receipt; exact replay returns the original outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryMembershipOutcomeV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "status": "applied",
+                  "request_id": "membership-example-1",
+                  "caller_id": "governance-operations-console",
+                  "operator_id": "operator:example",
+                  "operation": "add",
+                  "project_id": 1,
+                  "project_identifier": "workspace-delivery-art",
+                  "principal": {
+                    "id": 21,
+                    "name": "Example developer",
+                    "kind": "user"
+                  },
+                  "before": null,
+                  "after": {
+                    "id": 21,
+                    "name": "Example developer",
+                    "kind": "user",
+                    "membership_id": 11,
+                    "role_ids": [
+                      4
+                    ],
+                    "role_names": [
+                      "Member"
+                    ],
+                    "version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "protected": false,
+                    "restriction": null
+                  },
+                  "applied_at": "2026-11-17T00:00:00Z",
+                  "replayed": false,
+                  "request_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "receipt": {
+                    "ref": "openproject://delivery-memberships/receipts/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or duplicate request fields."
+          },
+          "401": {
+            "description": "Caller authentication required."
+          },
+          "403": {
+            "description": "Bound operator, caller-specific identity or project permission denied."
+          },
+          "409": {
+            "description": "Stale review, protected/inherited access or conflicting request."
+          },
+          "503": {
+            "description": "Membership authority unavailable; recover the same accepted decision."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -38048,26 +38303,90 @@
           "activity": {
             "type": "object",
             "properties": {
-              "state": {"enum": ["current", "unavailable"]},
-              "detail": {"type": "string"},
-              "page": {"type": "integer", "minimum": 1},
-              "limit": {"type": "integer", "minimum": 1, "maximum": 50},
-              "total": {"type": "integer", "minimum": 0},
-              "has_more": {"type": "boolean"},
-              "items": {"type": "array", "maxItems": 50, "items": {
-                "type": "object",
-                "properties": {
-                  "event_id": {"type": "string"}, "title": {"type": "string"},
-                  "occurred_at": {"type": "string", "format": "date-time"},
-                  "actor": {"type": "string"}, "detail": {"type": "string", "maxLength": 2000},
-                  "receipt_ref": {"type": "null"}, "tone": {"const": "info"},
-                  "evidence_refs": {"type": "array", "items": {"type": "string"}}
-                },
-                "required": ["event_id", "title", "occurred_at", "actor", "detail", "receipt_ref", "tone", "evidence_refs"],
-                "additionalProperties": false
-              }}
+              "state": {
+                "enum": [
+                  "current",
+                  "unavailable"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "occurred_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "actor": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "receipt_ref": {
+                      "type": "null"
+                    },
+                    "tone": {
+                      "const": "info"
+                    },
+                    "evidence_refs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "title",
+                    "occurred_at",
+                    "actor",
+                    "detail",
+                    "receipt_ref",
+                    "tone",
+                    "evidence_refs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
             },
-            "required": ["state", "detail", "page", "limit", "total", "has_more", "items"],
+            "required": [
+              "state",
+              "detail",
+              "page",
+              "limit",
+              "total",
+              "has_more",
+              "items"
+            ],
             "additionalProperties": false
           },
           "delivery_id": {
@@ -45469,7 +45788,12 @@
             "type": "array",
             "items": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": true,
+              "properties": {
+                "execution_navigation": {
+                  "$ref": "#/components/schemas/DeliveryExecutionNavigationV1"
+                }
+              }
             }
           },
           "project": {
@@ -51185,7 +51509,7 @@
                     },
                     "text": {
                       "type": "string",
-                      "maxLength": 2000
+                      "maxLength": 12000
                     }
                   }
                 }
@@ -52599,6 +52923,30 @@
         "properties": {
           "schema_version": {
             "const": 1
+          },
+          "conversation": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "text"
+              ],
+              "properties": {
+                "role": {
+                  "enum": [
+                    "operator",
+                    "advisor"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 12000
+                }
+              }
+            }
           },
           "request_id": {
             "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
@@ -79538,7 +79886,8 @@
                   "execution-tree",
                   "work-design-blocker",
                   "refinement-blocker",
-                  "definition-design"
+                  "definition-design",
+                  "execution-architecture"
                 ]
               },
               "subject_ref": {
@@ -92120,6 +92469,13 @@
                 "required_upstream_ref"
               ],
               "properties": {
+                "initiative_family": {
+                  "description": "Recorded initiative family, including retained terminal roots. Null means unassigned; no family is inferred from the title.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "id": {
                   "type": "integer",
                   "minimum": 1
@@ -92180,7 +92536,49 @@
             "type": "array",
             "items": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": true,
+              "properties": {
+                "execution_navigation": {
+                  "$ref": "#/components/schemas/DeliveryExecutionNavigationV1"
+                },
+                "work_sessions": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "description": "Only caller-bound recorded sessions. Null means session observation is unavailable; an empty array means no matching recorded sessions. Session presence is not current work eligibility.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "session_id",
+                      "work_item_ids",
+                      "updated_at",
+                      "state"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "session_id": {
+                        "type": "string"
+                      },
+                      "work_item_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "uniqueItems": true
+                      },
+                      "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "state": {
+                        "const": "recorded"
+                      }
+                    }
+                  }
+                }
+              }
             }
           },
           "deferred_history_refs": {
@@ -92365,7 +92763,8 @@
             "enum": [
               "work-design",
               "refinement",
-              "orchestration"
+              "orchestration",
+              "advisor-conversation"
             ]
           },
           "subject_id": {
@@ -93417,7 +93816,8 @@
                     "execution-tree",
                     "work-design-blocker",
                     "refinement-blocker",
-                    "definition-design"
+                    "definition-design",
+                    "execution-architecture"
                   ]
                 },
                 "subject_ref": {
@@ -98136,6 +98536,17 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "read_only_paths": {
+            "type": "array",
+            "maxItems": 48,
+            "uniqueItems": true,
+            "description": "Selected files supplied for knowledge only. Proposals cannot modify these paths; all existing scope restrictions still apply.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
           "schema_version": {
             "const": 1
           },
@@ -98344,6 +98755,529 @@
           "evidence",
           "replayed"
         ]
+      },
+      "DeliveryExecutionNavigationV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Read-only navigation from current ART facts. Preparation and recorded source sessions do not grant execution or closeout permission. Native status remains unchanged.",
+        "required": [
+          "authority",
+          "workflow_phase",
+          "package_posture",
+          "native_status",
+          "closeout_pending",
+          "active_work_item_ids",
+          "prepared_work_item_ids",
+          "blocked_work_item_ids",
+          "refinement_work_item_ids",
+          "eligibility"
+        ],
+        "properties": {
+          "authority": {
+            "const": "operator-orchestration-service"
+          },
+          "workflow_phase": {
+            "enum": [
+              "work_design",
+              "refinement",
+              "execution",
+              "audit_only"
+            ]
+          },
+          "package_posture": {
+            "enum": [
+              "New",
+              "Ready",
+              "In Progress",
+              "Blocked",
+              "Closeout Pending",
+              "Deferred",
+              "Done",
+              "Retired"
+            ]
+          },
+          "native_status": {
+            "enum": [
+              "new",
+              "ready",
+              "in-progress",
+              "blocked",
+              "done",
+              "parked",
+              "retired"
+            ]
+          },
+          "closeout_pending": {
+            "type": "boolean"
+          },
+          "eligibility": {
+            "const": "check-selected-work-item"
+          },
+          "active_work_item_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "prepared_work_item_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "blocked_work_item_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "refinement_work_item_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "DeliveryMembershipCommandV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id",
+          "operation",
+          "principal_id",
+          "membership_id",
+          "role_ids",
+          "expected_version"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:@-]{1,160}$"
+          },
+          "operation": {
+            "enum": [
+              "add",
+              "change",
+              "remove"
+            ]
+          },
+          "principal_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "membership_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "uniqueItems": true,
+            "maxItems": 20
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "add"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "membership_id": {
+                  "type": "null"
+                },
+                "expected_version": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "membership_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "expected_version": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "remove"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "role_ids": {
+                  "maxItems": 0
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "role_ids": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DeliveryMembershipPrincipalV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "group",
+              "placeholder"
+            ]
+          }
+        }
+      },
+      "DeliveryMembershipMemberV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "membership_id",
+          "role_ids",
+          "role_names",
+          "version",
+          "protected",
+          "restriction"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "group",
+              "placeholder"
+            ]
+          },
+          "membership_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "role_names": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "restriction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeliveryMembershipRoleV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "can_assign_work",
+          "manages_members"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "can_assign_work": {
+            "type": "boolean"
+          },
+          "manages_members": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DeliveryMembershipOutcomeV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "status",
+          "request_id",
+          "caller_id",
+          "operator_id",
+          "operation",
+          "project_id",
+          "project_identifier",
+          "principal",
+          "before",
+          "after",
+          "applied_at",
+          "replayed",
+          "request_digest",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "status": {
+            "const": "applied"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "caller_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "operation": {
+            "enum": [
+              "add",
+              "change",
+              "remove"
+            ]
+          },
+          "project_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "project_identifier": {
+            "const": "workspace-delivery-art"
+          },
+          "principal": {
+            "$ref": "#/components/schemas/DeliveryMembershipPrincipalV1"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryMembershipMemberV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryMembershipMemberV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "request_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^openproject://delivery-memberships/receipts/[a-f0-9]{64}$"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "DeliveryMembershipProjectionV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "project_id",
+          "project_identifier",
+          "project_name",
+          "members",
+          "total",
+          "page",
+          "page_size",
+          "candidates",
+          "candidate_total",
+          "roles",
+          "recent_outcomes"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "project_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "project_identifier": {
+            "const": "workspace-delivery-art"
+          },
+          "project_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryMembershipMemberV1"
+            },
+            "maxItems": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "enum": [
+              25,
+              50,
+              100
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryMembershipPrincipalV1"
+            },
+            "maxItems": 100
+          },
+          "candidate_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryMembershipRoleV1"
+            }
+          },
+          "recent_outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryMembershipOutcomeV1"
+            },
+            "maxItems": 10
+          }
+        }
       }
     }
   }

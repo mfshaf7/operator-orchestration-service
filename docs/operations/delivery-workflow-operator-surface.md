@@ -369,6 +369,22 @@ command records operator acceptance and evidence before composing the guided
 close. A typed downstream impact is only an outcome handoff; it does not claim
 Workspace Intake, release, or Portfolio success.
 
+For a new existing-product closeout, OOS reads the current Workspace Inventory
+and requires one active product with the exact reviewed version and registered
+responsible repository. An unavailable register stops acceptance; changed or
+ambiguous registration requires a new review. Replaying an existing command
+returns its retained outcome without rewriting history against newer records.
+Workspace-entrant candidates must correlate to the exact closeout command ID;
+the Console adapter supplies that correlation and candidate provenance from
+the reviewed command, rather than asking users to invent references.
+
+PI Objective continuation context includes
+`target_item.pi_objective_review_outcome_options`, read from that objective's
+native OpenProject form. Clients must use these configured choices and handle
+an unavailable/empty list explicitly. The native PI review write remains the
+authority and revalidates its allowed outcomes. Deploy this owner projection
+before enabling the dependent Console selector.
+
 ## Supported API Families
 
 ### Preferred Local CLI
@@ -1439,6 +1455,11 @@ applied.
 
 ### Delivery Initiative Reads
 
+The Console overview retains each root's recorded `initiative_family`, including
+terminal roots whose child trees are intentionally deferred. An absent family
+is unassigned; callers must not invent membership or infer it from a title.
+This is display metadata and grants no mutation or execution eligibility.
+
 - `GET /v1/delivery-initiatives`
 - `GET /v1/delivery-initiatives/{delivery_id}/active-session-packet`
 - `GET /v1/delivery-initiatives/{delivery_id}/evidence-packet`
@@ -1912,3 +1933,67 @@ the fresh owner collection snapshot and reread their exact reciprocal source
 proof; Prototype rows retain trusted native activity reads. This prevents
 repeated descendant scans and schema-form reads from turning normal visible
 workspace refresh into a readiness timeout. No cross-request proof cache exists.
+
+
+### Console Execution navigation and completion follow-up
+
+The Console overview uses OOS `execution_navigation` from current ART preparation,
+progress and terminal descendant facts. Refinement preserves native taxonomy and
+status: a prepared story may still have native status `new`. Preparation routes
+work into Execution for inspection; only the selected work-session preflight
+can authorize starting it. No automatic `ready` transition or historical receipt
+is fabricated. An active package may also retain unfinished Refinement scope.
+
+The overview includes a bounded, caller-bound summary of existing local work
+sessions without inspecting Git or a provider for each item. A recorded session
+keeps open work in Execution even when native ART status has not changed. The
+session must still be opened for current progress, readiness and permissions.
+No caller credentials, source paths or provider secrets are part of this summary.
+
+Completing the last story, defect or task retains the open Epic under **Closeout
+Pending**. This means review is needed, including remaining parent work or
+closeout gates; it does not certify readiness or change the Epic to Done.
+Deferred, blocked, retired and completed records retain their distinct meaning.
+The exact ART status remains available in the tree and work-item details.
+
+Choose Work Item lists recorded sessions, active ART work and prepared
+candidates, without choosing or starting one automatically. Exact child blocker
+records and dependency references stay with their work item; they are never
+promoted to a package blocker. Current owner preflight resolves dependencies
+against the actual Landing Unit coverage.
+
+After source completion, use the owner-returned next action: retry partial
+Landing Unit closeout, choose remaining work, or review package closeout. Source
+review links require explicit human review; no Console action approves a PR on
+behalf of the reviewer. Session reconstruction uses the existing reconstruct
+command. Archiving a superseded session requires a substantive explicit reason
+and exact owner source/PR bindings, retained unchanged for replay after a lost
+acknowledgement. Archival preserves history and does not certify completion.
+Non-source work continues through its separate completion and PI-review path.
+
+Confirmed effects and read-recovered changes refresh the connected board;
+opening a dialog is not a mutation and does not trigger a global refresh.
+Delivery runtime/profile binding and application preview remain separate work.
+
+
+### Technical plan preparation and human approval in the Console
+
+The Console exposes the existing Architecture Packet workflow as **Technical
+Plan & Approval** inside the selected package's Manage Package panel. The owner
+API names and schema v6 remain unchanged. System architecture is read from the
+saved Work Design brief; implementation sequencing is derived from the technical
+plan. The Console does not create a second execution engine or diagram ledger.
+
+Validation produces a local draft. Explicit operator approval binds the reviewed
+plan to fresh ART; changed scope/source requires renewed validation and review.
+Recording uses the existing OOS/WGCF custody path and does not start work or grant
+release permission. Missing current architecture (`delivery_art_reference_missing`)
+is distinct from an unavailable owner read and does not establish that a plan is
+unnecessary. A current recorded plan is revised explicitly; history remains read-only.
+
+The `execution-architecture` advisor role uses the ordinary governed Agent Console
+path to explain or draft only an admitted selected local section. The source-owned
+work guide prohibits invented evidence, source revisions, approval and canonical
+effects. Its native activity contracts identify the role without exposing prompts
+or drafts in metadata. Local advice, human approval and durable custody remain
+separate transitions even when presented together in the same workspace.

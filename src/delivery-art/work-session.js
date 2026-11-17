@@ -475,6 +475,7 @@ export function deliveryArtWorkNextAction({
   if (pendingArchitecturePrerequisite) {
     return {
       code: "architecture-prerequisite-required",
+      inputs: { work_item_id: pendingArchitecturePrerequisite.work_item_id },
       command:
         `npm run art -- item continuation ${pendingArchitecturePrerequisite.work_item_id}`,
       reason:
@@ -486,6 +487,7 @@ export function deliveryArtWorkNextAction({
     const gate = pendingArchitectureGate.gate;
     return {
       code: "architecture-human-gate-required",
+      inputs: { work_item_id: gate.authority_work_item_id, gate_id: gate.gate_id },
       command: `npm run art -- item continuation ${gate.authority_work_item_id}`,
       reason: `${gate.evidence_requirement} (${gate.blocked_transition})`,
       authority: gate.authority_owner_repo,

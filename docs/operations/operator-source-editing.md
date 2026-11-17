@@ -158,6 +158,14 @@ permission profile. Trusted owner preparations remain inspect-only.
 OOS validates the real session, current revision, allowed paths and baseline
 through its existing source reader, then admits honestly labelled operator
 buffers through CGG. Truncated or denied context fails with no raw fallback.
+The approved unpublished work-knowledge repair adds a trusted source-editor
+guide and explicit context coverage. Select relevant architecture, interface and
+design files when they affect the request; unselected files, another chat and
+repository skills are not automatically read. A filename is not its contents.
+Missing or shortened completeness metadata prevents model dispatch. The guide
+requires unsupported assumptions to remain explicit and separates suggested
+behavior from tests or previews actually run. Ask/Edit and local acceptance
+retain their existing authority boundaries.
 The governed gateway uses `source_editor_assistance` under the existing
 Prototype or Delivery source profile. Its route inherits that profile's source-generation override until explicitly configured otherwise; model, native
 reasoning effort, fallback and data-permission checks remain enforced.
@@ -172,3 +180,13 @@ This extension is staged source in operator review. Fresh composed Security
 acceptance and Platform activation are required before live model qualification.
 An isolated UI sample or passing model-policy tests do not prove a real account,
 provider invocation, delivered source or application readiness.
+
+The same unpublished batch distinguishes selected supporting files from edit
+targets with optional `read_only_paths`. These must be unique paths already in
+the selected file set; absent means legacy selected-file behavior. The projected
+context labels each file's access. Backend proposal validation rejects edit or
+delete attempts against read-only paths, including the new-file fallback. All
+existing baseline, project-scope, forbidden-path, provider and CGG controls still
+apply. This does not load external project files or repository instructions.
+The Console enforces the same restriction before accepting a reply and again
+when applying the reviewed local proposal.

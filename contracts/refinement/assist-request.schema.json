@@ -7,6 +7,8 @@
   "required": ["schema_version", "request_id", "correlation_id", "delivery_id", "package_ref", "source_ref", "source_revision", "operator", "task", "packet", "target", "operator_prompt"],
   "properties": {
     "schema_version": { "const": 1 },
+    "conversation": { "type": "array", "maxItems": 8, "items": { "type": "object", "additionalProperties": false,
+      "required": ["role", "text"], "properties": { "role": { "enum": ["operator", "advisor"] }, "text": { "type": "string", "maxLength": 12000 } } } },
     "request_id": { "$ref": "#/$defs/id" },
     "correlation_id": { "$ref": "#/$defs/id" },
     "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },

@@ -44,7 +44,7 @@
         "response_format": { "type": "string", "minLength": 1, "maxLength": 5000 },
         "conversation": { "type": "array", "maxItems": 8, "items": {
           "type": "object", "additionalProperties": false, "required": ["role", "text"],
-          "properties": { "role": { "enum": ["operator", "advisor"] }, "text": { "type": "string", "maxLength": 2000 } }
+          "properties": { "role": { "enum": ["operator", "advisor"] }, "text": { "type": "string", "maxLength": 12000 } }
         } },
         "scope": {
           "type": "object", "additionalProperties": false,

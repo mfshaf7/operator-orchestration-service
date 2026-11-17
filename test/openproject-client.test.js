@@ -788,6 +788,13 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
         return jsonResponse({
           _embedded: {
             schema: {
+              customField88: {
+                name: "PI Objective Review Outcome", type: "CustomOption", writable: true,
+                _links: { allowedValues: [
+                  { href: "/api/v3/custom_options/801", title: "Achieved" },
+                  { href: "/api/v3/custom_options/802", title: "Partially achieved" },
+                ] },
+              },
               status: {
                 _links: {
                   allowedValues: doneAvailable
@@ -870,6 +877,12 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
     invalidTarget.completion_narrative_contract_issues.join("\n"),
     /Narrative headings: What This Corrects, Why This Matters Now, Evidence Expectation/,
   );
+  // Native outcomes are operator configuration, not a Console-owned enum.
+  workPackages.find(entry => entry.id === 542)._links.type.title = "PI Objective";
+  const piResult = await client.getDeliveryWorkItemContinuationContext({ recordId: 542 });
+  assert.deepEqual(piResult.continuationContext.target_item.pi_objective_review_outcome_options,
+    ["Achieved", "Partially achieved"]);
+  assert.equal(Object.hasOwn(piResult.continuationContext.target_item, "formPayload"), false);
 });
 
 test("delivery planning workflow mirror exposes the canonical gate metadata", () => {
@@ -3323,6 +3336,8 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
               type: { title: "Task" },
             },
             customField14: "PI-2026-02",
+            customField41: "Waiting for shared approval",
+            customField42: "Cannot begin source work",
             id: 40,
             subject: "Add delivery execution summary projection",
           },
@@ -3440,7 +3455,7 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
           text: async () =>
             JSON.stringify({
               _embedded: {
-                schema: {},
+                schema: { customField41: {fieldFormat:"string",name:"Blocker Statement"}, customField42: {fieldFormat:"string",name:"Blocker Impact"} },
               },
             }),
         };
@@ -3476,7 +3491,7 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
           text: async () =>
             JSON.stringify({
               _embedded: {
-                schema: {},
+                schema: { customField41: {fieldFormat:"string",name:"Blocker Statement"}, customField42: {fieldFormat:"string",name:"Blocker Impact"} },
               },
             }),
         };
@@ -3665,6 +3680,14 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
   assert.equal(result.deliveryRecordId, 38);
   assert.equal(result.deliveryRecordRef, "openproject://work_packages/38");
   assert.equal(result.executionSummary.summary.total_items, 5);
+  assert.equal(result.executionSummary.execution_navigation.authority, "operator-orchestration-service");
+  assert.equal(result.executionSummary.execution_navigation.workflow_phase, "execution");
+  assert.equal(result.executionSummary.execution_navigation.eligibility, "check-selected-work-item");
+  assert.equal(result.executionSummary.execution_tree.blocker, null);
+  const childBlocker=result.executionSummary.execution_tree.children[0].children[0].blocker;
+  assert.equal(childBlocker.statement,"Waiting for shared approval");
+  assert.equal(childBlocker.impact,"Cannot begin source work");
+  assert.equal(childBlocker.review_date,null,"Unrecorded blocker details must remain absent");
   assert.equal(result.executionSummary.summary.blocked_count, 1);
   assert.equal(result.executionSummary.summary.by_status.done, 1);
   assert.equal(result.executionSummary.summary.by_status.retired, 1);

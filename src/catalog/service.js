@@ -130,6 +130,7 @@ function isOwnerRepo(item) {
 }
 
 function assertMutationAllowed(request, projection) {
+  if (projection.projection_status !== "ready") throw new CatalogServiceError("catalog_read_only", "Current Catalog values must be available before applying a new change.", { correlationId: request.correlation_id, statusCode: 409 });
   if (request.source_revision !== projection.source_revision) {
     throw new CatalogServiceError(
       "source_revision_stale",
@@ -328,9 +329,14 @@ export function createCatalogService({
         );
       }
       const before = await project({ callerId, correlationId: accepted.correlation_id });
-      const item = assertMutationAllowed(accepted, before);
+      // The canonical backend checks an exact request receipt before its stale
+      // revision guard. A stale request can therefore recover a prior result,
+      // but can never become a new mutation. Do not reauthorize historical
+      // readiness evidence or manufacture a replacement acceptance.
+      const replayOnly = accepted.source_revision !== before.source_revision;
+      if (!replayOnly) assertMutationAllowed(accepted, before);
       let verifiedRequest = accepted;
-      if (verifiedRequest.draft.repository_binding) {
+      if (!replayOnly && verifiedRequest.draft.repository_binding) {
         try {
           const repositoryBinding = await readinessClient.verifyCurrent(
             accepted.draft.repository_binding,
@@ -357,8 +363,18 @@ export function createCatalogService({
       } catch (error) {
         throw sourceFailure(error, "backend_mutation_failed", accepted.correlation_id);
       }
-      const after = await project({ callerId, correlationId: accepted.correlation_id });
-      assertMutationReadback({ projection: after, request: verifiedRequest, result });
+      if (replayOnly) {
+        if (!result.replayed || result.request_id !== accepted.request_id ||
+            result.correlation_id !== accepted.correlation_id || result.applied_by !== accepted.operator.id ||
+            result.value.catalog_item_id !== accepted.catalog_item_id) {
+          throw new CatalogServiceError("source_revision_stale", "The reviewed Catalog values changed. Review current values before a new decision.", { correlationId: accepted.correlation_id, statusCode: 409 });
+        }
+        // The immutable canonical receipt attests the original readback. The
+        // current projection may have legitimately changed since then.
+      } else {
+        const after = await project({ callerId, correlationId: accepted.correlation_id });
+        assertMutationReadback({ projection: after, request: verifiedRequest, result });
+      }
       audit?.emit({
         event_type: result.replayed
           ? "delivery.catalog.mutation.replayed"

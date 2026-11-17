@@ -31,6 +31,20 @@ Never generate a second key merely because the API or worker was interrupted.
 
 ## Canonical Metadata
 
+The approved unpublished context-continuity repair extends field advice with
+the current canonical selected-item and ancestor narratives. These may carry
+the applied Work Design scope and architectural notes. OOS derives them from the
+same validated packet; the browser cannot provide this owner context or substitute
+another project's tree. Unrelated branches are excluded. A reference to a
+separate finalized brief, diagram or proof does not load its contents.
+
+The additional `work_context` travels through the existing CGG projection wrapper,
+not in the operator prompt. The original assist-request digest stays separate;
+the model-context digest and projection receipt bind the complete enriched input.
+Changed narratives change projection identity. Old CGG callers without this
+optional context remain compatible; the updated OOS consumer requires the paired
+CGG source. Native field output, profile/effort and final acceptance are unchanged.
+
 The packet reads each current target's OpenProject form and canonical values.
 Done and retired descendants remain visible as history in the complete tree,
 but are excluded from mutable metadata targets and form requests. An open child

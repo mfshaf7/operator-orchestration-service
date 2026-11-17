@@ -130,7 +130,8 @@ function readiness(ready, status) {
   };
 }
 
-function harness({ beforeClose = null, closeFailure = false, ready = true, pendingEvidenceReasons = null, readinessCounts = {}, sourceCloseoutPending = false, terminalEventFailure = false, workspaceIntakeService = null } = {}) {
+function harness({ beforeClose = null, closeFailure = false, ready = true, pendingEvidenceReasons = null, readinessCounts = {}, sourceCloseoutPending = false, terminalEventFailure = false, workspaceIntakeService = null,
+  registryReader = async () => ({ records: [{ id: "product:governance-console", kind: "product", posture: "active", version: 4, owner_refs: ["repo://governance-operations-console"] }] }) } = {}) {
   const calls = [];
   const activities = [];
   let sourceIndex = 0;
@@ -169,6 +170,7 @@ function harness({ beforeClose = null, closeFailure = false, ready = true, pendi
     clock: () => new Date(timestamp),
     deliveryService,
     workspaceIntakeService,
+    registryReader,
     openProjectClient: {
       async addDeliveryCloseoutEvent({ raw }) {
         if (terminalEventFailure && activities.length === 1) {
@@ -456,7 +458,7 @@ test("Delivery closeout routes typed impact without claiming downstream mutation
             active_product: {
               product_id: "governance-console",
               registry_ref: "workspace-governance://products/governance-console",
-              registry_version: "products-v4",
+              registry_version: "4",
             },
             change_summary: "Delivery updated the active product.",
             product_owner_ref: "repo://governance-operations-console",
@@ -495,6 +497,32 @@ test("Delivery closeout retains the exact Workspace Intake candidate on apply an
   assert.equal(attestations.length, 2);
   assert.ok(attestations.every(({ callerId }) => callerId === "operator-orchestration-service"));
   assert.deepEqual(attestations[0].input, attestations[1].input);
+});
+
+test("existing-product closeout rejects unavailable, changed, inactive and conflicting registration before mutation", async () => {
+  const current = { id: "product:governance-console", kind: "product", posture: "active", version: 4, owner_refs: ["repo://governance-operations-console"] };
+  const input = command(); input.operation.payload.impact = {
+    kind: "existing_product_change", active_product: { product_id: "governance-console", registry_ref: "workspace-governance://products/governance-console", registry_version: "4" },
+    change_summary: "The reviewed product change.", product_owner_ref: "repo://governance-operations-console",
+  };
+  for (const registryReader of [null, async () => { throw Error("owner unavailable"); }, async () => ({records:[]}),
+    async () => ({records:[{...current,version:5}]}), async () => ({records:[{...current,posture:"retired"}]}),
+    async () => ({records:[{...current,owner_refs:["other-repository"]}]}), async () => ({records:[current,current]})]) {
+    const target=harness({registryReader});
+    await assert.rejects(target.service.applyCommand({callerId:"governance-operations-console",command:input,deliveryId:"delivery-886"}),
+      error=>["delivery_closeout_product_registry_unavailable","delivery_closeout_product_changed"].includes(error.code));
+    assert.equal(target.activities.length,0);
+    assert.equal(target.calls.filter(call=>call.operation==="close").length,0);
+  }
+});
+
+test("a historical product closeout replays its own receipt after the registry advances", async () => {
+  let version=4,reads=0;
+  const target=harness({registryReader:async()=>{reads++;return {records:[{id:"product:governance-console",kind:"product",posture:"active",version,owner_refs:["repo://governance-operations-console"]}]};}});
+  const input=command();input.operation.payload.impact={kind:"existing_product_change",active_product:{product_id:"governance-console",registry_ref:"workspace-governance://products/governance-console",registry_version:"4"},change_summary:"The reviewed product change.",product_owner_ref:"repo://governance-operations-console"};
+  const first=await target.service.applyCommand({callerId:"governance-operations-console",command:input,deliveryId:"delivery-886"});version=5;
+  const replay=await target.service.applyCommand({callerId:"governance-operations-console",command:input,deliveryId:"delivery-886"});
+  assert.equal(replay.replayed,true);assert.deepEqual(replay.receipt,first.receipt);assert.equal(reads,1);
 });
 
 test("Delivery closeout exposes candidate retention failure as retryable", async () => {

@@ -3533,6 +3533,7 @@ test("v3 transition gate overrides only the lifecycle boundary it owns", () => {
   });
 
   assert.equal(action.code, "architecture-human-gate-required");
+  assert.equal(action.inputs.work_item_id, "work-item-1026");
   assert.equal(action.authority, "security-architecture");
   assert.match(action.command, /item continuation work-item-1026/);
 });

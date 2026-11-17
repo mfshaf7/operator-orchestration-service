@@ -113,7 +113,8 @@ export function createPrototypeLifecycleContext({ client, store }) {
       const resultRef = store.writeArtifact(record.request.request_id, result);
       return { result_ref: resultRef, packet_ref: result.packet_ref, artifact_digest: result.artifact_digest,
         redaction_receipt_ref: result.redaction_receipt_ref, projection_receipt_ref: result.projection_receipt_ref,
-        captured_at: request.requested_at, source_revision: request.subject.source_revision, content: result.content };
+        captured_at: request.requested_at, source_revision: request.subject.source_revision, content: result.content,
+        budget: structuredClone(result.budget) };
     },
   };
 }

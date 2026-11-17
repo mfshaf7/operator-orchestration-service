@@ -98,7 +98,8 @@
               "execution-tree",
               "work-design-blocker",
               "refinement-blocker",
-              "definition-design"
+              "definition-design",
+              "execution-architecture"
             ]
           },
           "subject_ref": {

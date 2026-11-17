@@ -1,4 +1,5 @@
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
+import { advisorWorkInstruction } from "../advisor-work-instructions.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import {
@@ -140,6 +141,27 @@ function assertAssistTarget(request, packet) {
   return field;
 }
 
+// Read only the canonical packet already checked for this request. A reference
+// to the finalized brief does not load its separate diagrams or proof artifacts.
+function refinementWorkContext(packet, request) {
+  const selected = new Set(request.target.selected_node_ids);
+  const nodes = [];
+  function visit(node) {
+    const descendants = (node.children ?? []).map(visit).some(Boolean);
+    const relevant = selected.has(node.id) || descendants;
+    if (relevant) nodes.push({ id: node.id, kind: node.kind, title: node.title, description: node.description });
+    return relevant;
+  }
+  visit(packet.target_tree);
+  if (request.target.selected_node_ids.some(id => !nodes.some(node => node.id === id))) {
+    throw new RefinementServiceError("packet_stale", "Selected work items are absent from the current canonical tree.",
+      { correlationId: request.correlation_id, statusCode: 409 });
+  }
+  return { package_ref: packet.source.package_ref, source_ref: packet.source.source_ref,
+    source_revision: packet.source.source_revision, source_work_design_receipt_id: packet.source.source_work_design_receipt_id,
+    nodes, coverage: "Current canonical selected work items and ancestors, including applied scope/architectural narrative when recorded. Separate finalized diagrams, proof contents and unselected branches are not loaded by their references." };
+}
+
 function assertProjection(request, projection, projectedRequest, contextCallerId) {
   const binding = projection?.binding;
   if (
@@ -150,6 +172,7 @@ function assertProjection(request, projection, projectedRequest, contextCallerId
     projection?.request_digest !== canonicalDigest({
       binding,
       refinement_context: request,
+      ...(projectedRequest.work_context ? { work_context: projectedRequest.work_context } : {}),
     }) ||
     projection?.admission_decision?.redaction_safe !== true ||
     !["not_requested", "denied"].includes(projection?.admission_decision?.raw_projection) ||
@@ -176,7 +199,8 @@ function assertProjection(request, projection, projectedRequest, contextCallerId
     JSON.stringify(binding?.target?.selected_node_ids) !==
       JSON.stringify(request.target.selected_node_ids) ||
     binding?.requested_at !== projectedRequest.requested_at ||
-    binding?.context_digest !== projectedRequest.assist_request_digest ||
+    binding?.context_digest !== canonicalDigest(projectedRequest.work_context
+      ? { ...request, work_context: projectedRequest.work_context } : request) ||
     binding?.budget_tokens !== projectedRequest.budget_tokens ||
     typeof projection?.packet_ref !== "string" ||
     typeof projection?.redaction_receipt_ref !== "string" ||
@@ -404,19 +428,21 @@ export function createRefinementService({
       });
       assertPacketBinding(request, packet);
       const field = assertAssistTarget(request, packet);
+      const workContext = refinementWorkContext(packet, request);
       const requestedAt = clock().toISOString();
       const projectionRequest = {
         schema_version: 1,
-        idempotency_key: stableId("refinement-projection", request),
+        idempotency_key: stableId("refinement-projection", { request, work_context: workContext }),
         workflow_session_id: stableId("refinement-session", {
           delivery_id: request.delivery_id,
           operator_id: request.operator.id,
           package_ref: request.package_ref,
         }),
-        execution_id: stableId("refinement-execution", request),
+        execution_id: stableId("refinement-execution", { request, work_context: workContext }),
         requested_at: requestedAt,
         assist_request: request,
         assist_request_digest: canonicalDigest(request),
+        work_context: workContext,
         budget_tokens: 8000,
       };
       let projection;
@@ -460,7 +486,7 @@ export function createRefinementService({
           provider_output_schema_ref: OUTPUT_SCHEMA_REF,
           input: {
             task_instruction:
-              "Answer the operator about the selected Refinement metadata field. Only when explicitly asked to draft, fill or revise it, suggest one bounded value with required_operator_action=review. For questions, evaluation or ambiguous requests, return value=null and required_operator_action=none; explain or clarify in summary and rationale. Do not approve or apply anything.",
+              advisorWorkInstruction("refinement-metadata") + "\nAnswer the operator about the selected Refinement metadata field. Only when explicitly asked to draft, fill or revise it, suggest one bounded value with required_operator_action=review. For questions, evaluation or ambiguous requests, return value=null and required_operator_action=none; explain or clarify in summary and rationale. Do not approve or apply anything.",
             operator_prompt: request.operator_prompt,
             model_safe_packet: {
               packet_ref: projection.packet_ref,

@@ -16,6 +16,35 @@ a model profile or an owner mutation path.
 
 ## Authority And Sequence
 
+### Native local draft advice — approved preview batch
+
+Form and tree advisors reuse the existing `operator_draft` candidate and governed
+profile. The provider returns its native `draft_reply` object, with a declared
+intent and typed text, board or tree edits. OOS validates this structure and the
+admitted fields before recording success, then serializes it for the existing
+Console client envelope. It never repairs prose by guessing edits or falls back
+to an unstructured draft reply. Ordinary chat remains a readable answer.
+
+The Console still validates its exact captured source/view and the complete local
+transaction before editing. Questions and readonly requests cannot change drafts;
+switching views or changing captured content prevents a stale proposal applying.
+Final workflow decisions and canonical actions remain separate explicit controls.
+This source batch requires paired Platform schema and composed operating proof
+before it is claimed live.
+
+This shared draft path serves Proposal triage and disposition, Prototype
+Candidate and Baseline promotion drafting, Execution selected-node text,
+Work Design and Refinement blocker justifications, and Orchestration Definition
+drafting. They use the same native reply validation; none needs a separate model
+endpoint or provider-format implementation. A malformed reply is retained as a
+failed invocation with no usable draft result. Replaying that request returns
+the same outcome without a new model call; a subsequent intentional request can
+proceed normally.
+
+Work Design Context and Build Tree use their dedicated Work Design assist route
+with the same native reply shape. Refinement metadata and source-editor assistance
+keep their existing native field-value and file-edit contracts respectively.
+
 OOS owns session identity, one-active-invocation ordering, deterministic
 replay, terminal state, and invocation receipts. Every invocation follows one
 fixed sequence:
@@ -95,6 +124,38 @@ contracts are generated into `docs/api/openapi.json`. Source completion for
 #1245 proves merge-ready protocol behavior; live positive and negative cases
 belong to Platform #1246 and activation acceptance belongs to Security #1248.
 
+## Advisor work knowledge and context
+
+The unpublished advisor repair extends the existing paths with source-owned
+work guides in `src/advisor-work-instructions.js`. Proposal triage/disposition,
+Prototype Candidate/Baseline, Execution narrative, blocker justification and
+Definition Design each receive their own guide through the Agent Console task
+instruction. Work Design Context/Build Tree, Refinement metadata and the source
+editor receive their guides through their existing native routes. Overview
+assistance remains scoped to the supplied Console observations.
+
+The guide states the job, applicable workflow boundaries and evidence limits.
+Promotion requirements are read from the canonical Prototype maturity contract;
+Orchestration examples come from its registered source definitions. Source
+examples do not establish runtime admission or promise a universal activity
+catalog. These instructions add no model, permission, tool, automatic retry or
+final-decision authority.
+
+Console context includes current field values, relevant checks and explicitly
+missing evidence. References, tree listings and document names are not loaded
+contents. Repository instructions, Codex conversations and skills are not
+automatically inherited. If missing evidence could change advice, the advisor
+must identify it and ask a focused question while helping with the supported
+part. Small wording changes do not require unrelated contracts or full sources.
+
+Selected draft assistance rejects context-budget truncation before model
+dispatch. Paired CGG guards preserve complete Work Design drafts and Refinement
+fields; the source editor requires explicit complete-budget metadata for its
+selected buffers. A denial asks the operator to narrow the scope and preserves
+the draft. Ordinary overview chat retains its existing bounded projection.
+Source tests and browser request checks establish wiring and conformance;
+qualified model behavior requires reviewed composed activation and real cases.
+
 ## AI activity history
 
 The Console's Agent Runtime dock provides Recent AI activity and a bounded
@@ -143,3 +204,45 @@ dependent Console, finish the source-scoped Security delta, bind final commits
 and use the existing Platform activation procedure before claiming live history
 qualification. Normal operation is through the Console; this GET is its owned
 API and engineering recovery surface.
+
+## Selected project knowledge — unpublished continuity extension
+
+The Console can explicitly select one Proposal, Prototype or Delivery item for
+read-only discussion. Its existing authenticated owner reader resolves that
+exact identifier on send; the browser cannot submit the item body or a URL to
+fetch. OOS receives the resulting current source, revision, observations and
+coverage inside the digest-bound candidate, not a new model retrieval tool.
+Linked documents, repository files and other projects remain unavailable unless
+their own admitted workflow supplies them. Current recorded facts take precedence
+over old working conversation; all content remains untrusted input, not approval.
+
+Truncated selected project detail or conversation fails before model dispatch.
+Normal bounded overview compatibility stays available. The same model/profile,
+provider data permission and manual final-decision boundaries apply. The Console
+discloses the actual selected source revision/coverage with the reply.
+
+Working chat now uses the existing private saved-input store as described in
+[Saved operator work](saved-operator-work.md). It is distinct from model receipts
+and never creates canonical project state. Exact composed source review and
+activation are still required; isolated conformance checks are not live proof.
+
+
+### Technical Plan Advisor
+
+`execution-architecture` extends the existing Agent Console draft-advisor route
+for the Console's package-scoped Technical Plan & Approval workspace. It uses
+`agent-console-assistant-v1`, including Model Operations selection, CGG context
+admission, the native structured reply and activity/receipt evidence. This is a
+new named role of the existing capability, not a new model/provider connection.
+Only manual requests invoke it. The work guide is source-owned in
+`src/advisor-work-instructions.js` and the activity kind is registered in the
+existing invocation and activity contracts.
+
+The supplied selected section contract and actual project observations guide
+local JSON drafting. The advisor may explain or draft that section when asked;
+it cannot grant architecture approval, record custody, select covered work,
+change source pins, or start/complete execution. Missing Work Design, source
+contents or cross-section evidence remains unknown. The Console explicitly
+identifies which saved diagram and supporting sections are loaded. Final plan
+validation, human approval and recording keep the existing architecture API and
+owner authority. Questions return answer/clarify with no edits.

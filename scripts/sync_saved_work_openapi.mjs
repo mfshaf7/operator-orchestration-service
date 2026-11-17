@@ -15,7 +15,7 @@ const schemas = {
   SavedWorkRecovery: closed({ recovery_id: { type: "string", pattern: "^[0-9a-f]{64}$" }, storage_key: text, content_digest: digest, preserved_at: timestamp }),
   SavedWorkRecord: closed({ revision: { type: "integer", minimum: 1 }, saved_at: timestamp, content_digest: digest, payload_json: raw,
     acknowledgement_id: { type: "string", pattern: "^saved-work:" }, origin: { enum: ["operator-edit", "browser-import"] } }),
-  SavedWorkSnapshot: closed({ schema_version: { const: 1 }, kind: { enum: ["work-design", "refinement", "orchestration"] }, subject_id: text,
+  SavedWorkSnapshot: closed({ schema_version: { const: 1 }, kind: { enum: ["work-design", "refinement", "orchestration", "advisor-conversation"] }, subject_id: text,
     record: nullable(ref("SavedWorkRecord")), recoveries: { type: "array", maxItems: 100, items: ref("SavedWorkRecovery") }, recovery: nullable(ref("SavedWorkOriginal")) }),
 };
 let source = original;

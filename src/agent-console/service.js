@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { nativeAdvisorInstruction, nativeAdvisorScopeFromCandidate, normalizeNativeAdvisorOutput } from "../advisor-draft-reply.js";
+import { advisorWorkInstruction } from "../advisor-work-instructions.js";
 import { activityMetadata, createAdviceTracker, projectActivityPage } from "./activity.js";
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { createHash } from "node:crypto";
@@ -161,6 +163,12 @@ function assertContextProjection(record, request, projected, projection, context
       502,
     );
   }
+  let hasConversation = false;
+  try { const content = JSON.parse(request.candidate.content); hasConversation = Boolean(content?.conversation?.length || content?.selected_project); } catch { /* Ordinary overview text remains compatible. */ }
+  if ((nativeAdvisorScopeFromCandidate(request.candidate) || hasConversation) && projection.budget.truncated !== false) {
+    throw agentConsoleError("advisor_context_incomplete",
+      "The selected context was shortened by its budget. Choose fewer complete messages or a smaller draft scope; no model was invoked and no draft was changed.", 422);
+  }
   return projection;
 }
 
@@ -182,7 +190,8 @@ function gatewayRequest(record, request, projection) {
     },
     provider_output_schema_ref: MODEL.provider_output_schema_ref,
     input: {
-      task_instruction: "Answer the operator request using only the admitted model-safe packet. Do not authorize or execute workspace mutations.",
+      task_instruction: "Answer the operator request using only the admitted model-safe packet. Do not authorize or execute workspace mutations. " +
+        advisorWorkInstruction(nativeAdvisorScopeFromCandidate(request.candidate)?.role ?? null) + "\n" + nativeAdvisorInstruction,
       operator_prompt: request.prompt,
       interaction_mode: record.request.interaction_mode,
       model_safe_packet: {
@@ -227,11 +236,13 @@ function assertGatewayResult(request, response, projection) {
       502,
     );
   }
+  const draftScope = nativeAdvisorScopeFromCandidate(request.candidate);
+  const normalized = normalizeNativeAdvisorOutput(response.output, { required: Boolean(draftScope), scope: draftScope });
   assertAgentConsoleContract(
     "model-response.schema.json",
-    structuredClone(response.output),
+    normalized,
   );
-  return response;
+  return { ...response, output: normalized };
 }
 
 function failureFor(error) {

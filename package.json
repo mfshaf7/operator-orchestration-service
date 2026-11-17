@@ -8,6 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "sync:membership-openapi": "node scripts/sync_membership_openapi.mjs",
+    "validate:membership-openapi": "node scripts/sync_membership_openapi.mjs --check",
     "sync:saved-work-openapi": "node scripts/sync_saved_work_openapi.mjs",
     "validate:saved-work-openapi": "node scripts/sync_saved_work_openapi.mjs --check",
     "start": "node src/server.js",

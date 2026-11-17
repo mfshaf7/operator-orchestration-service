@@ -45,6 +45,7 @@ import { createRefinementSourceAdapter } from "./refinement/source-adapter.js";
 import { createRefinementTemporalAdapter } from "./refinement/temporal-adapter.js";
 import { createCatalogBackendClient } from "./catalog/http-client.js";
 import { createCatalogService } from "./catalog/service.js";
+import { createMembershipService } from "./catalog/membership-service.js";
 import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
 import { createRepositoryCustodyRuntime } from "./repository-custody/runtime.js";
 import { createWorkspaceIntakeRuntime } from "./workspace-intake/runtime.js";
@@ -195,6 +196,7 @@ export function createRuntime({
   const deliveryService = createDeliveryService({
     audit,
     openProjectClient,
+    workSessionStore: deliveryArtWorkSessionStore,
     wgcfArtReadinessClient,
     wgcfArtReadinessMode: config.wgcf.artReadinessMode,
     runtimeContext: {
@@ -272,6 +274,9 @@ export function createRuntime({
       ? (input) => workspaceInventoryService.repositoryReadinessAuthority(input)
       : null,
   });
+  const membershipService = createMembershipService({ audit, backendClient: createCatalogBackendClient({
+    baseUrl: config.catalog.backendBaseUrl, hostHeader: config.catalog.hostHeader, token: config.catalog.backendToken,
+  }) });
   const deliveryChangeService = createDeliveryChangeService({
     audit,
     catalogService,
@@ -372,6 +377,7 @@ export function createRuntime({
     deliveryService,
     openProjectClient,
     workspaceIntakeService,
+    registryReader: input => workspaceInventoryService.registry(input),
   });
   const orchestrationService = createOrchestrationService({ config });
   const workflowActivityService = createWorkflowActivityService({
@@ -393,6 +399,7 @@ export function createRuntime({
     fetchImpl,
   });
   const app = createApp({
+    membershipService,
     savedWorkService: env.OOS_ART_WORK_STATE_ROOT ? createSavedWorkStore({ root: path.join(deliveryArtWorkStateRoot(env), "operator-saved-work") }) : null,
     agentConsoleService,
     audit,

@@ -2,6 +2,13 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "read_only_paths": {
+      "type": "array",
+      "maxItems": 48,
+      "uniqueItems": true,
+      "description": "Selected files supplied for knowledge only. Proposals cannot modify these paths; all existing scope restrictions still apply.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+    },
     "schema_version": {
       "const": 1
     },

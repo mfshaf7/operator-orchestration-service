@@ -2,6 +2,11 @@
 
 ## Purpose
 
+The paired maintenance preview adds [Project membership management](delivery-project-members.md).
+This is a separate native access workflow reached from Catalog, not arbitrary
+editing of the assignee projection. It remains unpublished until coordinated
+source acceptance and activation.
+
 Use the Delivery Catalog runtime to read canonical Delivery vocabulary and to
 apply one explicitly accepted add, edit, or retire decision. The Governance
 Operations Console calls OOS only. It does not call OpenProject or WGCF from
@@ -72,3 +77,27 @@ dependency; never supply a fabricated reference or call WGCF from the browser.
 Rollback disables the OOS route composition and Console adapter while
 preserving canonical values and backend receipts. Repository lifecycle state is
 never rolled back through Catalog.
+
+## Exact reviewed revision and recovery
+
+The Console sends the revision the operator reviewed, never a newly substituted
+server revision. It prepares repository readiness once before dispatch and pins
+that reference with the complete accepted request. Retry the same acceptance
+and body to recover its receipt; a new revision is a new reviewed decision.
+
+The canonical Catalog control adapter checks an exact request digest and
+idempotency receipt before rejecting a stale revision. OOS forwards a stale
+request only through that existing receipt path and accepts only a replayed
+canonical result for the same operator, request, correlation and Catalog item.
+The backend must reject an unseen stale request without applying it. Historical
+receipt recovery does not reauthorize current repository readiness or grant a
+new write. Its original readback may predate later legitimate edits; consumers
+must separately read current values before another decision.
+
+An applied receipt is an applied outcome even if the consumer's next list read
+fails. Keep that receipt visible, mark the list unavailable, and retry the read.
+Never silently allocate a replacement acceptance for an uncertain mutation.
+Catalog has no separate in-use retirement request workflow: values with active
+references must be reassigned before retirement. Repository linking is a
+sequenced Catalog/Delivery command with explicit partial-failure reconciliation,
+not a multi-service transaction or a manual Sync workflow.

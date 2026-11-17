@@ -55,6 +55,17 @@ export function listOrchestrationDefinitions(config) {
   return [projectDefinition(sourceDefinition, config)];
 }
 
+/** Source capabilities only. Runtime admission is a separate current observation. */
+export function orchestrationAdvisorCapabilities() {
+  return [{ definition_id: sourceDefinition.definition_id, definition_version: sourceDefinition.definition_version,
+    purpose: sourceDefinition.purpose, source_domain: sourceDefinition.source_domain,
+    source_record_type: sourceDefinition.source_record_type,
+    execution_graph: sourceDefinition.execution_graph.map(node => ({ node_id: node.node_id, node_type: node.node_type,
+      owner: node.owner, adapter: node.adapter, activity_name: node.activity_name, task_queue: node.task_queue })),
+    completion_condition: sourceDefinition.completion_condition, expected_receipt: sourceDefinition.expected_receipt,
+    runtime_admission: "Not established by this source-contract projection" }];
+}
+
 export function getOrchestrationDefinition(
   definitionId,
   definitionVersion,

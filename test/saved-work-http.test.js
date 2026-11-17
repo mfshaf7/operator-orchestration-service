@@ -7,6 +7,7 @@ import test from "node:test";
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createSavedWorkStore } from "../src/saved-work/store.js";
+import { createHash } from "node:crypto";
 
 const caller = "governance-operations-console", operator = "operator:test";
 function setup(t, shared = false) {
@@ -16,9 +17,9 @@ function setup(t, shared = false) {
     OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({ [caller]: operator }) });
   return createApp({ config, savedWorkService: createSavedWorkStore({ root }) });
 }
-async function invoke(app, { method = "GET", body, secret = "test-secret", operatorId = operator, query = "", accept = "application/json" } = {}) {
+async function invoke(app, { method = "GET", body, secret = "test-secret", operatorId = operator, query = "", accept = "application/json", resource = "refinement/delivery-42" } = {}) {
   const request = Readable.from(body ? [Buffer.from(typeof body === "string" ? body : JSON.stringify(body))] : []);
-  Object.assign(request, { method, url: `/v1/operator-saved-work/refinement/delivery-42${query}`, headers: {
+  Object.assign(request, { method, url: `/v1/operator-saved-work/${resource}${query}`, headers: {
     "x-oos-caller-id": caller, "x-oos-caller-secret": secret, "x-oos-operator-id": operatorId, accept,
   } });
   let status, headers, output = "";
@@ -26,6 +27,19 @@ async function invoke(app, { method = "GET", body, secret = "test-secret", opera
   return { status, headers, body: JSON.parse(output) };
 }
 const command = () => ({ command_id: "save-1", expected_revision: 0, origin: "operator-edit", payload_json: JSON.stringify({ schemaVersion: 1, packageId: "delivery-42", metadata: { draftValues: {} } }) });
+
+test("conversation API accepts only the caller's bound private working input", async t => {
+  const app = setup(t), binding = {role:"proposal-triage",ref:"proposal:42",sourceRef:"source:42"};
+  const id = "chat:"+createHash("sha256").update(JSON.stringify([binding.role,binding.ref,binding.sourceRef])).digest("hex");
+  const resource = `advisor-conversation/${id}`;
+  const payload = {schemaVersion:1,conversationId:id,binding,sourceRevision:"r1",turns:[],pending:null,draftPrompt:"Unsent working idea"};
+  const body = {...command(),payload_json:JSON.stringify(payload)};
+  assert.equal((await invoke(app,{resource,method:"POST",body,operatorId:"operator:other"})).status,403);
+  assert.equal((await invoke(app,{resource,method:"POST",body,secret:"wrong"})).status,401);
+  assert.equal((await invoke(app,{resource,method:"POST",body})).status,200);
+  assert.deepEqual(JSON.parse((await invoke(app,{resource})).body.record.payload_json),payload);
+  assert.equal((await invoke(app,{resource,operatorId:"operator:other"})).status,403);
+});
 
 test("actual saved-work API saves, restarts reads and preserves raw browser records", async t => {
   const app = setup(t); assert.equal((await invoke(app)).body.record, null);

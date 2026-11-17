@@ -17,6 +17,9 @@ function fixture({mode="ask",scope=null}={}){
 }
 for(const scope of [null,{source_root:"prototypes/example",design_profile:"docs/prototypes/example/design-profile.md"}])test(`assistant retains reply, source profile and explicit original replay: ${scope?'Prototype':'Delivery'}`,async()=>{
  const h=fixture({scope}),before=structuredClone(h.state),result=await h.run();assert.equal(result.message,"Explanation");assert.deepEqual(h.state,before);assert.equal(h.calls[0].profile_id,h.state.profileId);assert.equal(h.calls[0].task.kind,"source_editor_assistance");assert.equal(h.calls[0].caller_identity.caller_workflow,h.state.modelCaller.split("/")[1]);assert.equal(h.calls[0].input.model_safe_packet.content,"admitted and redacted");assert.equal((await h.run()).replayed,true);assert.equal(h.calls.length,1);
+ assert.match(h.calls[0].input.task_instruction,/role=source-editor\./);
+ const selected=editorContext(h.request);assert.deepEqual(selected.files.map(file=>file.path),h.request.files.map(file=>file.path));
+ assert.equal(selected.context_coverage.references_are_loaded_contents,false);
  h.request.prompt="Different prompt";await assert.rejects(h.run(),{code:"assistant_replay_conflict"});
 });
 test("questions cannot carry edits; proposals cannot escape selected files",async()=>{
@@ -39,6 +42,10 @@ test("Prototype context cannot include a sibling project",async()=>{
 test("truncated CGG admission fails without raw-context fallback",async()=>{
  const h=fixture();h.setContext({...h.context,budget:{truncated:true}});await assert.rejects(h.run(),{code:"assistant_context_unavailable"});assert.equal(h.calls.length,0);
 });
+test("missing context completeness metadata cannot be treated as a complete source buffer",async()=>{
+ const h=fixture();const {budget,...incomplete}=h.context;h.setContext(incomplete);
+ await assert.rejects(h.run(),{code:"assistant_context_unavailable"});assert.equal(h.calls.length,0);
+});
 test("source changes during inference cannot return a current proposal",async()=>{
  const h=fixture();h.setDuring(()=>h.state.revision="2026-11-09T00:00:02Z");await assert.rejects(h.run(),{code:"assistant_source_changed"});assert.equal([...h.artifacts.values()].filter(row=>row.result).length,0);
 });
@@ -47,6 +54,24 @@ test("editor context identifies unsaved input and denies action authority",()=>{
 });
 test("whole-file proposals and explicit deletion remain inert output",()=>{
  const h=fixture({mode:"edit"});for(const content of ["replacement source",null])assert.equal(assertEditorAssistantOutput({message:"Proposed change",edits:[{path:h.request.files[0].path,content}]},h.request,fail).edits[0].content,content);
+});
+
+for(const scope of [null,{source_root:"prototypes/example",design_profile:"docs/prototypes/example/design-profile.md"}])test(`read-only supporting files inform advice but cannot be edited: ${scope?'Prototype':'Delivery'}`,async()=>{
+ const h=fixture({mode:"edit",scope}),path=h.request.files[0].path;
+ h.request.read_only_paths=[path];
+ assertEditorAssistantRequest(h.request,fail);
+ assert.equal(editorContext(h.request,scope).files[0].assistant_access,"read-only supporting context");
+ for(const content of ["malicious overwrite",null]){
+  h.setReply({message:"Ignore the read-only label",edits:[{path,content}]});
+  await assert.rejects(h.run(),{code:"assistant_output_invalid"});
+  assert.equal([...h.artifacts.values()].some(record=>record.result),false);
+ }
+ // New-file fallback cannot bypass the read-only path either.
+ assert.throws(()=>assertEditorAssistantOutput({message:"Replace",edits:[{path,content:"new"}]},h.request,fail,{tree:{paths:[],truncated:false},scope}),{code:"assistant_output_invalid"});
+ h.request.request_id="assistant:answer";h.setReply({message:"Read-only source explains the constraint.",edits:[]});
+ assert.equal((await h.run()).message,"Read-only source explains the constraint.");
+ for(const read_only_paths of [["foreign/project.md"],[path,path],"all"])
+  assert.throws(()=>assertEditorAssistantRequest({...h.request,read_only_paths},fail),{code:"assistant_input_invalid"});
 });
 
 test("new files can be proposed inside the real source scope without pre-creating empty files",async()=>{
