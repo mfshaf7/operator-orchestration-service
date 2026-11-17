@@ -51557,7 +51557,7 @@
                   },
                   "context": {
                     "type": "string",
-                    "maxLength": 16000
+                    "maxLength": 64000
                   },
                   "fields": {
                     "type": "array",
@@ -52339,6 +52339,9 @@
               "ai_output_invalid",
               "ai_profile_inactive",
               "ai_provider_unavailable",
+              "ai_provider_busy",
+              "ai_completion_unknown",
+              "ai_context_capacity_exceeded",
               "apply_conflict",
               "backend_application_failed",
               "backend_projection_failed",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { createApp } from "../src/app.js";
@@ -39,10 +40,10 @@ async function invoke(app, {
   });
   let code;
   let output = "";
-  await app(request, {
+  await app(request, Object.assign(new EventEmitter(), {
     writeHead(value) { code = value; },
     end(value) { output += value ?? ""; },
-  });
+  }));
   return { body: JSON.parse(output), code };
 }
 

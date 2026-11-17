@@ -398,11 +398,63 @@ test("Work Design local draft scope enters digest-bound CGG content and keeps th
   assert.deepEqual(JSON.parse(JSON.parse(admitted.context).draft_scope), request.draft_scope);
   assert.equal(admitted.context_digest, `sha256:${createHash("sha256").update(admitted.context).digest("hex")}`);
   assert.equal(result.evidence.model_profile_id, "delivery-work-design-advisor-v1");
+  assert.equal(admitted.budget_tokens, 32000);
+  assert.equal(JSON.parse(admitted.context).tree_draft.tree_source, "draft_scope.scope.fields.tree");
+  assert.equal(JSON.parse(admitted.context).tree_draft.tree, undefined);
   for (const changed of [{ sourceRevision: "version-18" }, { sourceRef: "openproject://work_packages/999" }, { packageRef: "delivery-package:999" }, { role: "work-design-context" }]) {
     admitted = null;
     const invalid = structuredClone(request); Object.assign(invalid.draft_scope.scope, changed);
     await assert.rejects(runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request: invalid }), (error) => error.code === "request_invalid");
     assert.equal(admitted, null);
+  }
+});
+
+test("complete larger architecture context is admitted once and cancellation reaches both bounded clients", async () => {
+  const request = assistRequest("context_advice");
+  const complete = "Supplied architecture, private source custody and recovery boundaries. ".repeat(800) + "ARCHITECTURE_END";
+  request.draft_scope = { response_format: "Native bounded answer", conversation: [],
+    scope: { role: "work-design-context", ref: "context:908", packageRef: request.package_ref,
+      sourceRef: request.source_ref, sourceRevision: request.source_revision, context: complete,
+      fields: [{ key: "note", label: "Architecture note", value: request.context_draft.note }] } };
+  const before = structuredClone(request), controller = new AbortController();
+  let admitted, contextSignal, gatewaySignal;
+  const runtime = service({
+    contextClient: { async project(input, { signal }) { admitted = input; contextSignal = signal; return readyProjection(input); } },
+    gatewayClient: { async invoke(input, { signal }) { gatewaySignal = signal;
+      const reply = gatewayResult();
+      return { ...reply, task: input.task, effective_selection: { ...reply.effective_selection, task: "delivery-work-design-advisor-v1/context_advice" },
+        output: { ...reply.output, affected_node_id: null, patch_proposal: null } };
+    } },
+  });
+  await runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request, signal: controller.signal });
+  const projected = JSON.parse(admitted.context);
+  assert.equal(JSON.parse(projected.draft_scope).scope.context, complete);
+  assert.equal(projected.context_draft.note_source, "draft_scope.scope.fields.note");
+  assert.equal(projected.context_draft.note, undefined);
+  assert.equal(contextSignal, controller.signal); assert.equal(gatewaySignal, controller.signal);
+  assert.deepEqual(request, before);
+});
+
+test("busy, unknown completion and model input capacity preserve their original evidence without replay", async () => {
+  const cases = [
+    { outcome: "provider-busy", code: "ai_provider_busy", status: 429, retryable: true },
+    { outcome: "provider-completion-unknown", code: "ai_completion_unknown", status: 503, retryable: false },
+    { outcome: "provider-context-exceeded", code: "ai_context_capacity_exceeded", status: 413, retryable: false },
+  ];
+  for (const item of cases) {
+    let invocations = 0;
+    const runtime = service({ gatewayClient: { async invoke() {
+      invocations++;
+      throw new WorkDesignUpstreamError("upstream_rejected", "Gateway denied", { statusCode: 503, retryable: true,
+        payload: { reasons: ["no-suitable-fallback"], audit_ref: "audit:original",
+          effective_selection: { attempts: [{ outcome: item.outcome }] } } });
+    } } });
+    const request = assistRequest();
+    await assert.rejects(runtime.assist({ callerId: "governance-operations-console", packageId: request.package_ref, request }), error => {
+      assert.equal(error.code, item.code); assert.equal(error.statusCode, item.status);
+      assert.equal(error.retryable, item.retryable); assert.equal(error.toResponse().audit_ref, "audit:original"); return true;
+    });
+    assert.equal(invocations, 1);
   }
 });
 

@@ -3489,11 +3489,16 @@ async function handleWorkDesignAssist({
   const recordAdvice = agentConsoleService?.recordsAdviceForCaller?.(caller.id) === true;
   if (recordAdvice) assertCallerIdentityBound(caller, "AI activity recording");
   const body = await readWorkDesignJsonBody(request);
-  const invoke = () => workDesignService.assist({ callerId: caller.id, packageId, request: body });
-  const result = recordAdvice ? await agentConsoleService.trackAdvice({ callerId: caller.id,
-    operatorId: body.operator?.id, source: "work-design", subjectRef: packageId,
-    kind: body.task?.kind === "tree_advice" ? "work-design-tree" : "work-design-context", invoke }) : await invoke();
-  sendJson(response, 200, result);
+  const waiting = new AbortController();
+  const disconnected = () => { if (!response.writableFinished) waiting.abort(); };
+  response.once("close", disconnected);
+  try {
+    const invoke = () => workDesignService.assist({ callerId: caller.id, packageId, request: body, signal: waiting.signal });
+    const result = recordAdvice ? await agentConsoleService.trackAdvice({ callerId: caller.id,
+      operatorId: body.operator?.id, source: "work-design", subjectRef: packageId,
+      kind: body.task?.kind === "tree_advice" ? "work-design-tree" : "work-design-context", invoke }) : await invoke();
+    if (!waiting.signal.aborted) sendJson(response, 200, result);
+  } finally { response.removeListener("close", disconnected); }
 }
 
 async function handleWorkDesignProjection({

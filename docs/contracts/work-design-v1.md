@@ -86,6 +86,14 @@ The assist result preserves the existing Console concepts: confidence,
 required operator action, prose guidance, affected node, and bounded patch
 summary. `mocked` is not a valid live response status.
 
+The staged reasoning repair keeps these two tasks on the same profile and
+permission boundary. Context instructions explain actual card rendering and
+CSS-pixel geometry supplied by the editor, distinguish the scrollable canvas
+from the sampled visible area, and preserve substantive architecture across
+named views. Build Tree uses the entire supplied accepted brief to decompose
+outcomes, preserving existing branch identities and relevant boundary work.
+Neither guide demands a fixed diagram format or number of work items.
+
 An optional `draft_scope` carries the actual local note/diagram/tree fields,
 bounded conversation and advice-text format. Its role, package, source and
 revision must match the ordinary request. It enters the canonical context
@@ -99,6 +107,23 @@ and task remain authoritative. The Console may validate the returned advice
 text as an inert local draft proposal and edit only explicitly requested local
 fields. Questions and ambiguous requests do not edit. This does not start apply,
 approve a context brief, commit a PI, create ART records or grant tool authority.
+
+Work Design scope context is bounded at 64,000 characters and the selected
+scope at 128,000 characters; CGG admits up to 32,000 budget tokens, still within
+its existing input-byte bound. This is not a guarantee that every maximum-sized
+field combination fits. Oversized complete input is rejected; editable content
+is never silently shortened. An identical legacy note or tree is referenced
+from the exact scoped field rather than sent twice. Nonidentical legacy data
+remains supplied. Request identity and source binding retain the original input.
+
+CGG projection has a 30-second deadline. The Work Design gateway JSON exchange
+has a 630-second whole-response deadline around the Platform's 600-second
+provider allowance. Native Node HTTP transport avoids the independent five-minute
+response-header cutoff of the ordinary fetch transport. This does not extend
+other workflows or canonical Apply. Client disconnect propagates a signal to
+the current projection/gateway wait. Stopping that wait is not proof that a
+provider turn stopped; no automatic second invocation follows a lost response.
+These source changes require paired exact-source activation before live proof.
 
 ## Apply Sequence
 
@@ -129,6 +154,14 @@ does not expose provider secrets, raw context, or unvalidated provider output.
 
 Configured live mode fails closed. It must not silently return fixture advice
 when CGG, profile, gateway, provider, schema, operator, or backend checks fail.
+
+`ai_provider_busy` (429) means all selected attempts were refused before
+submission because the account was occupied. `ai_context_capacity_exceeded`
+(413) means a configured model could not fit the supplied complete input.
+`ai_completion_unknown` (503, not retryable) retains the original unconfirmed
+invocation and available gateway audit reference. It takes precedence over
+other attempt outcomes. None of these is evidence of an offline account.
+Uncertain completion must not trigger an automatic retry or fallback.
 
 ## Storage And Audit
 
