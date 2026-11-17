@@ -56,7 +56,7 @@
             "sourceRevision": { "type": "string", "minLength": 1, "maxLength": 256 },
             "packageRef": { "type": "string", "minLength": 1, "maxLength": 256 },
             "readOnly": { "type": "boolean" },
-            "context": { "type": "string", "maxLength": 16000 },
+            "context": { "type": "string", "maxLength": 64000 },
             "fields": { "type": "array", "maxItems": 80, "items": {
               "type": "object", "additionalProperties": false, "required": ["key", "label", "value"],
               "properties": {

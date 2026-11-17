@@ -175,6 +175,22 @@ function gatewayFailure(error, correlationId) {
   const reasons = Array.isArray(error.payload?.reasons)
     ? error.payload.reasons
     : [];
+  const outcomes = (error.payload?.effective_selection?.attempts ?? []).map(attempt => attempt.outcome);
+  if (error.code === "upstream_completion_unknown" || reasons.includes("provider-completion-unknown") || outcomes.includes("provider-completion-unknown")) {
+    return new WorkDesignServiceError("ai_completion_unknown",
+      "The advisor's original response was not confirmed. Your draft is retained. Do not automatically repeat this request; review its original activity before starting a new one.",
+      { auditRef: error.payload?.audit_ref ?? null, correlationId, retryable: false, statusCode: 503 });
+  }
+  if (outcomes.length && outcomes.every(outcome => outcome === "provider-busy")) {
+    return new WorkDesignServiceError("ai_provider_busy",
+      "The selected AI account is busy with another request. Your draft is retained; wait for that request to finish before asking again.",
+      { auditRef: error.payload?.audit_ref ?? null, correlationId, retryable: true, statusCode: 429 });
+  }
+  if (reasons.includes("provider-context-exceeded") || outcomes.includes("provider-context-exceeded")) {
+    return new WorkDesignServiceError("ai_context_capacity_exceeded",
+      "The selected model cannot fit this complete architecture request. Choose a suitable registered model or a smaller scope; no source context was silently removed.",
+      { auditRef: error.payload?.audit_ref ?? null, correlationId, retryable: false, statusCode: 413 });
+  }
   if (
     error.code === "upstream_not_configured" ||
     reasons.some((reason) =>
@@ -416,7 +432,7 @@ export function createWorkDesignService({
       return result;
     },
 
-    async assist({ callerId, packageId, request: rawRequest }) {
+    async assist({ callerId, packageId, request: rawRequest, signal }) {
       const request = validateRequest(assertWorkDesignAssistRequest, rawRequest);
       if (request.package_ref !== packageId) {
         throw new WorkDesignServiceError(
@@ -441,7 +457,7 @@ export function createWorkDesignService({
         const expectedRole = request.task.kind === "context_advice" ? "work-design-context" : "work-design-tree";
         if (scope.role !== expectedRole || scope.sourceRef !== request.source_ref ||
           scope.sourceRevision !== request.source_revision || scope.packageRef !== request.package_ref ||
-          JSON.stringify(request.draft_scope).length > 48000) {
+          JSON.stringify(scope).length > 128000) {
           throw new WorkDesignServiceError("request_invalid", "Draft advice scope does not match the selected Work Design source.",
             { correlationId: request.correlation_id, statusCode: 400 });
         }
@@ -451,9 +467,18 @@ export function createWorkDesignService({
       // applying Delivery ART's integer-only artifact rules to canvas data.
       const draftScopeJson = request.draft_scope ? JSON.stringify(request.draft_scope) : null;
       const adviceBinding = draftScopeJson ? { ...request, draft_scope: draftScopeJson } : request;
+      const noteInScope = request.draft_scope?.scope?.fields?.find(field => field.key === "note");
+      const treeInScope = request.draft_scope?.scope?.fields?.find(field => field.key === "tree");
+      const contextDraft = noteInScope && noteInScope.value === request.context_draft?.note
+        ? { decision: request.context_draft.decision, note_source: "draft_scope.scope.fields.note" }
+        : request.context_draft ?? null;
+      const treeDraft = treeInScope && JSON.stringify(treeInScope.value) === JSON.stringify(request.tree_draft?.tree)
+        ? { selected_node_id: request.tree_draft.selected_node_id, tree_digest: request.tree_draft.tree_digest,
+            tree_source: "draft_scope.scope.fields.tree" }
+        : request.tree_draft ?? null;
       const context = canonicalStringify({
-        context_draft: request.context_draft ?? null,
-        tree_draft: request.tree_draft ?? null,
+        context_draft: contextDraft,
+        tree_draft: treeDraft,
         ...(draftScopeJson ? { draft_scope: draftScopeJson } : {}),
       });
       const requestedAt = clock().toISOString();
@@ -481,13 +506,13 @@ export function createWorkDesignService({
         requested_at: requestedAt,
         context,
         context_digest: textDigest(context),
-        budget_tokens: 8000,
+        budget_tokens: 32000,
       };
       let projection;
       try {
         projection = assertProjection(
           request,
-          await contextClient.project(projectionRequest),
+          await contextClient.project(projectionRequest, { signal }),
           projectionRequest,
           contextCallerId,
         );
@@ -530,7 +555,7 @@ export function createWorkDesignService({
               content: projection.content,
             },
           },
-        });
+        }, { signal });
       } catch (error) {
         if (error instanceof WorkDesignUpstreamError) {
           throw gatewayFailure(error, request.correlation_id);

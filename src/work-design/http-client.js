@@ -1,3 +1,5 @@
+import { workDesignJsonFetch } from "./long-response-transport.js";
+
 export class WorkDesignUpstreamError extends Error {
   constructor(code, message, { payload = null, retryable = false, statusCode = 502 } = {}) {
     super(message);
@@ -9,8 +11,8 @@ export class WorkDesignUpstreamError extends Error {
   }
 }
 
-export function createWorkDesignJsonClient({ baseUrl, fetchImpl = globalThis.fetch, headers = {} }) {
-  async function post(path, body) {
+export function createWorkDesignJsonClient({ baseUrl, fetchImpl = workDesignJsonFetch, headers = {}, timeoutMs = 30_000 }) {
+  async function post(path, body, { signal } = {}) {
     if (!baseUrl) {
       throw new WorkDesignUpstreamError(
         "upstream_not_configured",
@@ -24,12 +26,13 @@ export function createWorkDesignJsonClient({ baseUrl, fetchImpl = globalThis.fet
         body: JSON.stringify(body),
         headers: { "Content-Type": "application/json", ...headers },
         method: "POST",
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       throw new WorkDesignUpstreamError(
-        "upstream_unavailable",
+        error?.requestSubmitted ? "upstream_completion_unknown" : "upstream_unavailable",
         error instanceof Error ? error.message : "Work Design upstream failed.",
-        { retryable: true, statusCode: 503 },
+        { retryable: !error?.requestSubmitted, statusCode: 503 },
       );
     }
     const text = await response.text();

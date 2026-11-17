@@ -10,17 +10,17 @@ export function createWorkDesignContextClient({ baseUrl, callerId, callerSecret,
     },
   });
   return {
-    project(request) {
-      return client.post("/v1/context/work-design/projections", request);
+    project(request, options) {
+      return client.post("/v1/context/work-design/projections", request, options);
     },
   };
 }
 
 export function createWorkDesignGatewayClient({ baseUrl, fetchImpl }) {
-  const client = createWorkDesignJsonClient({ baseUrl, fetchImpl });
+  const client = createWorkDesignJsonClient({ baseUrl, fetchImpl, timeoutMs: 630_000 });
   return {
-    invoke(request) {
-      return client.post("/v1/governed-ai/invoke", { ...request, selection_evidence_version: 1 });
+    invoke(request, options) {
+      return client.post("/v1/governed-ai/invoke", { ...request, selection_evidence_version: 1 }, options);
     },
   };
 }

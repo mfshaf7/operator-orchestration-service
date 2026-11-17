@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
+import http from "node:http";
 import test from "node:test";
 
 import { createApp } from "../src/app.js";
@@ -31,14 +33,14 @@ async function executeRequest(app, {
   if (body !== null) request.headers["content-type"] = "application/json";
   let statusCode = 200;
   let responseBody = "";
-  const response = {
+  const response = Object.assign(new EventEmitter(), {
     end(chunk = "") {
       responseBody += chunk;
     },
     writeHead(code) {
       statusCode = code;
     },
-  };
+  });
   await app(request, response);
   return {
     body: responseBody ? JSON.parse(responseBody) : null,
@@ -96,6 +98,26 @@ test("Work Design HTTP routes preserve package identity and caller identity", as
   assert.equal(calls[0].callerId, "governance-operations-console");
   assert.equal(calls[1].packageId, "delivery-package:908");
   assert.equal(calls[2].packageId, "delivery-package:908");
+});
+
+test("closing the real advice connection cancels downstream waiting without applying anything", async t => {
+  let entered, stopped;
+  const started = new Promise(resolve => { entered = resolve; });
+  const aborted = new Promise(resolve => { stopped = resolve; });
+  const app = appWith({ async assist({ signal }) {
+    entered();
+    await new Promise(resolve => signal.addEventListener("abort", () => { stopped(); resolve(); }, { once: true }));
+    return { status: "ready" };
+  } });
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const request = http.request(`http://127.0.0.1:${server.address().port}/v1/delivery-work-design/package-1/assist`, {
+    method: "POST", headers: { "content-type": "application/json", "x-oos-caller-id": "governance-operations-console", "x-oos-caller-secret": "test-secret" },
+  });
+  request.on("error", () => {});
+  request.end(JSON.stringify({ correlation_id: "cancel-1" }));
+  await started; request.destroy(); await aborted;
 });
 
 test("Work Design projection requires a source reference", async () => {
