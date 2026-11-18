@@ -9,10 +9,25 @@ const compact = value => Array.isArray(value) ? value.map(compact)
   : value && typeof value === "object" ? Object.fromEntries(Object.entries(value)
     .filter(([, child]) => child !== null).map(([key, child]) => [key, compact(child)])) : value;
 
+/** Retained completed v1 replies keep their original meaning after extension. */
+function legacyBoardReply(reply) {
+  const result = structuredClone(reply);
+  if (!Array.isArray(result?.edits)) return result;
+  const previous = ["addItems", "updateItems", "removeItemIds", "addConnections", "removeConnectionIds"];
+  for (const edit of result.edits) {
+    const board = edit?.board_patch;
+    if (!board || typeof board !== "object" || Array.isArray(board) || Object.keys(board).length !== previous.length || !previous.every(key => Array.isArray(board[key]))) continue;
+    for (const key of ["addTrays", "updateTrays", "removeTrayIds", "updateConnections", "arrangements", "layers"]) board[key] = [];
+    board.placement = null;
+    for (const item of [...board.addItems, ...board.updateItems]) if (item && typeof item === "object" && !Object.hasOwn(item, "autoSize")) item.autoSize = null;
+  }
+  return result;
+}
+
 export const nativeAdvisorInstruction = `The provider schema contains a required native draft_reply object. Always fill it directly; never put JSON, JSON Patch or the edit envelope inside text.
 Legacy requested_response_format/response_format strings inside packet data describe the compatibility HTTP envelope. They do not override this native provider schema.
 Use intent=answer or clarify with edits=[] for questions or missing information. Only an explicit request to edit an admitted operator draft permits intent=draft and nonempty edits. Never approve, execute, publish, apply canonical changes or invent authority.
-Each edit names one admitted field and value_type=text, board or tree. Populate exactly the matching text_value, board_patch or tree_patch; set the other two to null. Optional item/style/update properties use null when unchanged. Board patches use the five native addItems/updateItems/removeItemIds/addConnections/removeConnectionIds arrays; empty unused arrays are allowed. Use supported kinds from admitted field choices and unique IDs; preserve unrelated content. Tree additions are individual Feature/User story/Risk nodes with children=[] and the ID of an existing or earlier-added parent in parentId. The Epic root already exists; never insert or remove it. Updates preserve IDs and hierarchy. No tools, source inspection or other diagrams are available unless supplied in the admitted packet.
+Each edit names one admitted field and value_type=text, board or tree. Populate exactly the matching text_value, board_patch or tree_patch; set the other two to null. Optional item/style/update properties use null when unchanged. Board patches use the native addItems/updateItems/removeItemIds/addConnections/updateConnections/removeConnectionIds/addTrays/updateTrays/removeTrayIds/arrangements/layers arrays and nullable placement. Leave unused arrays empty. Follow the selected editor's supplied operation and rendering facts: trays group actual member IDs, removing a frame preserves its cards, connector updates preserve IDs, autoSize=true restores text sizing, and new diagrams center by default. Use as-authored placement only for an explicit positioning request. Use current supported kinds and unique IDs. Do not replace meaningful architecture with generic template examples. Preserve unrelated content and other views. Tree additions are individual Feature/User story/Risk nodes with children=[] and the ID of an existing or earlier-added parent in parentId. The Epic root already exists; never insert or remove it. Updates preserve IDs and hierarchy. No shell, browser, repository inspection or other diagrams are available unless supplied in the admitted packet.
 For ordinary chat without an operator draft, return answer/clarify and edits=[]; message is the human-readable answer. text may repeat a short human-readable summary, never an encoded edit object.`;
 
 export function nativeAdvisorScopeFromCandidate(candidate) {
@@ -27,6 +42,7 @@ export function nativeAdvisorScopeFromCandidate(candidate) {
 }
 
 export function decodeNativeAdvisorReply(reply, scope) {
+  reply = legacyBoardReply(reply);
   if (!validate(reply)) invalid("The provider returned an invalid native advisor reply. No draft was changed.");
   if ((reply.intent !== "draft" && reply.edits.length) || (reply.intent === "draft" && !reply.edits.length))
     invalid("An answer cannot contain draft edits, and a draft reply requires its explicit edit batch.");
