@@ -207,3 +207,13 @@ than guessed current status. Submit the reviewed request to the owner for exact
 request validation instead of treating any existing run as its acknowledgement.
 The receipt digest remains authoritative; current packet values cannot reconstruct
 an original accepted payload that the owner does not expose.
+
+
+### Context digest interoperability
+
+Refinement uses the existing CGG wire encoding (sorted compact JSON with ASCII
+escapes) for the assist-request, admitted-context and returned-envelope digests.
+This is separate from UTF-8 ART/run/receipt custody; do not replace those internal
+digests or alter original source text. Non-ASCII titles, narratives and operator
+questions retain the same strict source/target/authority verification. A mismatch
+still blocks model invocation and must not be bypassed by accepting either digest.

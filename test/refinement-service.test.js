@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { cggContextDigest } from "../src/context-wire-digest.js";
 
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import {
@@ -248,7 +250,7 @@ function readyProjection(request) {
         selected_node_ids: request.assist_request.target.selected_node_ids,
       },
       requested_at: request.requested_at,
-      context_digest: canonicalDigest(request.work_context ? { ...request.assist_request, work_context: request.work_context } : request.assist_request),
+      context_digest: cggContextDigest(request.work_context ? { ...request.assist_request, work_context: request.work_context } : request.assist_request),
       budget_tokens: request.budget_tokens,
     },
     artifact_id: "refinement-artifact-1",
@@ -271,7 +273,7 @@ function readyProjection(request) {
   };
   // CGG hashes its bound projection envelope; context_digest separately binds
   // the canonical assist request. Those two digests are deliberately distinct.
-  projection.request_digest = canonicalDigest({
+  projection.request_digest = cggContextDigest({
     binding: projection.binding,
     refinement_context: request.assist_request,
     ...(request.work_context ? { work_context: request.work_context } : {}),
@@ -568,7 +570,7 @@ test("Refinement rejects context-only receipts and tampered CGG bindings before 
         async project(request) {
           const projection = structuredClone(readyProjection(request));
           mutation(projection, request);
-          if (index > 0) projection.request_digest = canonicalDigest({
+          if (index > 0) projection.request_digest = cggContextDigest({
             binding: projection.binding, refinement_context: request.assist_request,
           });
           return projection;
@@ -682,4 +684,38 @@ test("integer Apply preflight rejects fractional values before durable execution
   await assert.rejects(adapter.apply({callerId:"console",packageId:packageRef,request}),/whole number/);
  }
  assert.equal(starts,0);
+});
+
+
+test("Refinement uses the CGG Python wire digest for Unicode owner context and operator input", async () => {
+  const current = packet();
+  current.target_tree.title = "PM² — 開発 😀";
+  current.target_tree.description = "Preserve café and \u007f in canonical source text.";
+  const request = assistRequest();
+  request.operator_prompt = "Explain PM² for 開発 😀 without changing values.";
+  let invoked = false;
+  const result = await service({
+    sourceAdapter: { async projectPacket() { return current; } },
+    contextClient: { async project(input) {
+      const projection = readyProjection(input);
+      const values = {
+        assist: input.assist_request,
+        context: { ...input.assist_request, work_context: input.work_context },
+        envelope: { binding: projection.binding, refinement_context: input.assist_request, work_context: input.work_context },
+      };
+      const python = spawnSync("python3", ["-c", "import sys,json,hashlib; v=json.load(sys.stdin); print(json.dumps({k:'sha256:'+hashlib.sha256(json.dumps(x,ensure_ascii=True,separators=(',',':'),sort_keys=True).encode()).hexdigest() for k,x in v.items()}))"], { input: JSON.stringify(values), encoding: "utf8" });
+      assert.equal(python.status, 0, python.stderr);
+      const digests = JSON.parse(python.stdout);
+      assert.equal(input.assist_request_digest, digests.assist);
+      assert.equal(projection.binding.context_digest, digests.context);
+      assert.equal(projection.request_digest, digests.envelope);
+      assert.notEqual(digests.context, canonicalDigest(values.context));
+      assert.equal(input.work_context.nodes[0].title, current.target_tree.title);
+      invoked = true;
+      return projection;
+    } },
+  }, { value: null, required_operator_action: "none", summary: "Explanation only." }).assist({ callerId: "governance-operations-console", packageId: packageRef, request });
+  assert.equal(invoked, true);
+  assert.equal(result.suggestion.value, null);
+  assert.equal(result.required_operator_action, "none");
 });

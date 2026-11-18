@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalStringify } from "../delivery-art/canonical-json.js";
+import { cggContextDigest as lifecycleContextDigest } from "../context-wire-digest.js";
 import { HttpError } from "../errors.js";
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
@@ -21,13 +22,8 @@ export function textDigest(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-// CGG lifecycle wire envelopes use Python json.dumps(ensure_ascii=True),
-// independently of ART/internal UTF-8 custody. Source text itself is unchanged.
-export function lifecycleContextDigest(value) {
-  const wire = canonicalStringify(value).replace(/[\u007f-\uffff]/g,
-    character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
-  return textDigest(wire);
-}
+// Keep the existing lifecycle API while sharing CGG wire canonicalization.
+export { cggContextDigest as lifecycleContextDigest } from "../context-wire-digest.js";
 
 function safeSourceBindings(sources) {
   return sources.map(({ content: _content, ...source }) => source);

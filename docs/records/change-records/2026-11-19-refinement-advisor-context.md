@@ -79,3 +79,22 @@ Apply was used for source proof. Paired live behavior requires later activation.
 Publish the operator-reviewed batch. Run committed
 base-aware owner checks, sequence dependencies, update the generated Security
 record index after owner merges, qualify the native advisor, then clean branches.
+
+
+## Native Unicode wire binding follow-up
+
+Native publication qualification loaded the real packet but rejected the admitted
+response: CGG hashes ASCII-escaped canonical JSON, while Refinement compared UTF-8
+ART digests. The actual owner narrative contains PM². ASCII-only synthetic tests
+missed the mismatch. The existing lifecycle wire digest is now shared, retaining
+its public lifecycle export and using that same encoding at all three Refinement
+CGG digest boundaries. ART/run/receipt/idempotency custody remains unchanged.
+No integrity check is removed or dual-encoding fallback added. Source text is
+preserved, including non-Latin and supplementary characters.
+
+Operator-approved maintenance, Landing Unit Decision
+`child_isolated_landing_unit`, `refinement-wire-digest-oos-20261119`. Independent
+Python serialization and the actual CGG HTTP response qualify digest parity and
+unchanged denial behavior before publication. Full owner validation and exact
+composed Security acceptance precede normal activation and native advisor proof.
+The original Epic 1384 Work Design and Refinement Apply must not be replayed.
