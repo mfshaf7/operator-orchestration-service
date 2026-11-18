@@ -1,3 +1,4 @@
+import { credentialFile, installationCredentialFile, readerCredentialFile } from "./credential-files.js";
 import { HttpError } from "../errors.js";
 import { repositoryConnections } from "./connections.js";
 import {
@@ -129,8 +130,42 @@ export function createGitHubRepositoryProviderClient({
   readInstallationToken,
   readAccount,
   connections,
+  connectionsFile,
+  readerCredentialPath,
+  provisioningTokenFile,
   sandbox = false,
 }) {
+  if (connectionsFile || readerCredentialPath || provisioningTokenFile) {
+    // Validate fixed provider configuration without reading optional connections
+    // at startup. Failure of one role must not disable unrelated workflows.
+    const fixed = { apiBaseUrl, clock, fetchImpl, sandbox };
+    const baseline = createGitHubRepositoryProviderClient(fixed);
+    const snapshot = (method, request) => {
+      const options = { ...fixed };
+      if (connectionsFile) options.connections = credentialFile(connectionsFile);
+      else options.connections = connections;
+      // A configured connection registry owns all grants. Never fall back to
+      // stale legacy tokens if its current file is empty, missing or invalid.
+      if (connectionsFile && !options.connections) throw new HttpError(503,
+        "repository_connections_invalid", "The selected GitHub connections are unavailable.");
+      if (!options.connections && method !== "connections") {
+        if (request?.action === "provision-new") {
+          options.provisioningInstallationToken = provisioningTokenFile
+            ? installationCredentialFile(provisioningTokenFile) : provisioningInstallationToken;
+        } else if (readerCredentialPath) {
+          const value = readerCredentialFile(readerCredentialPath, clock);
+          options.readInstallationToken = value.token;
+          options.readAccount = value.account;
+        } else {
+          options.readInstallationToken = readInstallationToken;
+          options.readAccount = readAccount;
+        }
+      }
+      return createGitHubRepositoryProviderClient(options);
+    };
+    return Object.fromEntries(Object.keys(baseline).map(method => [method,
+      (...args) => snapshot(method, args[0])[method](...args)]));
+  }
   let connected, connectionError;
   try { connected = repositoryConnections(connections, { clock }); }
   catch (error) { connectionError = error; }
