@@ -2,6 +2,7 @@ import { refinementSelectedField, refinementFieldValueError } from "./catalog-fi
 import { RefinementAdviceError, refinementAdviceTarget, refinementAdviceWorkContext, refinementPlanningSuggestion } from "./advice-context.js";
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { advisorWorkInstruction } from "../advisor-work-instructions.js";
+import { cggContextDigest } from "../context-wire-digest.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import {
@@ -122,7 +123,7 @@ function assertProjection(request, projection, projectedRequest, contextCallerId
     projection?.request_id !== request.request_id ||
     projection?.correlation_id !== request.correlation_id ||
     projection?.idempotency_key !== projectedRequest.idempotency_key ||
-    projection?.request_digest !== canonicalDigest({
+    projection?.request_digest !== cggContextDigest({
       binding,
       refinement_context: request,
       ...(projectedRequest.work_context ? { work_context: projectedRequest.work_context } : {}),
@@ -152,7 +153,7 @@ function assertProjection(request, projection, projectedRequest, contextCallerId
     JSON.stringify(binding?.target?.selected_node_ids) !==
       JSON.stringify(request.target.selected_node_ids) ||
     binding?.requested_at !== projectedRequest.requested_at ||
-    binding?.context_digest !== canonicalDigest(projectedRequest.work_context
+    binding?.context_digest !== cggContextDigest(projectedRequest.work_context
       ? { ...request, work_context: projectedRequest.work_context } : request) ||
     binding?.budget_tokens !== projectedRequest.budget_tokens ||
     typeof projection?.packet_ref !== "string" ||
@@ -403,7 +404,7 @@ export function createRefinementService({
         execution_id: stableId("refinement-execution", { request, work_context: workContext }),
         requested_at: requestedAt,
         assist_request: request,
-        assist_request_digest: canonicalDigest(request),
+        assist_request_digest: cggContextDigest(request),
         work_context: workContext,
         budget_tokens: 8000,
       };
