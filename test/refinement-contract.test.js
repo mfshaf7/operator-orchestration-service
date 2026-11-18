@@ -13,6 +13,8 @@ import {
   assertRefinementRunProjection,
 } from "../src/refinement/contracts.js";
 
+import { buildRefinementRunProjection } from "../src/refinement/run-model.js";
+
 const contractRoot = new URL("../contracts/refinement/", import.meta.url);
 const digest = `sha256:${"a".repeat(64)}`;
 const timestamp = "2026-08-26T00:00:00Z";
@@ -366,4 +368,14 @@ test("Refinement projection and bounded errors remain strictly versioned", () =>
     }).code,
     "packet_stale",
   );
+});
+
+
+test("new run projections identify their original Work Design handoff without exposing the accepted payload",()=>{
+ const request=applyRequest();
+ const run=buildRefinementRunProjection({request,state:"accepted",submittedAt:timestamp,updatedAt:timestamp,events:[]});
+ assert.equal(run.source_work_design_receipt_id,request.accepted_draft.source_work_design_receipt_id);
+ assert.equal(Object.hasOwn(run,"accepted_draft"),false);
+ const {source_work_design_receipt_id,...legacy}=run;
+ assertRefinementRunProjection(legacy);
 });

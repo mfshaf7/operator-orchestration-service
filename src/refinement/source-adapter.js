@@ -1,3 +1,4 @@
+import { refinementCatalogMetadata } from "./catalog-fields.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { OpenProjectError } from "../errors.js";
 import { createWorkDesignApplicationAdapter } from "../work-design/application-adapter.js";
@@ -35,7 +36,7 @@ function latestCompletion(applications) {
     .sort((left, right) => right.event.recorded_at.localeCompare(left.event.recorded_at))[0] ?? null;
 }
 
-export function createRefinementSourceAdapter({ openProjectClient }) {
+export function createRefinementSourceAdapter({ openProjectClient, catalogReader = null }) {
   const workDesignStore = createWorkDesignApplicationAdapter({ openProjectClient });
   let automationUserRefPromise = null;
 
@@ -142,9 +143,15 @@ export function createRefinementSourceAdapter({ openProjectClient }) {
     } catch (error) {
       throw sourceFailure("backend_projection_failed", error);
     }
+    let fieldMetadata = deliverySnapshot.fieldMetadata;
+    if (catalogReader) {
+      let catalog = null;
+      try { catalog = await catalogReader(); } catch { /* A visible blocked field, never guessed choices. */ }
+      fieldMetadata = refinementCatalogMetadata(fieldMetadata, catalog);
+    }
     return buildRefinementPacket({
       deliveryTree: deliverySnapshot.tree,
-      fieldMetadata: deliverySnapshot.fieldMetadata,
+      fieldMetadata,
       packageRef,
       source,
       workDesignCompletion: completion,

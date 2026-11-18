@@ -18,6 +18,7 @@
     "last_saved_at"
   ],
   "properties": {
+    "planning_rules": {"type": "object","additionalProperties": false,"required": ["backlog_iteration_label","iteration_prefix_templates"],"properties": {"backlog_iteration_label": {"type": "string"},"iteration_prefix_templates": {"type": "array","items": {"type": "string"}}}},
     "schema_version": { "const": 1 },
     "packet_id": { "$ref": "#/$defs/id" },
     "packet_revision": { "$ref": "#/$defs/nonEmptyString" },
@@ -72,6 +73,7 @@
         "description": { "type": "string" },
         "draft_body": { "type": "string" },
         "remark": { "type": "string" },
+        "planning": {"type": "object","additionalProperties": false,"required": ["status","target_pi","iteration","owner_repo"],"properties": {"status": {"type": "string"},"target_pi": {"type": "string"},"iteration": {"type": "string"},"owner_repo": {"type": "string"}}},
         "children": { "type": "array", "items": { "$ref": "#/$defs/treeNode" } }
       }
     },
@@ -108,6 +110,8 @@
         "required": { "type": "boolean" },
         "status": { "enum": ["blocked", "complete", "dirty", "missing", "stale"] },
         "value": { "type": "string" },
+        "target_allowed_values": { "type": "object", "additionalProperties": { "type": "array", "uniqueItems": true, "items": { "type": "string" } } },
+        "numeric_type": { "enum": ["integer", "decimal"] },
         "allowed_values": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
         "target_kinds": { "type": "array", "uniqueItems": true, "items": { "enum": ["Epic", "Feature", "User story", "Defect", "Task", "Risk", "Milestone"] } },
         "target_node_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },

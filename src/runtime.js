@@ -250,7 +250,10 @@ export function createRuntime({
       fetchImpl,
     }),
     runAdapter: createRefinementTemporalAdapter({ config }),
-    sourceAdapter: createRefinementSourceAdapter({ openProjectClient }),
+    sourceAdapter: createRefinementSourceAdapter({ openProjectClient,
+      catalogReader: () => createCatalogBackendClient({ baseUrl: config.catalog.backendBaseUrl,
+        hostHeader: config.catalog.hostHeader, token: config.catalog.backendToken }).project(),
+    }),
   });
   const workspaceInventoryService = createWorkspaceInventoryRuntime({
     audit,

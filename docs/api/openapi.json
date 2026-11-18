@@ -52486,6 +52486,25 @@
           "last_saved_at"
         ],
         "properties": {
+          "planning_rules": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "backlog_iteration_label",
+              "iteration_prefix_templates"
+            ],
+            "properties": {
+              "backlog_iteration_label": {
+                "type": "string"
+              },
+              "iteration_prefix_templates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "schema_version": {
             "const": 1
           },
@@ -52623,6 +52642,30 @@
               "remark": {
                 "type": "string"
               },
+              "planning": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "target_pi",
+                  "iteration",
+                  "owner_repo"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  },
+                  "target_pi": {
+                    "type": "string"
+                  },
+                  "iteration": {
+                    "type": "string"
+                  },
+                  "owner_repo": {
+                    "type": "string"
+                  }
+                }
+              },
               "children": {
                 "type": "array",
                 "items": {
@@ -52706,6 +52749,22 @@
               },
               "value": {
                 "type": "string"
+              },
+              "target_allowed_values": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "numeric_type": {
+                "enum": [
+                  "integer",
+                  "decimal"
+                ]
               },
               "allowed_values": {
                 "type": "array",
@@ -53064,6 +53123,31 @@
                 "uniqueItems": true,
                 "items": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "related_drafts": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "field_key",
+                "node_id",
+                "value"
+              ],
+              "properties": {
+                "field_key": {
+                  "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+                },
+                "node_id": {
+                  "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 16000
                 }
               }
             }
@@ -53605,6 +53689,9 @@
           },
           "request_id": {
             "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+          },
+          "source_work_design_receipt_id": {
+            "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/nonEmptyString"
           },
           "correlation_id": {
             "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"

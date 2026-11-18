@@ -8,6 +8,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "request_id": { "$ref": "#/$defs/id" },
+    "source_work_design_receipt_id": { "$ref": "#/$defs/nonEmptyString" },
     "correlation_id": { "$ref": "#/$defs/id" },
     "run_id": { "$ref": "#/$defs/id" },
     "state": { "enum": ["accepted", "running", "completed", "failed", "cancelled"] },

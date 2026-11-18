@@ -309,3 +309,35 @@ test("Refinement retains terminal history without root fallback and still requir
   assert.deepEqual(pi.target_node_ids, ["1005"]);
   assert.equal(pi.target_statuses["1005"], "missing");
 });
+
+test("the source adapter reads Catalog once and turns a native String PI into current choices with a revision-bound outage",async()=>{
+ const native=client(),tree=deliveryTree();let reads=0,available=true;
+ native.getRefinementDeliveryTree=async()=>({tree,fieldMetadata:{'884':{target_pi:{writable:true,field_kind:'short_text'}}}});
+ const stamp='2026-11-19T00:00:00Z';
+ const item={catalog_item_id:'catalog-target-pi',group_id:'planning',label:'Target PI',description:'Planning increments',value_key:'target_pi',source_authority:'OpenProject',backend_route:'/catalog',owner_route:'platform',create_authority:'Catalog',console_capability:'request',gap_status:'backend_created',lifecycle_state:'active',usage_count:0,usage_summary:'None',evidence_refs:[],last_projected_at:stamp,next_action_label:'Manage PI',next_action_detail:'Use Catalog'};
+ const catalog={schema_version:1,source_revision:'catalog-1',projection_status:'ready',projected_at:stamp,summary:{total_items:1,requestable_count:1,owner_routed_count:0,missing_route_count:0,drift_count:0},groups:[{group_id:'planning',title:'Planning',description:'Planning choices',source_authority:'OpenProject',expected_route:'/catalog',route_status:'implemented',item_ids:[item.catalog_item_id]}],items:[item],values:[{catalog_item_id:item.catalog_item_id,catalog_value_id:'pi-1',value_key:'PI-2026-03',label:'PI-2026-03',description:'',lifecycle_state:'active',usage_count:0,usage_summary:'None',evidence_refs:[],last_projected_at:stamp}]};
+ const adapter=createRefinementSourceAdapter({openProjectClient:native,catalogReader:async()=>{reads++;if(!available)throw Error('Catalog offline');return catalog;}});
+ const input={packageRef:'delivery-package:909',sourceRef:'openproject://work_packages/909'};
+ const first=await adapter.projectPacket(input),field=first.draft_groups.flatMap(g=>g.fields).find(f=>f.backend_field==='target_pi'&&f.target_node_ids.includes('884'));
+ assert.equal(reads,1);assert.equal(field.field_kind,'select');assert.deepEqual(field.allowed_values,['PI-2026-03']);
+ assert.equal(first.target_tree.planning.target_pi,'PI-2026-03');
+ available=false;const blocked=await adapter.projectPacket(input);
+ assert.equal(reads,2);assert.notEqual(blocked.packet_revision,first.packet_revision);
+ assert.equal(blocked.draft_groups.flatMap(g=>g.fields).find(f=>f.field_key===field.field_key).status,'blocked');
+});
+
+
+test("native per-item choices and integer constraints survive packet projection", async () => {
+ const native=client(), tree=deliveryTree();
+ tree.children[0].execution_classification="Enabler";
+ tree.children.push({...structuredClone(tree.children[0]),id:1003,execution_classification:"Business"});
+ native.getRefinementDeliveryTree=async()=>({tree,fieldMetadata:{
+  1002:{execution_classification:{writable:true,field_kind:"select",allowed_values:["Enabler"]},planned_business_value:{writable:true,field_kind:"number",numeric_type:"integer"}},
+  1003:{execution_classification:{writable:true,field_kind:"select",allowed_values:["Business"]},planned_business_value:{writable:true,field_kind:"number",numeric_type:"integer"}},
+ }});
+ const projected=await createRefinementSourceAdapter({openProjectClient:native}).projectPacket({packageRef:"delivery-package:909",sourceRef:"openproject://work_packages/909"});
+ const fields=projected.draft_groups.flatMap(group=>group.fields), classification=fields.find(field=>field.backend_field==="execution_classification");
+ assert.deepEqual(classification.allowed_values,[]);
+ assert.deepEqual(classification.target_allowed_values,{1002:["Enabler"],1003:["Business"]});
+ assert.equal(fields.find(field=>field.backend_field==="planned_business_value").numeric_type,"integer");
+});
