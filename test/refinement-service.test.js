@@ -580,3 +580,106 @@ test("Refinement rejects context-only receipts and tampered CGG bindings before 
       (error) => error.code === "context_projection_failed");
   }
 });
+
+function subsetAdvice() {
+  const current = packet(), request = assistRequest();
+  const base = structuredClone(current.target_tree);
+  current.target_tree.children = ["885","886","887"].map(id => ({...base,id,kind:"Feature",title:`Outcome ${id}`,children:[],planning:{status:"new",target_pi:"",iteration:"",owner_repo:""}}));
+  const field = {...current.draft_groups[0].fields[0],field_key:"work-repo",backend_field:"owner_repo",label:"Repository",field_kind:"short_text",allowed_values:[],value:"",target_node_ids:["885","886","887"],target_values:{"885":"alpha","886":"beta","887":"gamma"}};
+  current.draft_groups.push({group_id:"work",title:"Work",summary:"Selected work",fields:[field]});
+  request.target={field_key:field.field_key,field_label:field.label,field_kind:field.field_kind,required:field.required,source_value:"alpha",draft_value:"alpha",selected_node_ids:["885"],allowed_values:[]};
+  const invoke=(extra={},output={})=>service({sourceAdapter:{async projectPacket(){return current;}},...extra},{field_key:field.field_key,value:"reviewed-repo",...output}).assist({callerId:"console",packageId:packageRef,request});
+  return {current,request,field,invoke};
+}
+
+test("individual and mixed-value subsets bind exact canonical values without expanding to the field group",async()=>{
+  const h=subsetAdvice();let captured;
+  const contextClient={async project(input){captured=input;return readyProjection(input);}};
+  assert.equal((await h.invoke({contextClient})).suggestion.value,"reviewed-repo");
+  assert.deepEqual(captured.work_context.nodes.map(n=>n.id),["885","884"]);
+  h.request.target.selected_node_ids=["885","886"];h.request.target.source_value="";
+  await h.invoke({contextClient});assert.deepEqual(captured.assist_request.target.selected_node_ids,["885","886"]);
+  assert.doesNotMatch(JSON.stringify(captured.work_context),/Outcome 887|gamma/);
+  h.request.target.source_value="alpha";
+  await assert.rejects(h.invoke(),error=>error.code==="packet_stale");
+});
+
+test("foreign, duplicate, blocked and stale choices are rejected before the model",async()=>{
+  for(const patch of [{selected_node_ids:["999"]},{selected_node_ids:["885","885"]},{field_label:"Unrelated"},{allowed_values:["forged"]}]){
+    const h=subsetAdvice();Object.assign(h.request.target,patch);
+    await assert.rejects(h.invoke({gatewayClient:{async invoke(){assert.fail("No model invocation for invalid scope");}}}),e=>["packet_stale","request_invalid"].includes(e.code));
+  }
+  const h=subsetAdvice();h.field.target_statuses={"885":"blocked"};
+  await assert.rejects(h.invoke(),e=>e.code==="packet_stale");
+});
+
+test("related drafts bind selected/ancestor field identities and remain distinct from canonical facts",async()=>{
+  const h=subsetAdvice();let seen;
+  h.request.related_drafts=[{node_id:"884",field_key:"initiative-target-pi",value:"PI-2026-04"}];
+  await h.invoke({contextClient:{async project(input){seen=input;return readyProjection(input);}}});
+  const pi=seen.work_context.metadata.find(f=>f.node_id==="884");
+  assert.equal(pi.source_value,"PI-2026-03");assert.equal(pi.draft_value,"PI-2026-04");
+  assert.match(seen.work_context.coverage,/unaccepted/);
+  for(const drafts of [[{node_id:"887",field_key:"work-repo",value:"outside"}], [...h.request.related_drafts,...h.request.related_drafts]]){
+    h.request.related_drafts=drafts;await assert.rejects(h.invoke(),e=>e.code==="packet_stale");
+  }
+});
+
+test("planning advice cannot conflict with retained or edited counterpart and never silently commits backlog",async()=>{
+  const h=subsetAdvice();Object.assign(h.field,{field_key:"work-pi",backend_field:"target_pi",label:"Target PI",field_kind:"select",allowed_values:["PI-2026-03","PI-2026-04"],required:false,target_values:{"885":""}});
+  Object.assign(h.request.target,{field_key:h.field.field_key,field_label:h.field.label,field_kind:h.field.field_kind,required:false,source_value:"",draft_value:"",allowed_values:h.field.allowed_values});
+  h.current.target_tree.children[0].planning.iteration="PI-2026-03 / Iteration 1";
+  h.current.draft_groups[1].fields.push({...h.field,field_key:"work-iteration",backend_field:"iteration",label:"Iteration",field_kind:"short_text",allowed_values:[],value:"PI-2026-03 / Iteration 1",target_values:{"885":"PI-2026-03 / Iteration 1"},target_node_ids:["885"]});
+  const bad=await h.invoke({}, {value:"PI-2026-04"});
+  assert.equal(bad.suggestion.value,null);assert.equal(bad.required_operator_action,"none");assert.match(bad.suggestion.rationale,/align/);
+  h.request.related_drafts=[{node_id:"885",field_key:"work-iteration",value:"PI-2026-04 / Iteration 1"}];
+  assert.equal((await h.invoke({}, {value:"PI-2026-04"})).suggestion.value,"PI-2026-04");
+  assert.equal((await h.invoke({}, {value:null,required_operator_action:"none"})).suggestion.value,null);
+});
+
+test("a read-only planning counterpart uses its saved snapshot instead of fabricating a blank or starting invalid work",async()=>{
+ const h=mixedPlanningRequest(),node=h.packet.target_tree.children[0];
+ node.planning={status:"new",target_pi:"PI-2026-03",iteration:"PI-2026-03 / Iteration 1",owner_repo:"repo"};
+ h.packet.draft_groups[1].fields=h.packet.draft_groups[1].fields.filter(f=>!(f.backend_field==="target_pi"&&f.target_node_ids.includes(node.id)));
+ delete h.request.accepted_draft.metadata_values['target_pi:'+node.id];
+ h.request.accepted_draft.metadata_values['iteration:'+node.id]='PI-2026-04 / Iteration 1';h.seal();
+ await assert.rejects(service({sourceAdapter:{async projectPacket(){return h.packet;}},runAdapter:{async startRun(){assert.fail('Invalid counterpart must fail before effects');}}}).apply({callerId:'console',packageId:packageRef,request:h.request}),e=>e.code==='request_invalid');
+});
+
+test("Apply checks each item against its own options and rejects incompatible shared values before start",async()=>{
+ const current=packet(),field=current.draft_groups[0].fields[0];
+ field.backend_field="owner_repo";field.label="Repository";field.route_binding.payload_key="owner_repo";
+ field.target_node_ids=["884","885"];field.allowed_values=[];field.target_values={884:"repo-a",885:"repo-b"};
+ field.target_allowed_values={884:["repo-a"],885:["repo-b"]};
+ const adapter=service({sourceAdapter:{async projectPacket(){return current;}}});
+ const request=applyRequest();
+ const setValues=values=>{request.accepted_draft.metadata_values=values;request.accepted_draft.metadata_resolutions=Object.fromEntries(Object.keys(values).map(key=>[key,"accepted"]));const {draft_digest,...content}=request.accepted_draft;request.accepted_draft.draft_digest=canonicalDigest(content);};
+ setValues({"owner_repo:884":"repo-a","owner_repo:885":"repo-b"});
+ assert.equal((await adapter.apply({callerId:"console",packageId:packageRef,request})).state,"accepted");
+ setValues({owner_repo:"repo-a"});
+ await assert.rejects(adapter.apply({callerId:"console",packageId:packageRef,request}),/offered/);
+});
+
+test("advice accepts the exact selected item's options and rejects a broadened list",async()=>{
+ const current=packet(),field=current.draft_groups[0].fields[0];
+ field.allowed_values=[];field.target_allowed_values={884:["PI-2026-03","PI-2026-04"],885:["PI-other"]};field.target_node_ids=["884","885"];
+ const adapter=service({sourceAdapter:{async projectPacket(){return current;}}});
+ const request=assistRequest();
+ assert.equal((await adapter.assist({callerId:"console",packageId:packageRef,request})).suggestion.value,"PI-2026-04");
+ request.target.allowed_values.push("PI-other");
+ await assert.rejects(adapter.assist({callerId:"console",packageId:packageRef,request}),/canonical packet/);
+});
+
+
+test("integer Apply preflight rejects fractional values before durable execution",async()=>{
+ const current=packet(),field=current.draft_groups[0].fields[0];
+ field.backend_field="planned_business_value";field.label="Planned Business Value";field.field_kind="number";field.numeric_type="integer";field.value="8";field.target_values={884:"8"};field.route_binding.payload_key="planned_business_value";
+ let starts=0;
+ const adapter=service({sourceAdapter:{async projectPacket(){return current;}},runAdapter:{async startRun(){starts++;throw Error("must not start");}}});
+ for(const value of ["1.5","0x10","1e3"]){
+  const request=applyRequest();request.accepted_draft.metadata_values={planned_business_value:value};request.accepted_draft.metadata_resolutions={planned_business_value:"accepted"};
+  const {draft_digest,...content}=request.accepted_draft;request.accepted_draft.draft_digest=canonicalDigest(content);
+  await assert.rejects(adapter.apply({callerId:"console",packageId:packageRef,request}),/whole number/);
+ }
+ assert.equal(starts,0);
+});

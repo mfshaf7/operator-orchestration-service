@@ -134,3 +134,34 @@ Rollback can suspend the Refinement advisor and apply definition independently,
 while preserving accepted input, run events, partial-effect evidence, canonical
 readback, and historical receipts. Work Design and unrelated Delivery paths
 remain available.
+
+## Selected-field maintenance extension
+
+The additive `related_drafts` list contains at most 256 typed
+`{field_key,node_id,value}` entries, each at most 16,000 characters. It is local,
+unaccepted context, never a replacement canonical source. Only selected nodes
+and their ancestors can contribute editable fields. Exact field identity,
+required/kind markers, selected source values and admitted options remain bound
+to the current packet. A selected set may be a subset of a field's eligible
+scope; this grants no broader target or mutation authority.
+
+Optional tree `planning` snapshots and packet `planning_rules` retain canonical
+saved counterparts and current compatibility rules without making them editable.
+Catalog-backed options are exposed as select fields even when OpenProject stores
+strings. Advice and accepted Apply values are validated against the freshly read
+constraints; stale or fabricated identifiers cannot be legitimized by a model.
+The existing optional CGG work-context wrapper carries the enriched facts and
+separately identified drafts with unchanged redaction, budgeting and receipts.
+
+
+Per-record native select permissions are retained in `target_allowed_values`.
+`allowed_values` remains the whole-group compatibility intersection for older
+clients; individual controls/advice and accepted per-item values use the selected
+record's choices. Shared advice intersects only explicitly selected records.
+A supplied per-record map cannot fall back to broader group choices for a missing
+record. Native `numeric_type` distinguishes integer and decimal fields; integer
+preflight rejects fractional, radix/prefix, exponent and unsafe integer inputs.
+The native integer writer also rejects partial parsing before mutation. Decimal
+fields retain fractions. New durable run projections carry the original
+`source_work_design_receipt_id`; old completed runs remain readable through their
+original receipt. This is source identity evidence, not a new execution mechanism.

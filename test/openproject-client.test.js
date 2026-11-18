@@ -16387,3 +16387,32 @@ test("applyDeliveryPlan creates committed children with Target PI and roadmap ve
   );
   assert.equal(createCalls.length, 3);
 });
+
+test("native integer updates reject partial parsing before any work-package mutation", async () => {
+  for (const value of ["1.5", "0x10", "1e3", "12abc", "9007199254740993"]) {
+    const calls=[];
+    const client=createOpenProjectClient({config,fetchImpl:async(url,options)=>{
+      const path=new URL(url).pathname; calls.push({path,method:options.method});
+      const payload=path.endsWith('/form') ? {_embedded:{schema:{customField90:{name:'Planned Business Value',type:'Integer',writable:true}}}}
+        : {id:56,lockVersion:1,subject:'Implement source validation',_links:{type:{title:'Task'},status:{title:'new'}}};
+      return {ok:true,status:200,text:async()=>JSON.stringify(payload)};
+    }});
+    await assert.rejects(client.updateDeliveryWorkItem({recordId:56,plannedBusinessValue:value}),error=>error.details==='invalid_custom_field_integer');
+    assert.equal(calls.some(call=>call.method==='PATCH'),false);
+  }
+});
+
+test("native Refinement form projection distinguishes Integer from Float", async () => {
+ for(const [type,numericType,value] of [["Integer","integer",8],["Float","decimal",1.5]]) {
+  const root={id:56,lockVersion:1,subject:"Architecture work",customField90:value,_links:{type:{title:"Epic"},status:{title:"new"}}};
+  const client=createOpenProjectClient({config,fetchImpl:async(url,options)=>{
+   const path=new URL(url).pathname;
+   const payload=path.endsWith('/form') ? {_embedded:{schema:{customField90:{name:'Planned Business Value',type,writable:true}}}}
+    : path.includes('/projects/') ? {_embedded:{elements:[root]},total:1,count:1,offset:1,pageSize:100} : root;
+   return {ok:true,status:200,text:async()=>JSON.stringify(payload)};
+  }});
+  const source=await client.getRefinementDeliveryTree({recordId:56});
+  assert.equal(source.fieldMetadata['56'].planned_business_value.numeric_type,numericType);
+  assert.equal(String(source.tree.planned_business_value),String(value));
+ }
+});

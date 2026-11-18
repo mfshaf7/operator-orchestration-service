@@ -82,6 +82,7 @@ export function buildRefinementRunProjection({
     schema_version: 1,
     request_id: request.request_id,
     correlation_id: request.correlation_id,
+    source_work_design_receipt_id: request.accepted_draft.source_work_design_receipt_id,
     run_id: runId,
     state,
     replayed,

@@ -1,3 +1,5 @@
+import { refinementSelectedField, refinementFieldValueError } from "./catalog-fields.js";
+import { RefinementAdviceError, refinementAdviceTarget, refinementAdviceWorkContext, refinementPlanningSuggestion } from "./advice-context.js";
 import { selectionEvidence } from "../model-operations/selection-evidence.js";
 import { advisorWorkInstruction } from "../advisor-work-instructions.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
@@ -111,55 +113,6 @@ function assertPacketBinding(request, packet) {
       { correlationId: request.correlation_id, statusCode: 409 },
     );
   }
-}
-
-function assertAssistTarget(request, packet) {
-  const field = allPacketFields(packet).find(
-    (candidate) => candidate.field_key === request.target.field_key,
-  );
-  const selectedNodeIds = [...request.target.selected_node_ids].sort();
-  const targetNodeIds = [...(field?.target_node_ids ?? [])].sort();
-  if (
-    !field ||
-    request.target.field_label !== field.label ||
-    request.target.field_kind !== field.field_kind ||
-    request.target.required !== field.required ||
-    JSON.stringify(selectedNodeIds) !== JSON.stringify(targetNodeIds) ||
-    request.target.source_value !== field.value ||
-    (
-      Array.isArray(field.allowed_values) &&
-      JSON.stringify([...request.target.allowed_values].sort()) !==
-        JSON.stringify([...field.allowed_values].sort())
-    )
-  ) {
-    throw new RefinementServiceError(
-      "packet_stale",
-      "The selected Refinement field no longer matches the canonical packet.",
-      { correlationId: request.correlation_id, statusCode: 409 },
-    );
-  }
-  return field;
-}
-
-// Read only the canonical packet already checked for this request. A reference
-// to the finalized brief does not load its separate diagrams or proof artifacts.
-function refinementWorkContext(packet, request) {
-  const selected = new Set(request.target.selected_node_ids);
-  const nodes = [];
-  function visit(node) {
-    const descendants = (node.children ?? []).map(visit).some(Boolean);
-    const relevant = selected.has(node.id) || descendants;
-    if (relevant) nodes.push({ id: node.id, kind: node.kind, title: node.title, description: node.description });
-    return relevant;
-  }
-  visit(packet.target_tree);
-  if (request.target.selected_node_ids.some(id => !nodes.some(node => node.id === id))) {
-    throw new RefinementServiceError("packet_stale", "Selected work items are absent from the current canonical tree.",
-      { correlationId: request.correlation_id, statusCode: 409 });
-  }
-  return { package_ref: packet.source.package_ref, source_ref: packet.source.source_ref,
-    source_revision: packet.source.source_revision, source_work_design_receipt_id: packet.source.source_work_design_receipt_id,
-    nodes, coverage: "Current canonical selected work items and ancestors, including applied scope/architectural narrative when recorded. Separate finalized diagrams, proof contents and unselected branches are not loaded by their references." };
 }
 
 function assertProjection(request, projection, projectedRequest, contextCallerId) {
@@ -327,6 +280,12 @@ function assertAcceptedDraft(request, packet) {
       );
     }
   }
+  for (const field of fields) for (const id of field.target_node_ids) {
+    const key = `${field.backend_field}:${id}`;
+    const value = draft.metadata_values[key] ?? draft.metadata_values[field.backend_field] ?? field.target_values?.[id] ?? field.value;
+    const error = refinementFieldValueError(refinementSelectedField(field, [id]), value);
+    if (error) throw new RefinementServiceError("request_invalid", `${field.label}: ${error}`, { correlationId: request.correlation_id });
+  }
   try {
     validateRefinementPlanningValues(packet, draft);
   } catch (error) {
@@ -427,8 +386,11 @@ export function createRefinementService({
         sourceRef: request.source_ref,
       });
       assertPacketBinding(request, packet);
-      const field = assertAssistTarget(request, packet);
-      const workContext = refinementWorkContext(packet, request);
+      let field, workContext;
+      try { field = refinementAdviceTarget(packet, request); workContext = refinementAdviceWorkContext(packet, request); }
+      catch (error) { if (!(error instanceof RefinementAdviceError)) throw error;
+        throw new RefinementServiceError(error.code, error.message, { correlationId: request.correlation_id, statusCode: 409 }); }
+
       const requestedAt = clock().toISOString();
       const projectionRequest = {
         schema_version: 1,
@@ -502,7 +464,7 @@ export function createRefinementService({
         }
         throw error;
       }
-      const output = gateway?.output;
+      let output = gateway?.output;
       if (
         gateway?.policy_decision !== "allow" ||
         gateway?.policy_status !== "active" ||
@@ -533,6 +495,11 @@ export function createRefinementService({
           },
         );
       }
+      if (output.value !== null) {
+        const issue = refinementFieldValueError(field, output.value);
+        if (issue) output = { ...output, value: null, required_operator_action: "none", summary: "Review the field requirements first.", rationale: issue };
+      }
+      output = refinementPlanningSuggestion(output, field, workContext, request);
       let result;
       try {
         result = assertRefinementAssistResult({

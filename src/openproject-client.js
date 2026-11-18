@@ -2073,8 +2073,9 @@ async function parseCreateCustomFieldValue({
 }) {
   switch (kind) {
     case "int": {
-      const parsed = Number.parseInt(String(rawValue), 10);
-      if (!Number.isInteger(parsed)) {
+      const text = String(rawValue).trim();
+      const parsed = Number(text);
+      if (!/^[+-]?\d+$/.test(text) || !Number.isSafeInteger(parsed)) {
         throw new OpenProjectError(
           "validation_failure",
           `${entry.name} must be an integer.`,
@@ -2216,8 +2217,13 @@ function normalizePlanCustomValue({ field, kind, rawValue }) {
   }
 
   switch (kind) {
-    case "int":
-      return String(Number.parseInt(String(rawValue), 10));
+    case "int": {
+      const text = String(rawValue).trim();
+      if (!/^[+-]?\d+$/.test(text) || !Number.isSafeInteger(Number(text))) {
+        throw new OpenProjectError("validation_failure", `${field.name} must be an integer.`, 422, "invalid_custom_field_integer");
+      }
+      return String(Number(text));
+    }
     case "date":
       return parseCreateDateValue(rawValue, field.name);
     case "list":
@@ -6281,6 +6287,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             metadata[definition.backendField] = {
               writable: Boolean(schema) && schema.writable !== false,
               field_kind: kind,
+              ...(kind === "number" ? { numeric_type: schema?.type === "Integer" ? "integer" : "decimal" } : {}),
               ...(kind === "select" ? { allowed_values: allowedValues } : {}),
             };
           }

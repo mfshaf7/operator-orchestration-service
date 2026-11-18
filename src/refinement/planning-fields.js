@@ -48,13 +48,14 @@ export function validateRefinementPlanningValues(packet, draft) {
     // Omitted form properties remain under native writer authority. Do not
     // fabricate a blank counterpart for a populated read-only planning field.
     if (selected.some((field) => field.backend_field === "target_pi") &&
-        selected.some((field) => field.backend_field === "iteration")) {
+        selected.some((field) => field.backend_field === "iteration") || selected.length && node.planning) {
       const value = (key) => {
         const field = selected.find((candidate) => candidate.backend_field === key);
-        return field ? effectiveRefinementPlanningValue(field, draft, node.id) : "";
+        return field ? effectiveRefinementPlanningValue(field, draft, node.id) : node.planning?.[key];
       };
       validateDeliveryPlanningState({
         typeName: node.kind,
+        status: node.planning?.status ?? "new",
         targetPi: value("target_pi"),
         iteration: value("iteration"),
       });

@@ -1,3 +1,4 @@
+import { DELIVERY_PLANNING_WORKFLOW } from "../delivery-taxonomy.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { assertRefinementPacket } from "./contracts.js";
 import { isRefinementPlanningField, refinementPlanningFieldRequired } from "./planning-fields.js";
@@ -99,7 +100,7 @@ function fieldProjection(definition, nodes, target, metadata) {
   const commonValue = new Set(values).size === 1 ? values[0] : "";
   const details = nodes.map((node) => metadata?.[String(node.id)]?.[definition.backendField]);
   const targetStatuses = Object.fromEntries(nodes.map((node, index) => [String(node.id),
-    details[index]?.writable === false ? "blocked" : definition.required && !targetValues[String(node.id)].trim() ? "missing" : "complete"]));
+    details[index]?.writable === false || details[index]?.unavailable ? "blocked" : (definition.required && !targetValues[String(node.id)].trim()) || (details[index]?.field_kind === "select" && targetValues[String(node.id)].trim() && !details[index].allowed_values?.includes(targetValues[String(node.id)])) ? "missing" : "complete"]));
   const kinds = [...new Set(details.flatMap((entry) => entry?.field_kind ? [entry.field_kind] : []))];
   if (kinds.length > 1) {
     Object.keys(targetStatuses).forEach((id) => { targetStatuses[id] = "blocked"; });
@@ -121,10 +122,12 @@ function fieldProjection(definition, nodes, target, metadata) {
     target_node_ids: nodes.map((node) => String(node.id)),
     target_values: targetValues,
     target_statuses: targetStatuses,
-    ...(kinds[0] === "select" ? { allowed_values: allowedValues } : {}),
-    validation_hint: definition.required
+    ...(kinds[0] === "select" ? { allowed_values: allowedValues,
+      target_allowed_values: Object.fromEntries(nodes.map((node, index) => [String(node.id), details[index]?.allowed_values ?? []])) } : {}),
+    ...((kinds[0] ?? definition.fieldKind) === "number" ? { numeric_type: details.some(detail => detail?.numeric_type === "integer") || (!details.some(detail => detail?.numeric_type) && ["planned_business_value", "actual_business_value"].includes(definition.backendField)) ? "integer" : "decimal" } : {}),
+    validation_hint: details.find(detail => detail?.validation_hint)?.validation_hint ?? (definition.required
       ? `${definition.label} must resolve for every selected ${target === "initiative" ? "initiative" : "work item"}.`
-      : `${definition.label} is applied only when the operator records a value.`,
+      : `${definition.label} is applied only when the operator records a value.`),
     route_binding: routeBinding(definition, target),
   };
 }
@@ -156,6 +159,7 @@ function refinementTreeNode(node) {
     description: node.description ?? "",
     draft_body: node.description ?? "",
     remark: "",
+    planning: { status: stringValue(node.status), target_pi: stringValue(node.target_pi), iteration: stringValue(node.iteration), owner_repo: stringValue(node.owner_repo) },
     children: (node.children ?? []).map(refinementTreeNode),
   };
 }
@@ -234,7 +238,10 @@ export function buildRefinementPacket({
       },
     ],
   };
+  const planningRules = { backlog_iteration_label: DELIVERY_PLANNING_WORKFLOW.backlog_iteration_label,
+    iteration_prefix_templates: DELIVERY_PLANNING_WORKFLOW.pi_lifecycle.iteration_compatibility.allowed_prefix_templates };
   const packetRevision = canonicalDigest({
+    planning_rules: planningRules,
     apply_plan: applyPlan,
     metadata_fields: [...governanceFields, ...workItemFields],
     draft_groups: draftGroups,
@@ -259,6 +266,7 @@ export function buildRefinementPacket({
       finalized_brief_ref: `brief://work-design/${receiptId}/final`,
     },
     target_tree: refinementTreeNode(deliveryTree),
+    planning_rules: planningRules,
     draft_groups: draftGroups,
     readiness_gates: [
       {

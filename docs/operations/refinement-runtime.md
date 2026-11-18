@@ -149,3 +149,61 @@ Caller, operator, workflow/execution, packet/source revision, field selection,
 task, request time, budget, redaction and suggestion-only authority checks all
 remain required before model invocation. A mismatch fails closed; refresh the
 original projection and investigate its owner receipt rather than applying advice.
+
+## Paired maintenance: governed values and selected-field advice
+
+The unpublished repair reuses the existing Delivery Catalog. Target PI and
+Iteration, repository, team, assignee/responsible, initiative family, lineage
+role and objective type use current choices. Native select permissions further
+narrow these choices. String storage does not authorize arbitrary identifiers.
+The derived uncommitted and retired roadmap buckets are never PI assignments.
+Create missing values through Catalog, membership or repository onboarding;
+Refinement advice cannot create them. A Catalog outage blocks affected fields
+visibly and preserves unrelated narrative work. Each packet read obtains one
+Catalog projection, not one request per field; changed applicable choices alter
+the packet revision and invalidate stale advice or Apply input.
+
+Single-item and shared advice bind a nonempty subset of the canonical field's
+eligible targets. Source values are compared for that exact subset; mixed
+shared values retain their per-item facts instead of using the first item.
+The optional bounded `related_drafts` input identifies field/node pairs on the
+selected items or their ancestors. OOS rejects foreign, duplicate, blocked or
+generated targets and marks draft values as unaccepted operator input, separate
+from canonical saved values. Related edits change the model-context identity;
+late replies cannot overwrite a changed draft.
+
+The canonical planning snapshots retain actual status, PI, Iteration and source
+repository even when a counterpart is read-only. Current planning rules and
+field constraints accompany selected/ancestor narratives through CGG; diagrams,
+unrelated projects and unselected branches are not fetched. Planning suggestions
+must match the effective saved/draft counterpart. An unavailable counterpart or
+incompatible PI/Iteration returns clarification without inserting a value.
+Current assignment is evidence, not permission to commit other backlog work.
+Typed selectors, number/date/reference checks and the native writer remain
+independent of model intelligence. Review dates use real ISO calendar dates;
+Delivery reference existence/type/family checks remain native owner authority.
+Sponsor and Risk Owner retain their descriptive business-responsibility meaning;
+they do not grant account access. Narrative fields remain operator-authored text.
+
+The Console keeps AI-filled fields visibly unreviewed until the operator records
+review. Every final Apply still requires explicit operator acceptance. Existing
+model routing is retained; a stronger model cannot substitute for missing facts.
+
+Publication order: compatible CGG admission first, OOS producer/validation next,
+then Console. The paired Security source review and later exact-source acceptance
+must precede activation. Synthetic transport tests prove source wiring, not live
+model quality or canonical mutation. Preserve the previous composition for rollback.
+
+
+Each item retains the choices supplied by its native form. An unrelated sibling
+cannot remove those choices from an individual edit. Shared edits use only choices
+allowed for every selected item. Whole-number fields reject fractional or
+partially parseable input before starting a run; decimal fields remain decimal.
+
+A completed run belongs to its original Work Design handoff. Retained history
+must not mark a later handoff completed. Pending/failed run status must also bind
+that handoff; legacy runs without that fact remain historical evidence rather
+than guessed current status. Submit the reviewed request to the owner for exact
+request validation instead of treating any existing run as its acknowledgement.
+The receipt digest remains authoritative; current packet values cannot reconstruct
+an original accepted payload that the owner does not expose.
