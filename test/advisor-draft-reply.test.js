@@ -83,3 +83,30 @@ test("extended native tool grammar carries groups, identity-preserving edits and
   board.addTrays[0].manual = "yes";
   assert.throws(() => decodeNativeAdvisorReply(reply([edit("board", board)]), scope), /invalid native/);
 });
+
+
+test("complete structured replies retain their typed validation across both compatibility transports", async () => {
+  const { assertWorkDesignAssistResult } = await import("../src/work-design/contracts.js");
+  const { assertAgentConsoleContract } = await import("../src/agent-console/contracts.js");
+  const tree = { addNodes: Array.from({ length: 3 }, (_, i) => ({ parentId: "epic-a", node: {
+    id: `feature-${i}`, kind: "Feature", title: `Outcome ${i}`, description: "A bounded outcome",
+    draftBody: "x".repeat(18000), remark: "Draft only", children: [] } })), updateNodes: [], removeNodeIds: [] };
+  const native = reply([edit("tree", tree)]);
+  const encoded = normalizeNativeAdvisorOutput({ text: "Short summary", draft_reply: native }, { scope, required: true });
+  assert.ok(encoded.text.length > 48000);
+  assertAgentConsoleContract("model-response.schema.json", encoded);
+  const result = { schema_version: 1, request_id: "synthetic-large-reply", correlation_id: "synthetic-correlation",
+    response_id: "synthetic-response", task_kind: "tree_advice", status: "ready", confidence: "high",
+    required_operator_action: "review", ...encoded, evidence: {
+      generated_at: "2026-11-18T00:00:00Z", model_profile_id: "delivery-work-design-advisor-v1",
+      task_contract_ref: "oos.delivery-work-design.v1", output_schema_ref: "synthetic-output-schema",
+      cgg_packet_ref: "synthetic-context", redaction_receipt_ref: "synthetic-redaction", gateway_audit_ref: "synthetic-audit" } };
+  assertWorkDesignAssistResult(result);
+  assert.deepEqual(JSON.parse(encoded.text).edits[0].value, tree);
+  assert.throws(() => decodeNativeAdvisorReply({ ...native, message: "x".repeat(12001) }, scope), /invalid native/);
+  const tooLarge = structuredClone(native);
+  tooLarge.edits[0].tree_patch.addNodes = Array.from({ length: 8 }, (_, i) => ({ ...tree.addNodes[0], node: { ...tree.addNodes[0].node, id: `oversized-${i}` } }));
+  assert.throws(() => normalizeNativeAdvisorOutput({ draft_reply: tooLarge }, { scope, required: true }), /bounded transport/);
+  assert.throws(() => assertAgentConsoleContract("model-response.schema.json", { text: "x".repeat(128001) }));
+  assert.throws(() => assertWorkDesignAssistResult({ ...result, text: "x".repeat(128001) }));
+});

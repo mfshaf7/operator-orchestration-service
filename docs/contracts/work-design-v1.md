@@ -207,3 +207,17 @@ Rollback removes the OOS composition projections and caller binding, then
 suspends only the Work Design profile. It must not disable
 `intake-classifier-v1`, remove historical audit or receipts, alter unrelated ART
 workflows, or broaden direct provider access.
+
+
+### Structured advisor reply transport
+
+Native provider replies carry human explanation and typed edits separately. After
+native validation, the existing HTTP compatibility `text` field may encode the
+complete reply up to 128,000 characters. It must not inherit the 12,000-character
+human-message limit. The shared Agent Console compatibility response uses the
+same transport bound. Native message, field, operation and scope validation still
+apply before encoding; an oversized transaction fails without partial edits.
+The Console applies the same aggregate reply limit and retains its atomic local
+transaction and unchanged-context checks. This is draft assistance, not canonical
+Apply or implementation completion. Completed provider records are retained and
+must not be regenerated merely because a downstream consumer rejected encoding.
