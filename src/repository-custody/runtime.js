@@ -38,6 +38,9 @@ export function createRepositoryCustodyRuntime({
       readInstallationToken: config.providerReadInstallationToken,
       readAccount: config.providerReadAccount,
       connections: config.providerConnections,
+      connectionsFile: config.providerConnectionsFile,
+      readerCredentialPath: config.providerReaderCredentialFile,
+      provisioningTokenFile: config.providerProvisioningTokenFile,
       sandbox: config.providerSandbox,
     }),
     readinessClient: createWgcfRepositoryCustodyClient({

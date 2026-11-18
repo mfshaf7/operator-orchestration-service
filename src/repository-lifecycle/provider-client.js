@@ -1,3 +1,4 @@
+import { credentialFile, installationCredentialFile } from "../repository-custody/credential-files.js";
 import { HttpError } from "../errors.js";
 import { repositoryConnections } from "../repository-custody/connections.js";
 import { withRepositoryLifecycleIntegrity } from "./contracts.js";
@@ -49,8 +50,23 @@ export function createGitHubRepositoryLifecycleClient({
   fetchImpl = globalThis.fetch,
   installationToken,
   connections,
+  connectionsFile,
+  installationTokenFile,
   sandbox = false,
 }) {
+  if (connectionsFile || installationTokenFile) {
+    const fixed = { apiBaseUrl, clock, fetchImpl, sandbox };
+    const baseline = createGitHubRepositoryLifecycleClient(fixed);
+    return Object.fromEntries(Object.keys(baseline).map(method => [method, (...args) => {
+      const currentConnections = connectionsFile ? credentialFile(connectionsFile) : connections;
+      if (connectionsFile && !currentConnections) throw new HttpError(503,
+        "repository_connections_invalid", "The selected GitHub connections are unavailable.");
+      const current = createGitHubRepositoryLifecycleClient({ ...fixed, connections: currentConnections,
+        installationToken: currentConnections ? undefined : installationTokenFile
+          ? installationCredentialFile(installationTokenFile) : installationToken });
+      return current[method](...args);
+    }]));
+  }
   let connected, connectionError;
   try { connected = repositoryConnections(connections, {clock}); } catch (error) { connectionError = error; }
   function credential(request) {

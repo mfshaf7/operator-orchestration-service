@@ -21,6 +21,8 @@ export function createRepositoryLifecycleRuntime({ audit, config, fetchImpl } = 
       fetchImpl,
       installationToken: config.providerInstallationToken,
       connections: config.providerConnections,
+      connectionsFile: config.providerConnectionsFile,
+      installationTokenFile: config.providerInstallationTokenFile,
       sandbox: config.providerSandbox,
     }),
     readinessClient: createWgcfRepositoryLifecycleClient({

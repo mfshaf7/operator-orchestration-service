@@ -269,3 +269,28 @@ An unconfirmed provider completion remains unconfirmed and non-retryable as a
 new inference; no automatic replay occurs. Real authorization denials retain
 their existing rejection path. These outcomes do not change configured model
 fallback, account custody or final operator authority.
+
+
+## Credential renewal and active requests
+
+Routine GitHub credential renewal uses the existing read-only projected Secret
+files and leaves active workflow requests running. A repository operation captures
+one current credential generation; the next operation reads the latest file.
+The reader account and token share one atomic JSON file. Optional connection
+failure is local to that connection; a configured missing/invalid file never
+falls back to stale process credentials. Account, purpose and approval checks
+still apply. No credential values enter Console responses or renewal receipts.
+
+Platform verifies current file fingerprints before retiring previous tokens.
+Kubelet projection has a bounded 150-second wait for the five required identities
+as a group. Expiry/resource-version observations live on Deployment metadata,
+not PodTemplate. New source/configuration or a real WGCF readiness-caller change
+can still require a rollout. Renewal success is not a claim that every active
+provider request completed; preserve unknown/completed journals without replay.
+
+Server configuration: `OOS_REPOSITORY_PROVIDER_CREDENTIAL_FILE` points to the
+reader JSON bundle; `OOS_REPOSITORY_CONNECTIONS_FILE` to the existing account/grant
+JSON; `OOS_REPOSITORY_PROVISIONING_TOKEN_FILE` and
+`OOS_REPOSITORY_LIFECYCLE_TOKEN_FILE` to their separate installation tokens.
+These paths come only from Platform, never browser input. If no file path is
+configured, the existing environment-only adapter remains supported.
