@@ -246,3 +246,26 @@ contents or cross-section evidence remains unknown. The Console explicitly
 identifies which saved diagram and supporting sections are loaded. Final plan
 validation, human approval and recording keep the existing architecture API and
 owner authority. Questions return answer/clarify with no edits.
+
+### Current draft tools and provider outcomes
+
+Work Design supplies the selected editor's actual card, tray, membership,
+arrangement, sizing and viewport semantics through the existing admitted packet.
+The native grammar supports bounded group and connector updates while retaining
+the same local-draft and human-final-decision boundary. Other views remain
+outside the editable scope. Completed replies using the earlier five-array
+grammar remain readable; compatibility supplies only empty extension operations
+and unused nullable sizing data, never another inference or a new authority.
+
+Definition design supplies an object-based execution-step drafting contract.
+Requested step edits use the same defaults as the manual form, preserve existing
+IDs and unrelated fields, and leave missing implementation facts blank. Text
+lines cannot stand in for step objects. The advisor cannot classify, approve,
+admit or activate an executable definition.
+
+A busy selected provider is reported as busy, not an access denial. A complete
+request that exceeds model capacity is reported separately without truncation.
+An unconfirmed provider completion remains unconfirmed and non-retryable as a
+new inference; no automatic replay occurs. Real authorization denials retain
+their existing rejection path. These outcomes do not change configured model
+fallback, account custody or final operator authority.

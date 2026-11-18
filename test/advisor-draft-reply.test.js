@@ -70,3 +70,16 @@ test("scope extraction uses the existing admitted draft envelope and leaves norm
   assert.deepEqual(nativeAdvisorScopeFromCandidate({ content: JSON.stringify({ operator_draft: scope }) }), scope);
   assert.throws(() => nativeAdvisorScopeFromCandidate({ content: '{"operator_draft":{}}' }), /bound role/);
 });
+
+test("extended native tool grammar carries groups, identity-preserving edits and explicit sizing without widening fields", () => {
+  const board = { ...patch(), addTrays: [], updateTrays: [], removeTrayIds: [], updateConnections: [], arrangements: [], layers: [], placement: null };
+  board.addItems.push({ id: "new-card", kind: "component", label: "Runtime", detail: "Private draft execution", x: 0, y: 0,
+    width: null, height: null, tone: null, diagramType: "c4", autoSize: true });
+  board.addTrays.push({ id: "private-group", label: "Private runtime", diagramType: "c4", x: 0, y: 0, width: 400, height: 260, itemIds: ["new-card"], manual: false, tone: null, autoFit: null });
+  board.updateConnections.push({ id: "existing-edge", from: null, to: null, label: "Read exact source", shape: null, stroke: "dashed", tone: null, tip: null, startTip: null, relationship: "none" });
+  const value = decodeNativeAdvisorReply(reply([edit("board", board)]), scope).edits[0].value;
+  assert.equal(value.addItems[0].autoSize, true); assert.equal(value.addTrays[0].manual, false);
+  assert.deepEqual(value.updateConnections[0], { id: "existing-edge", label: "Read exact source", stroke: "dashed", relationship: "none" });
+  board.addTrays[0].manual = "yes";
+  assert.throws(() => decodeNativeAdvisorReply(reply([edit("board", board)]), scope), /invalid native/);
+});

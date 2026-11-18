@@ -254,7 +254,7 @@ function failureFor(error) {
       state: "failed",
       code: error.code,
       message: error.message,
-      retryable: error.statusCode >= 500,
+      retryable: error.code === "agent_console_ai_provider_busy" || error.statusCode >= 500 && error.code !== "agent_console_ai_completion_unknown",
     };
   }
   return {
