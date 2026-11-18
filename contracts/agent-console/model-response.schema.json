@@ -9,7 +9,8 @@
     "text": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 32768
+      "maxLength": 128000,
+      "description": "Human response or compatibility encoding of a validated structured draft reply; native message and field limits are enforced before encoding."
     }
   }
 }

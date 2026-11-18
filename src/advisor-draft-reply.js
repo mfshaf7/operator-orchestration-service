@@ -4,6 +4,7 @@ import { HttpError } from "./errors.js";
 
 const schema = JSON.parse(readFileSync(new URL("../contracts/work-design/advisor-draft-reply.schema.json", import.meta.url), "utf8"));
 const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
+export const advisorReplyChars = 128_000;
 const invalid = message => { throw new HttpError(502, "advisor_draft_output_invalid", message); };
 const compact = value => Array.isArray(value) ? value.map(compact)
   : value && typeof value === "object" ? Object.fromEntries(Object.entries(value)
@@ -67,7 +68,10 @@ export function decodeNativeAdvisorReply(reply, scope) {
       invalid("The advisor proposed a card kind outside the admitted diagram vocabulary.");
     return { field: edit.field, value };
   });
-  return { intent: reply.intent, message: reply.message, edits };
+  const decoded = { intent: reply.intent, message: reply.message, edits };
+  if (JSON.stringify(decoded).length > advisorReplyChars)
+    invalid("The structured advisor reply exceeds its bounded transport. No draft was changed.");
+  return decoded;
 }
 
 /** Existing HTTP clients retain their envelope; native structure is validated first. */
