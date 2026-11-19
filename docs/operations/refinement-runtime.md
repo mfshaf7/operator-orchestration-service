@@ -217,3 +217,12 @@ This is separate from UTF-8 ART/run/receipt custody; do not replace those intern
 digests or alter original source text. Non-ASCII titles, narratives and operator
 questions retain the same strict source/target/authority verification. A mismatch
 still blocks model invocation and must not be bypassed by accepting either digest.
+
+
+The complete selected/ancestor work context, separately identified related drafts
+and bounded conversation use the existing finite 32,000-token CGG planning
+allowance. The previous fixed 8,000-token request could refuse a valid one-record
+scope after several fields were drafted. CGG still refuses oversize or truncated
+context; its byte ceiling and all source/draft/caller bindings remain. No partial
+context or raw fallback is sent to the model, whose capacity is checked separately
+by the existing gateway. The matching CGG contract/runtime must land first.

@@ -98,3 +98,19 @@ Python serialization and the actual CGG HTTP response qualify digest parity and
 unchanged denial behavior before publication. Full owner validation and exact
 composed Security acceptance precede normal activation and native advisor proof.
 The original Epic 1384 Work Design and Refinement Apply must not be replayed.
+
+
+## Complete selected-field context after drafting
+
+An actual one-story repository advice request, including its owner/ancestor facts,
+five related draft values and the existing bounded conversation, was refused by
+the fixed 8,000-token admission allowance. This was reproduced through isolated
+real HTTP admission before the companion Console scope fix was published. The
+selected facts were complete and appropriate; reducing to one item could not
+resolve it. OOS reuses Work Design's existing finite 32,000-token planning pattern
+for Refinement. Matching CGG schema, HTTP and runtime limits land first. The byte
+ceiling, caller, redaction, source/draft bindings, model route, deadlines and
+refusal to truncate remain unchanged. No model scope, writer or tool is added.
+Operator-approved required maintenance, `child_isolated_landing_unit`,
+`refinement-selected-scope-oos-20261119`. Actual large-context HTTP and native
+Console qualification follow; no real Work Design/Refinement Apply is replayed.
