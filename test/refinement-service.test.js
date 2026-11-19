@@ -409,6 +409,7 @@ test("Refinement native request retains complete follow-up conversation through 
   await service({contextClient:{async project(input){captured=input;return readyProjection(input);}}}).assist({callerId:"governance-operations-console",packageId:packageRef,request});
   assert.deepEqual(captured.assist_request.conversation,request.conversation);
   assert.equal(captured.assist_request_digest,canonicalDigest(request));
+  assert.equal(captured.budget_tokens,32_000);
 });
 
 test("Refinement carries canonical selected and ancestor narratives, excludes sibling branches and binds their content", async () => {

@@ -406,7 +406,7 @@ export function createRefinementService({
         assist_request: request,
         assist_request_digest: cggContextDigest(request),
         work_context: workContext,
-        budget_tokens: 8000,
+        budget_tokens: 32_000,
       };
       let projection;
       try {
