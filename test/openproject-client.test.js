@@ -16416,3 +16416,39 @@ test("native Refinement form projection distinguishes Integer from Float", async
   assert.equal(String(source.tree.planned_business_value),String(value));
  }
 });
+
+
+test("native User form resolves hidden logins by Catalog identity and retains target assignment restrictions", async () => {
+  for (const allowed of [true, false]) {
+    const calls=[];
+    const principalReader=async()=>[{login:"runtime-team",href:"/api/v3/users/6"}];
+    const current={id:56,lockVersion:1,subject:"Runtime risk",_links:{type:{title:"Risk"},status:{title:"new"}}};
+    const client=createOpenProjectClient({config,principalReader,fetchImpl:async(url,options)=>{
+      const path=new URL(url).pathname;calls.push({path,method:options.method,body:options.body});
+      let payload;
+      if(path.endsWith('/form'))payload={_embedded:{schema:{assignee:{type:"User",writable:true,_links:{allowedValues:{href:"/api/v3/work_packages/56/available_assignees"}}},responsible:{type:"User",writable:true,_links:{allowedValues:{href:"/api/v3/work_packages/56/available_assignees"}}}}}};
+      else if(path.endsWith('/available_assignees'))payload={total:1,_embedded:{elements:[{_type:"User",name:"Runtime Team",_links:{self:{href:allowed?"/api/v3/users/6":"/api/v3/users/99",title:"Runtime Team"}}},{_type:"User",name:"runtime-team",_links:{self:{href:"/api/v3/users/100",title:"runtime-team"}}}]}};
+      else if(options.method==='PATCH')payload={...current,...JSON.parse(options.body),lockVersion:2};
+      else payload=current;
+      return {ok:true,status:200,text:async()=>JSON.stringify(payload)};
+    }});
+    const action=()=>client.updateDeliveryWorkItem({recordId:56,assigneeLogin:"runtime-team",responsibleLogin:"runtime-team"});
+    if(allowed){await action();const patch=calls.find(call=>call.method==='PATCH');assert.ok(patch);assert.equal(JSON.parse(patch.body)._links.assignee.href,"/api/v3/users/6");assert.equal(JSON.parse(patch.body)._links.responsible.href,"/api/v3/users/6");}
+    else {await assert.rejects(action,error=>error.details==='missing_allowed_value_link');assert.equal(calls.some(call=>call.method==='PATCH'),false);}
+  }
+});
+
+test("native Refinement User projection preserves scoped login keys for hidden-login readback",async()=>{
+ const root={id:55,lockVersion:1,subject:"Runtime foundation",_links:{type:{title:"Epic"},status:{title:"new"}}};
+ const child={id:56,lockVersion:1,subject:"Runtime risk",_links:{type:{title:"Risk"},status:{title:"new"},parent:{href:"/api/v3/work_packages/55"},assignee:{href:"/api/v3/users/6",title:"Runtime Team"},responsible:{href:"/api/v3/users/6",title:"Runtime Team"}}};
+ const client=createOpenProjectClient({config,principalReader:async()=>[{login:"runtime-team",href:"/api/v3/users/6"},{login:"outside-this-item",href:"/api/v3/users/99"}],fetchImpl:async(url,options)=>{
+  const path=new URL(url).pathname;
+  const payload=path.endsWith('/form')?{_embedded:{schema:{assignee:{type:"User",writable:true,_links:{allowedValues:{href:"/api/v3/work_packages/56/available_assignees"}}},responsible:{type:"User",writable:true,_links:{allowedValues:{href:"/api/v3/work_packages/56/available_assignees"}}}}}}
+   :path.endsWith('/available_assignees')?{_embedded:{elements:[{name:"Runtime Team",_links:{self:{href:"/api/v3/users/6",title:"Runtime Team"}}}]}}
+   :path.includes('/projects/')?{_embedded:{elements:[root,child]},total:2,count:2,offset:1,pageSize:100}:root;
+  return {ok:true,status:200,text:async()=>JSON.stringify(payload)};
+ }});
+ const snapshot=await client.getRefinementDeliveryTree({recordId:55});
+ assert.equal(snapshot.tree.children[0].assignee_login,"runtime-team");assert.equal(snapshot.tree.children[0].responsible_login,"runtime-team");
+ assert.deepEqual(snapshot.fieldMetadata['56'].assignee_login.allowed_values,["runtime-team"]);assert.deepEqual(snapshot.fieldMetadata['56'].responsible_login.allowed_values,["runtime-team"]);
+});
