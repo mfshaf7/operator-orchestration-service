@@ -226,3 +226,20 @@ scope after several fields were drafted. CGG still refuses oversize or truncated
 context; its byte ceiling and all source/draft/caller bindings remain. No partial
 context or raw fallback is sent to the model, whose capacity is checked separately
 by the existing gateway. The matching CGG contract/runtime must land first.
+
+
+### Native account identity
+
+Catalog account choices use stable login keys. OpenProject may omit other
+accounts' logins from a native User response. The broker matches Catalog's
+scoped identity reference to the exact user/group allowed by the current
+work-item form; it does not derive a login from the display name or grant
+membership to make a selection work. Assignee and Responsible use the same
+rule in initiative, planning, creation and metadata updates. Refinement reads
+saved assignments back by that identity and narrows choices per work item.
+Unavailable or ambiguous identity authority cannot certify an assignment.
+
+A terminal failed run can contain completed earlier operations. Read its
+original events and current canonical fields before reviewing a replacement
+input. Preserve that failed record and the original reviewed draft; never
+report rollback or completion merely because one later metadata update failed.

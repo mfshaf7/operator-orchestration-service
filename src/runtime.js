@@ -44,6 +44,7 @@ import { createRefinementService } from "./refinement/service.js";
 import { createRefinementSourceAdapter } from "./refinement/source-adapter.js";
 import { createRefinementTemporalAdapter } from "./refinement/temporal-adapter.js";
 import { createCatalogBackendClient } from "./catalog/http-client.js";
+import { catalogPrincipalBindings } from "./openproject-principal-identity.js";
 import { createCatalogService } from "./catalog/service.js";
 import { createMembershipService } from "./catalog/membership-service.js";
 import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
@@ -122,6 +123,10 @@ export function createRuntime({
     config: config.openProject,
     fetchImpl,
     requestImpl,
+    principalReader: config.catalog.backendBaseUrl ? async () => catalogPrincipalBindings(
+      await createCatalogBackendClient({ baseUrl: config.catalog.backendBaseUrl,
+        hostHeader: config.catalog.hostHeader, token: config.catalog.backendToken }).project(),
+    ) : null,
   });
   const wgcfArtReadinessClient = config.wgcf.artReadinessBaseUrl
     ? createWgcfArtReadinessClient({

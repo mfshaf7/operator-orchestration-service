@@ -1,4 +1,5 @@
 import http from "node:http";
+import { allowedPrincipalLink, allowedPrincipalLogins, principalLoginForLink } from "./openproject-principal-identity.js";
 import https from "node:https";
 import { preservePrototypeDeliveryTargetMarker } from "./delivery-ingress/prototype-adapter.js";
 
@@ -1443,7 +1444,7 @@ async function buildAllowedValueLinkMap({
   return new Map();
 }
 
-async function resolveAllowedValueLink({
+async function resolveAllowedValueLinkFromForm({
   baseUrl,
   executeRequest,
   fieldNames,
@@ -1451,6 +1452,7 @@ async function resolveAllowedValueLink({
   requestHeaders,
   value,
   fieldLabel,
+  principalReader,
 }) {
   const normalizedValue = normalizeStringValue(value);
   if (!normalizedValue) {
@@ -1467,7 +1469,13 @@ async function resolveAllowedValueLink({
     formPayload,
     requestHeaders,
   });
-  const resolved = hrefMap.get(normalizedValue.toLowerCase());
+  let resolved = hrefMap.get(normalizedValue.toLowerCase());
+  if (principalReader && ["assignee", "responsible"].includes(fieldLabel)) {
+    const bindings = await principalReader();
+    if (bindings.some((entry) => entry.login === normalizedValue)) {
+      resolved = allowedPrincipalLink(hrefMap, bindings, normalizedValue);
+    }
+  }
   if (!resolved) {
     const extraGuidance =
       fieldLabel === "assignee"
@@ -2839,7 +2847,10 @@ export function createOpenProjectClient({
   config,
   requestImpl,
   fetchImpl,
+  principalReader = null,
 } = {}) {
+  const resolveAllowedValueLink = (options) =>
+    resolveAllowedValueLinkFromForm({ ...options, principalReader });
   const executeRequest =
     requestImpl ?? fetchImpl ?? createNodeRequestImpl();
 
@@ -6229,6 +6240,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     },
 
     async getRefinementDeliveryTree({ recordId }) {
+      let principals = null;
+      if (principalReader) {
+        try { principals = await principalReader(); } catch { /* Missing identity authority cannot produce assignment choices. */ }
+      }
       const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
       const sourcePayload = state.workPackagesById.get(recordId);
       if (!sourcePayload || !Number.isInteger(sourcePayload.lockVersion)) {
@@ -6270,6 +6285,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             const schema = entry?.schema;
             let kind = definition.fieldKind;
             if (["String", "Date", "User"].includes(schema?.type)) kind = "short_text";
+            if (role && principalReader && schema?.type === "User") kind = "select";
             else if (schema?.type === "Formattable") kind = "long_text";
             else if (["Integer", "Float"].includes(schema?.type)) kind = "number";
             else if (schema?.type === "CustomOption") kind = "select";
@@ -6279,10 +6295,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
                 baseUrl: config.baseUrl, executeRequest: executeRequestWithRetry,
                 fieldNames: [entry.key], formPayload: form, requestHeaders,
               });
-              allowedValues = [...new Set([...options.values()].map((option) => option.title))].sort();
+              allowedValues = role && principalReader
+                ? allowedPrincipalLogins(options, principals ?? [])
+                : [...new Set([...options.values()].map((option) => option.title))].sort();
             }
-            node[definition.backendField] = role === "assignee" ? workPackageAssigneeLogin(payload)
-              : role === "responsible" ? workPackageResponsibleLogin(payload)
+            node[definition.backendField] = role
+              ? principalLoginForLink(principals ?? [], payload._links?.[role] ?? (role === "assignee" ? payload._links?.assignedTo : null)) ??
+                (role === "assignee" ? workPackageAssigneeLogin(payload) : workPackageResponsibleLogin(payload))
               : readCustomFieldValueFromSchemaEntry(payload, entry);
             metadata[definition.backendField] = {
               writable: Boolean(schema) && schema.writable !== false,

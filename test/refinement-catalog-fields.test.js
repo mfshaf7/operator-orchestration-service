@@ -1,3 +1,4 @@
+import { catalogPrincipalBindings } from "../src/openproject-principal-identity.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { refinementCatalogMetadata, refinementFieldValueError, refinementSelectedField } from "../src/refinement/catalog-fields.js";
@@ -62,4 +63,15 @@ test("integer fields reject truncation and unsafe values while decimal fields re
  for(const value of ["0","12"])assert.equal(refinementFieldValueError(field,value),null);
  for(const value of ["1.5","1e3"])assert.equal(refinementFieldValueError({...field,numeric_type:"decimal"},value),null);
  assert.match(refinementFieldValueError({...field,numeric_type:"decimal"},"0x10"),/number/);
+});
+
+
+test("Catalog principal bindings use scoped native identity evidence, rejecting ambiguous aliases",()=>{
+ const catalog=catalogFixture();const principal=catalog.values.find(value=>value.catalog_item_id==='catalog-principal-lookup');
+ principal.label='A display label is not an account identity';principal.evidence_refs=['openproject://users/42'];
+ assert.deepEqual(catalogPrincipalBindings(catalog),[{login:'known-user',href:'/api/v3/users/42'}]);
+ principal.evidence_refs=['https://foreign.test/api/v3/users/42'];assert.deepEqual(catalogPrincipalBindings(catalog),[]);
+ principal.evidence_refs=['openproject://users/42'];principal.lifecycle_state='retired';assert.deepEqual(catalogPrincipalBindings(catalog),[]);
+ principal.lifecycle_state='active';catalog.values.push({...principal,catalog_value_id:'ambiguous',evidence_refs:['openproject://users/99']});
+ assert.throws(()=>catalogPrincipalBindings(catalog),/ambiguous/);
 });
