@@ -514,7 +514,7 @@ export function createProposalWorkflowService({
     return events;
   }
 
-  function projectionFromRecord(record, events = []) {
+  function projectionFromRecord(record, events = [], state = parseProposalState(record.workflowState, record.updatedAt ?? new Date().toISOString())) {
     const historyObserved = events !== null;
     events ??= [];
     if (!Number.isInteger(record.lockVersion)) {
@@ -524,10 +524,6 @@ export function createProposalWorkflowService({
         "Canonical Proposal record does not expose a lock version.",
       );
     }
-    const state = parseProposalState(
-      record.workflowState,
-      record.updatedAt ?? new Date().toISOString(),
-    );
     const lastEvent = events.at(-1) ?? null;
     const repositoryResolution = [
       ...(state.repository_resolution ? [state.repository_resolution] : []),
@@ -566,6 +562,31 @@ export function createProposalWorkflowService({
       last_event_ref: lastEvent?.event_id ?? null,
       updated_at: record.updatedAt ?? state.updated_at,
     });
+  }
+
+  async function projectionForRegister(record) {
+    const state = parseProposalState(record.workflowState, record.updatedAt ?? new Date().toISOString());
+    const resolution = state.repository_resolution;
+    const gate = state.route?.source_custody;
+    if (!resolution || gate?.repository_gate_state !== "resolved" ||
+        gate.owner !== resolution.resolved_owner || gate.source_ref !== resolution.resolved_repo_ref) {
+      return projectionFromRecord(record, null, state);
+    }
+    // The source can commit before the journal entry is recorded. Find the
+    // exact receipt without sending the activity or fetching it for other rows.
+    let page = 1;
+    const recordId = Number(record.ideaId.slice(5));
+    for (let index = 0; index < MAX_ACTIVITY_PAGES && page !== null; index += 1) {
+      const result = await readEventPage({ page, recordId });
+      const event = result.events.find(item => item.event_type === "repository-gate-resolved" &&
+        item.proposal_id === record.ideaId && item.repository_resolution?.receipt_ref === resolution.receipt_ref);
+      if (event) return { ...projectionFromRecord(record, [event], state), last_event_ref: null };
+      page = result.nextPage;
+    }
+    if (page !== null) {
+      throw new HttpError(502, "proposal_history_limit_exceeded", "Proposal confirmation history exceeds the bounded OOS scan limit.");
+    }
+    return projectionFromRecord(record, [], state);
   }
 
   async function getRecordAndEvents(proposalId, onFirstPage = null) {
@@ -1223,7 +1244,7 @@ export function createProposalWorkflowService({
     getProjection,
     getSnapshot,
     async getRegister({callerId,correlationId,...selection}={}) {
-      const result=await createProposalRegisterReader({openProjectClient,projectRecord:projectionFromRecord})(selection);
+      const result=await createProposalRegisterReader({openProjectClient,projectRecord:projectionForRegister})(selection);
       assertProposalContract("register-result.schema.json",result,"Proposal register");
       audit?.emit({event_type:"proposal.register.read",caller:{id:callerId},correlation_id:correlationId,status:"succeeded",record_count:result.records.length,source_total:result.source_total,has_more:result.next_cursor!==null});
       return result;
