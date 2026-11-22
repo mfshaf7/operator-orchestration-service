@@ -585,6 +585,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/workspace-inventory/promotions/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }
+  if (pattern.startsWith("/v1/workspace-inventory/repository-migrations/")) {
+    return pattern.replace("[a-z0-9][a-z0-9._-]{0,185}", "{name}");
+  }
   if (pattern.startsWith("/v1/workspace-inventory/lifecycle/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }

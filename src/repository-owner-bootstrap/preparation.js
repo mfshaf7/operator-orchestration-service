@@ -7,6 +7,10 @@ import { qualifiedOwnerSource, nativeSourceAuthorityRef } from "./private-source
 
 const fail = (message, status = 409) => { throw new HttpError(status, "repository_owner_bootstrap_preparation_invalid", message); };
 const fields = ["owner_repo", "custody_request_id", "evidence_profile", "application_markers", "with_ci", "decision_ref"];
+const verificationInspectionPaths = [
+  ".github/CODEOWNERS", ".github/pull_request_template.md", "AGENTS.md", "README.md",
+  "contracts/delivery-art-work-session/evidence-profile.json",
+];
 const selected = authority => ({
   ...(authority.canonical_authority?.kind === "internal-instance-record" ? nativeSourceAuthorityRef(authority) : {}),
   ...(authority.inventory_entry_ref ? { inventory_entry_ref: authority.inventory_entry_ref, verification_setup_eligible: authority.verification_setup_eligible } : {}), owner_repo: authority.owner_repo, intake_entry_ref: authority.intake_entry_ref,
@@ -70,7 +74,9 @@ export function createRepositoryOwnerBootstrapPreparation({ callerOperatorBindin
       // missing, mismatched, active/retired, out of scope or privileged.
       const before = assertOwnerSetupAuthority(await authority(), operation);
       if (before.owner_repo !== input.owner_repo || !/^sha256:[0-9a-f]{64}$/.test(before.custody_receipt_digest ?? "")) fail("The proposed authority does not bind this exact selected custody owner.");
-      const source = await sourceReader.inspect({ providerRepository: before.provider_repository, paths: sourceOwnerBootstrapPaths(input.with_ci),
+      const inspectOnly = operation === "configure-verification" && input.evidence_profile === null && input.with_ci === false;
+      const paths = inspectOnly ? verificationInspectionPaths : sourceOwnerBootstrapPaths(input.with_ci);
+      const source = await sourceReader.inspect({ providerRepository: before.provider_repository, paths,
         ownerAuthority: before, callerId, operatorId, operation });
       if (!qualifiedOwnerSource(source, before)) fail("Source inspection requires the exact main branch and a verified private-access connection where applicable.");
       const existing = inspectExistingSourceOwnerControls({ ownerRepo: input.owner_repo, fetchedBase: source.fetched_base, observedFiles: source.observed_files });

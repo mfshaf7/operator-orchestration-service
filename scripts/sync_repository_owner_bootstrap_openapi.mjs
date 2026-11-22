@@ -168,6 +168,14 @@ const paths = {
   "/v1/repository-owner-bootstrap/requests/{request_id}/recover": { post: post("Recover", "OwnerBootstrapRecover", { command: control, source_intent_ref: source }) },
   "/v1/repository-owner-bootstrap/requests/{request_id}/publish": { post: post("Publish", "OwnerBootstrapPublish", { command: { ...control, expected_pull_request: null }, source_intent_ref: source }) },
 };
+paths["/v1/repository-owner-bootstrap/preparations"].post.responses["429"] = {
+  description: "The GitHub public read limit was reached. The optional retry time identifies when another provider check can run.",
+  content: { "application/json": { schema: ref("ErrorResponse"), example: {
+    error: "repository_owner_bootstrap_provider_throttled",
+    message: "GitHub temporarily limited public repository reads.",
+    details: { retry_at: "2026-11-22T14:00:00.000Z" },
+  } } },
+};
 for (const action of ["review", "merge", "close"]) paths[`/v1/repository-owner-bootstrap/requests/{request_id}/${action}`] = { post: post(action[0].toUpperCase() + action.slice(1), "OwnerBootstrapControl",
   { command: { ...control, expected_pull_request: { url: "https://github.com/example-organization/example-owner-source/pull/1", head_commit: base } } }) };
 
