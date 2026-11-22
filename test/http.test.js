@@ -5065,7 +5065,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     url: "/v1/delivery-work-items/1024/work-session/context",
   });
   const realizationStatus = await executeRequest(app, {
-    headers,
+    headers: { ...headers, accept: "application/vnd.mfshaf7.console-source-projection+json; version=1" },
     method: "GET",
     url: "/v1/delivery-work-items/1024/work-session/realization",
   });
@@ -5133,6 +5133,8 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   assert.equal(command.statusCode, 200);
   assert.equal(context.statusCode, 200);
   assert.equal(realizationStatus.statusCode, 200);
+  assert.equal(realizationStatus.body.projection.state, "not-started");
+  assert.equal(realizationStatus.body.binding.record_ref, "openproject://work_packages/1024/source-realization");
   assert.equal(realizationStart.statusCode, 200);
   assert.equal(merge.statusCode, 200);
   assert.equal(reconstruct.statusCode, 200);

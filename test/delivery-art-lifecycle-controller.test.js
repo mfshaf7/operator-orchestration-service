@@ -1084,6 +1084,38 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   );
 });
 
+test("pre-merge lifecycle and evidence projection agree on validation-only owners", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const seed = fixture("review-packet-merge-ready.valid.json");
+  const repo = seed.landing_unit.repos[0];
+  const source = {
+    base_commit: repo.base_commit, base_ref: repo.base_ref, branch: repo.branch,
+    changed_files: repo.changed_files, head_commit: repo.head_commit,
+    repo_name: repo.repo_name, state: "pushed",
+  };
+  const evidencePath = `${repoRoot}/.art/review-packets/evidence.json`;
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]: architecture,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  Object.assign(setup.source, source);
+  Object.assign(setup.pullRequest, { head_commit: repo.head_commit, state: "open", url: repo.pr_url });
+  const controller = createDeliveryArtLifecycleController(setup);
+  for (const mode of ["unconfigured", "manual", "automated", null]) {
+    const acquisition = { state: "ready", ...(mode && { application_verification: { mode } }) };
+    const { evidence_document: document } = projectDeliveryArtReviewEvidence({
+      architecture, currentDocument: { acquisition, evidence: { ...seed.evidence, tests: [] }, exceptions: seed.exceptions },
+      source, workStart,
+    });
+    setup.files.set(evidencePath, document);
+    const result = await controller.inspect(finalizationPlan);
+    assert.equal(result.facts.evidence_projection, "current");
+    assert.equal(result.facts.evidence, ["manual", "unconfigured"].includes(mode) ? "ready" : "incomplete");
+  }
+});
+
 test("same-head evidence revision obtains new immutable custody without changing source or prior proof", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const architecture = fixture("architecture-packet.valid.json");

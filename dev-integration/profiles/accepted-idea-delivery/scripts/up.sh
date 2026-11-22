@@ -13,6 +13,16 @@ validate_work_design_composition_context
 validate_refinement_catalog_composition_context
 validate_agent_console_composition_context
 
+wgcf_implementation_ref=""
+if [[ "${OOS_WORKSPACE_INTAKE_ENABLED:-false}" == "true" &&
+  "${OOS_WORKSPACE_INVENTORY_ENABLED:-false}" == "true" ]]; then
+  wgcf_implementation_ref="$(repo_state_value workspace-governance-control-fabric head_sha)"
+  if [[ ! "${wgcf_implementation_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "refused: the selected WGCF source is not bound to an exact Git commit." >&2
+    exit 2
+  fi
+fi
+
 # Validate before any Helm/Kubernetes mutation. The mounted path is fixed; the
 # host-side bundle is checked with the same role-aware runtime validator.
 orchestration_worker_replicas="$(
@@ -215,11 +225,6 @@ extract_marked_json \
   "${OPENPROJECT_IDENTITY_JSON}"
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
-wgcf_implementation_ref="$(repo_state_value workspace-governance-control-fabric head_sha)"
-if [[ ! "${wgcf_implementation_ref}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "refused: the selected WGCF source is not bound to an exact Git commit." >&2
-  exit 2
-fi
 
 WGCF_WORKSPACE_OPERATIONS_IMPLEMENTATION_REF="${wgcf_implementation_ref}" \
 python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_ID}" "${BROKER_SHARED_SECRET}" <<'PY'

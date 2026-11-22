@@ -1,5 +1,14 @@
 // Read-only navigation from current ART facts, never work-start eligibility.
 // Whole-package navigation must survive partial scopes and the final child close.
+export function preparedForPIPlanning(node) {
+  return ["new", "ready"].includes(node.status) && (
+    node.ready_contract_satisfied === true ||
+    node.ready_contract_applicable === true &&
+      Array.isArray(node.ready_contract_missing_fields) &&
+      node.ready_contract_missing_fields.every(field => field === "Iteration")
+  );
+}
+
 export function deliveryExecutionNavigation(root) {
   const nodes = (root.children ?? []).flatMap(function walk(node) {
     return [node, ...(node.children ?? []).flatMap(walk)];
@@ -9,6 +18,8 @@ export function deliveryExecutionNavigation(root) {
   const open = leaves.filter(node => !terminal(node));
   const active = nodes.filter(node => node.status === "in-progress");
   const prepared = open.filter(node => ["new", "ready"].includes(node.status) && node.ready_contract_satisfied === true);
+  const planningPrepared = nodes.filter(node =>
+    ["Feature", "User story", "Defect", "Task"].includes(node.type) && preparedForPIPlanning(node));
   const blocked = nodes.filter(node => !terminal(node) && (node.blocked || node.dependency_blocked || node.status === "blocked"));
   const finishedScope = leaves.length > 0 && leaves.every(terminal);
   const executionSeen = leaves.length > 0 && ["in-progress", "blocked", "parked"].includes(root.status) ||
@@ -27,6 +38,7 @@ export function deliveryExecutionNavigation(root) {
     closeout_pending: closeoutPending,
     active_work_item_ids: active.map(node => node.id),
     prepared_work_item_ids: prepared.map(node => node.id),
+    planning_prepared_work_item_ids: planningPrepared.map(node => node.id),
     blocked_work_item_ids: blocked.map(node => node.id),
     // Includes remaining backlog: it can be refined without resetting work
     // already underway. No receipt or admission is fabricated for older work.

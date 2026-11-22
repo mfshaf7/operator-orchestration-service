@@ -159,8 +159,12 @@ intake records whose typed active value validates against the target inventory.
 It cannot invent an owner, approval, lineage, or active identity, and an
 identity cannot appear in both candidate and active-record sets.
 
-Provider access requires a Platform-mounted GitHub installation token limited
-to the exact Workspace Governance repository. PATs, ambient `gh` credentials,
+The commissioned Console reads the registry from the Platform-managed
+Workspace Governance snapshot. The broker verifies its freshness and exact
+revision before returning the register. A stale snapshot requires a Platform
+refresh. Publishing and reviewing Git-backed changes use the existing
+Platform-mounted GitHub installation token for the exact Workspace Governance
+repository. PATs, ambient `gh` credentials,
 redirects, broader repository selection, and unbounded responses are denied.
 Tokens never enter workflow state, review text, logs, or receipts.
 

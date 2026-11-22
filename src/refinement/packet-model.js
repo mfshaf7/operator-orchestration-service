@@ -1,16 +1,12 @@
 import { DELIVERY_PLANNING_WORKFLOW } from "../delivery-taxonomy.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { assertRefinementPacket } from "./contracts.js";
-import { isRefinementPlanningField, refinementPlanningFieldRequired } from "./planning-fields.js";
 
 const GOVERNANCE_ROUTE =
   "POST /v1/delivery-initiatives/{delivery_id}/governance";
 const BULK_UPDATE_ROUTE = "POST /v1/delivery-work-items/bulk-update";
-const PLAN_APPLY_ROUTE = "POST /v1/delivery-initiatives/{delivery_id}/plan/apply";
-const PLANNING_FIELDS = new Set(["target_pi", "iteration"]);
 
 const GOVERNANCE_FIELDS = [
-  field("target-pi", "target_pi", "Target PI", "short_text", true),
   field("owner-repo", "owner_repo", "Owner Repo", "short_text", true),
   field("initiative-family", "initiative_family", "Initiative Family", "select", false),
   field("lineage-role", "lineage_role", "Lineage Role", "select", false),
@@ -23,10 +19,8 @@ const GOVERNANCE_FIELDS = [
 ];
 const CONTRACT_TYPES = ["Feature", "User story", "Defect", "Task", "PI Objective"];
 const WORK_ITEM_FIELDS = [
-  field("target-pi", "target_pi", "Target PI", "short_text", true),
   field("owner-repo", "owner_repo", "Owner Repo", "short_text", true),
   field("delivery-team", "delivery_team", "Delivery Team", "short_text", true),
-  field("iteration", "iteration", "Iteration", "short_text", true),
   field("assignee", "assignee_login", "Assignee", "short_text", true),
   field("responsible", "responsible_login", "Responsible", "short_text", true),
   field("classification", "execution_classification", "Execution Classification", "select", true, ["Feature", "User story"]),
@@ -34,22 +28,10 @@ const WORK_ITEM_FIELDS = [
   field("ready", "definition_of_ready", "Definition of Ready", "long_text", true, CONTRACT_TYPES),
   field("done", "definition_of_done", "Definition of Done", "long_text", true, CONTRACT_TYPES),
   field("nfr", "nfr_category", "NFR Category", "select", false, ["Feature", "User story", "Defect", "Task"]),
-  field("objective-type", "pi_objective_type", "PI Objective Type", "select", true, ["PI Objective"]),
-  field("objective-planned-value", "planned_business_value", "Planned Business Value", "number", true, ["PI Objective"]),
-  field("actual-value", "actual_business_value", "Actual Business Value", "number", false, ["PI Objective"]),
-  field("objective-review", "pi_objective_review_outcome", "PI Objective Review Outcome", "select", false, ["PI Objective"]),
   field("roam", "roam_state", "ROAM State", "select", true, ["Risk"]),
   field("risk-owner", "risk_owner", "Risk Owner", "short_text", true, ["Risk"]),
   field("risk-review", "risk_review_date", "Risk Review Date", "short_text", true, ["Risk"]),
   field("risk-disposition", "risk_disposition", "Risk Disposition", "long_text", true, ["Risk"]),
-  field(
-    "planned-business-value",
-    "planned_business_value",
-    "Planned Business Value",
-    "number",
-    false,
-    ["Epic", "Feature", "User story", "Defect", "Task", "Risk", "Milestone"],
-  ),
 ];
 
 export const REFINEMENT_METADATA_FIELDS = [
@@ -66,10 +48,9 @@ function stringValue(value) {
 }
 
 function routeBinding(definition, target) {
-  const planning = target === "work_item" && PLANNING_FIELDS.has(definition.backendField);
   return {
-    operation_kind: target === "initiative" ? "governance" : planning ? "plan_apply" : "bulk_update",
-    oos_route: target === "initiative" ? GOVERNANCE_ROUTE : planning ? PLAN_APPLY_ROUTE : BULK_UPDATE_ROUTE,
+    operation_kind: target === "initiative" ? "governance" : "bulk_update",
+    oos_route: target === "initiative" ? GOVERNANCE_ROUTE : BULK_UPDATE_ROUTE,
     payload_key: definition.backendField,
     target,
   };
@@ -132,25 +113,6 @@ function fieldProjection(definition, nodes, target, metadata) {
   };
 }
 
-function workItemFieldProjections(definition, nodes, metadata) {
-  if (!isRefinementPlanningField({ backend_field: definition.backendField })) {
-    return [fieldProjection(definition, nodes, "work_item", metadata)].filter(Boolean);
-  }
-  // Existing v1 fields already have explicit target ids and required markers.
-  // Partition their targets instead of imposing one obligation on every branch.
-  return [true, false].flatMap((required) => {
-    const selected = nodes.filter((node) =>
-      refinementPlanningFieldRequired(node, definition.backendField) === required,
-    );
-    const projected = fieldProjection({
-      ...definition,
-      fieldKey: definition.fieldKey + (required ? "" : "-backlog"),
-      required,
-    }, selected, "work_item", metadata);
-    return projected ? [projected] : [];
-  });
-}
-
 function refinementTreeNode(node) {
   return {
     id: String(node.id),
@@ -180,9 +142,9 @@ export function buildRefinementPacket({
     fieldProjection(definition, [deliveryTree], "initiative", fieldMetadata),
   ).filter(Boolean);
   const itemTargets = workItems.length > 0 ? workItems : [deliveryTree];
-  const workItemFields = WORK_ITEM_FIELDS.flatMap((definition) =>
-    workItemFieldProjections(definition, itemTargets, fieldMetadata),
-  );
+  const workItemFields = WORK_ITEM_FIELDS.map((definition) =>
+    fieldProjection(definition, itemTargets, "work_item", fieldMetadata),
+  ).filter(Boolean);
   const requiredFields = [...governanceFields, ...workItemFields].filter(
     (entry) => entry.required,
   );
@@ -190,9 +152,6 @@ export function buildRefinementPacket({
     (entry) => entry.status === "complete",
   );
   const receiptId = workDesignCompletion.event.application_id;
-  const planningFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "plan_apply");
-  const bulkFields = workItemFields.filter((entry) => entry.route_binding.operation_kind === "bulk_update");
-  const optionalPlanning = (entry) => isRefinementPlanningField(entry) && !entry.required;
   const draftGroups = [
     {
       group_id: `${packageRef}-governance`,
@@ -203,19 +162,13 @@ export function buildRefinementPacket({
     {
       group_id: `${packageRef}-work-items`,
       title: "Work Item Metadata",
-      summary: "Review item-scoped metadata before the package enters execution control.",
-      fields: workItemFields.filter((entry) => !optionalPlanning(entry)),
-    },
-    {
-      group_id: `${packageRef}-backlog-planning`,
-      title: "Backlog Planning",
-      summary: "Future scope may retain blank PI and blank or backlog Iteration.",
-      fields: workItemFields.filter(optionalPlanning),
+      summary: "Prepare the work items for PI Planning.",
+      fields: workItemFields,
     },
   ].filter((group) => group.fields.length > 0);
   const applyPlan = {
-    summary: "Apply reviewed governance, coordinated PI planning and ID-scoped metadata through existing Delivery authorities.",
-    expected_routes: [GOVERNANCE_ROUTE, PLAN_APPLY_ROUTE, BULK_UPDATE_ROUTE],
+    summary: "Save the reviewed preparation. Use PI Planning to commit work and assign iterations.",
+    expected_routes: [GOVERNANCE_ROUTE, BULK_UPDATE_ROUTE],
     operations: [
       {
         operation_id: `${packageRef}-governance`, kind: "governance",
@@ -223,18 +176,11 @@ export function buildRefinementPacket({
         target: workDesignCompletion.event.result.target.delivery_ref, oos_route: GOVERNANCE_ROUTE, status: "planned",
       },
       {
-        operation_id: `${packageRef}-planning`, kind: "plan_apply",
-        label: "Apply Coordinated PI Planning",
-        detail: "Apply accepted Target PI and Iteration to the existing hierarchy; preserve taxonomy and current statuses.",
-        target: "Reviewed ART planning scope", oos_route: PLAN_APPLY_ROUTE,
-        status: workItems.length > 0 && planningFields.length > 0 ? "planned" : "skipped",
-      },
-      {
         operation_id: `${packageRef}-work-items`, kind: "bulk_update",
         label: "Update Work Item Metadata",
         detail: "Apply accepted non-planning metadata by explicit work-item id without reshaping the tree.",
         target: "Reviewed ART work items", oos_route: BULK_UPDATE_ROUTE,
-        status: workItems.length > 0 && bulkFields.length > 0 ? "planned" : "skipped",
+        status: workItemFields.length > 0 ? "planned" : "skipped",
       },
     ],
   };
@@ -278,7 +224,7 @@ export function buildRefinementPacket({
       {
         gate_id: `${packageRef}-metadata-review`,
         label: "Metadata Review",
-        oos_route: (bulkFields[0] ?? planningFields[0] ?? governanceFields[0])?.route_binding.oos_route ?? BULK_UPDATE_ROUTE,
+        oos_route: (workItemFields[0] ?? governanceFields[0])?.route_binding.oos_route ?? BULK_UPDATE_ROUTE,
         detail: metadataComplete
           ? "Every required metadata target has a current value."
           : "Required metadata still needs an operator decision.",

@@ -38,6 +38,8 @@ OOS performs this order:
 
 `201` means a new Delivery Epic was created. `200` means the exact application
 was replayed or an incomplete application was safely repaired.
+The target version is OpenProject's native lock version. A newly created Epic
+can start at version `0`, which is retained in the event and returned receipt.
 
 ## Read
 

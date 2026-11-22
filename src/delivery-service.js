@@ -1635,7 +1635,14 @@ export function createDeliveryService({
           status: result.continuationContext?.target_item?.status ?? "unknown",
         });
 
-        return toWorkItemContinuationContextProjection(result);
+        const projection = toWorkItemContinuationContextProjection(result);
+        // Local custody answers this even when the source executor is offline or the item has no repository.
+        return {
+          ...projection,
+          source_session_present: workSessionStore
+            ? workSessionStore.readByAlias(projection.work_item_id) !== null
+            : null,
+        };
       } catch (error) {
         if (error instanceof OpenProjectError && error.errorClass === "not_found") {
           return null;
@@ -2266,6 +2273,7 @@ export function createDeliveryService({
       subject,
       targetPi,
       type,
+      workNote,
       wsjfJobSize,
       wsjfRiskReductionOpportunityEnablement,
       wsjfTimeCriticality,
@@ -2307,6 +2315,8 @@ export function createDeliveryService({
           subject,
           targetPi,
           type,
+          workNote,
+          workNoteAuthor: callerId,
           wsjfJobSize,
           wsjfRiskReductionOpportunityEnablement,
           wsjfTimeCriticality,
@@ -2379,6 +2389,7 @@ export function createDeliveryService({
       successCriteria,
       systemDemoEvidence,
       targetPi,
+      workNote,
     }) {
       const deliveryRecordId = parseDeliveryId(recordId);
       if (!deliveryRecordId) {
@@ -2406,6 +2417,8 @@ export function createDeliveryService({
           successCriteria,
           systemDemoEvidence,
           targetPi,
+          workNote,
+          workNoteAuthor: callerId,
         });
 
         audit.emit({

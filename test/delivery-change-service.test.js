@@ -109,6 +109,7 @@ function harness({
   catalogFailure = false,
   deliveryFailure = false,
   deliveryReadbackMismatch = false,
+  lostWriteAcknowledgement = false,
   terminalEventFailure = false,
 } = {}) {
   const calls = [];
@@ -162,6 +163,7 @@ function harness({
         calls.push({ operation: "revise", input });
         if (deliveryFailure) throw new Error("delivery failed");
         sourceIndex = 1;
+        if (lostWriteAcknowledgement) throw new Error("Write acknowledgement unavailable");
         return { work_item_id: input.workItemId, changes_applied: { subject: true } };
       },
       async updateDeliveryInitiative(input) {
@@ -217,6 +219,19 @@ test("Delivery change applies once and replays its durable event", async () => {
   assert.equal(target.activities.length, 2);
 });
 
+test("Unconfirmed Execution writes with a changed source require work structure inspection", async () => {
+  const target = harness({ lostWriteAcknowledgement: true });
+  const input = { callerId: "governance-operations-console", deliveryId: "delivery-886", command: command() };
+  const first = await target.service.applyCommand(input);
+  const replay = await target.service.applyCommand(input);
+  assert.equal(first.status, "partial_failure");
+  assert.equal(first.next_action.code, "inspect_delivery_package");
+  assert.equal(first.after.source_revision, revisions[1]);
+  assert.equal(replay.status, "partial_failure");
+  assert.equal(replay.replayed, true);
+  assert.equal(target.calls.filter(call => call.operation === "revise").length, 1);
+});
+
 test("Delivery change rejects a stale package before mutation", async () => {
   const target = harness();
   await assert.rejects(
@@ -242,6 +257,24 @@ test("root revision uses the native initiative writer once and preserves unsuppo
   const denied=harness();const rejected=await denied.service.applyCommand({...input,command:command({operation:{type:"revise_work_item",payload:{work_item_id:"work-item-886",changes:{iteration:"PI-2026-04 / Iteration 1"}}}})});
   assert.equal(rejected.status,"rejected");assert.equal(rejected.before.source_revision,rejected.after.source_revision);
   assert.equal(denied.calls.some(c=>c.operation==="revise-initiative"||c.operation==="revise"),false);
+});
+
+test("Reviewed note-only revisions and additions reach the native work-note path", async () => {
+  const examples = [
+    { type: "revise_work_item", payload: { work_item_id: "work-item-1028", changes: {}, work_note: "Confirm the release window." } },
+    { type: "revise_work_item", payload: { work_item_id: "work-item-886", changes: {}, work_note: "Capture the Epic decision." } },
+    { type: "add_work_item", payload: { parent_work_item_id: "work-item-1028", type: "Task", subject: "Prepare rollout", work_note: "Keep the release checklist handy." } },
+  ];
+  for (const [index, operation] of examples.entries()) {
+    const target = harness();
+    const result = await target.service.applyCommand({
+      callerId: "governance-operations-console", deliveryId: "delivery-886", command: command({ operation }),
+    });
+    assert.equal(result.status, "applied");
+    const write = target.calls.find(call => call.operation === ["revise", "revise-initiative", "add"][index]);
+    assert.equal(write.input.workNote, operation.payload.work_note);
+    assert.equal(write.input.subject, operation.payload.subject);
+  }
 });
 
 test("Repository request routes to Repository without mutating Delivery", async () => {

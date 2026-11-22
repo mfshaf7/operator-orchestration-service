@@ -142,11 +142,18 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
   return {
     async registry() {
       try {
-        const revision = await provider.mainRevision();
+        const readCheckpoint = () => requireRecordAuthorityFreshness({
+          authorityRoot, git, ownerRepo: "workspace-governance", clock,
+        });
+        const checkpoint = await readCheckpoint();
+        const revision = checkpoint?.record_revision ?? await provider.mainRevision();
         return await sandbox(revision, async ({ directory, source }) => {
           const result = await ownerCommand("registry", source, directory, {});
           if (await git(source, "status", "--short")) {
             throw inventoryError("source_change_invalid", "Workspace Inventory registry inspection must not modify authority source.", 503);
+          }
+          if (checkpoint && (await readCheckpoint()).record_revision !== revision) {
+            throw inventoryError("authority_unavailable", "Workspace Inventory changed while loading the register. Read the current register again.", 503);
           }
           return { ...result, authority_revision: revision };
         });

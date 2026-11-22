@@ -172,6 +172,7 @@ test("representative broker responses conform to documented response schemas", a
         delivery_id: "delivery-38",
         delivery_record_ref: "openproject://work_packages/38",
         delivery_record_system: "openproject",
+        source_session_present: false,
         work_item_id: "work-item-177",
         work_item_record_ref: "openproject://work_packages/177",
         work_item_record_system: "openproject",

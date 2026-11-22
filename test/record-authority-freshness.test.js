@@ -77,7 +77,7 @@ test("deployment checkpoint permits real Git record advancement, but denies expi
   const denied = () => assert.rejects(requireRecordAuthorityFreshness(options), { code: "record_authority_unavailable", statusCode: 503 });
   await denied();
   await writeFile(file, JSON.stringify(checkpoint));
-  await requireRecordAuthorityFreshness(options);
+  assert.deepEqual(await requireRecordAuthorityFreshness(options), checkpoint);
   assert.equal(await git(root, "status", "--porcelain"), "");
   assert.equal(await git(root, "rev-parse", "HEAD"), revision);
   for (const delta of [
@@ -110,4 +110,8 @@ test("every existing Studio and Workspace source adapter denies a missing commis
     await assert.rejects(client.state("prototype:sample"), (error) => error.statusCode === 503);
   }
   await assert.rejects(createPrototypeLandingSourceClient(options).records(), { code: "record_authority_unavailable" });
+  let writerCalls = 0;
+  const inventory = createWorkspaceInventorySourceClient({ ...options, provider: { mainRevision: async () => { writerCalls++; } } });
+  await assert.rejects(inventory.registry(), { code: "workspace_inventory_authority_unavailable" });
+  assert.equal(writerCalls, 0);
 });

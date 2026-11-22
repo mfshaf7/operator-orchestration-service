@@ -1,6 +1,7 @@
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { parseDeliveryId } from "../delivery-model.js";
 import { HttpError, OpenProjectError } from "../errors.js";
+import { confirmPIPlan, preparePIPlan } from "./pi-planning.js";
 import {
   assertDeliveryChangeCommand,
   assertDeliveryChangeError,
@@ -159,7 +160,8 @@ function mapFailure(error) {
   );
 }
 
-function nextActionFor(status, operationType) {
+function nextActionFor(status, operationType, effect) {
+  if (status === "rejected" && effect.error?.next_action) return effect.error.next_action;
   if (operationType === "request_repository") {
     return {
       code: "open_repository_operation",
@@ -168,16 +170,12 @@ function nextActionFor(status, operationType) {
     };
   }
   if (status === "partial_failure") {
+    if (operationType === "link_repository") {
+      return { code: "reconcile_repository_link", label: "Reconcile Repository Link", authority: "operator-orchestration-service" };
+    }
     return {
-      code: "reconcile_repository_link",
-      label: "Reconcile Repository Link",
-      authority: "operator-orchestration-service",
-    };
-  }
-  if (status === "rejected") {
-    return {
-      code: "prepare_compensating_command",
-      label: "Prepare Compensating Command",
+      code: "inspect_delivery_package",
+      label: operationType === "apply_pi_plan" ? "Inspect PI Plan" : "Inspect Current Work Structure",
       authority: "operator-orchestration-service",
     };
   }
@@ -197,6 +195,9 @@ function rollbackFor(status, operationType) {
       mode: "not_supported",
       reason: "Automatic inversion is rejected until an exact operation-specific inverse is proven.",
     };
+  }
+  if (status === "rejected") {
+    return { mode: "not_applicable", reason: "The rejected request has no confirmed Delivery change to undo." };
   }
   return {
     mode: "compensating_command_required",
@@ -296,6 +297,7 @@ export function createDeliveryChangeService({
           subject: payload.subject,
           targetPi: payload.target_pi,
           type: payload.type,
+          workNote: payload.work_note,
         });
       case "revise_work_item":
         if (workItemId(payload.work_item_id) === `work-item-${parseDeliveryId(command.delivery_id)}`) {
@@ -307,7 +309,7 @@ export function createDeliveryChangeService({
           const changes = mappedRevisionChanges(Object.fromEntries(Object.entries(payload.changes).filter(([key])=>key!=="clear_description")));
           if (payload.changes.clear_description === true) changes.description = null;
           return deliveryService.updateDeliveryInitiative({
-            ...changes,callerId,correlationId:command.command_id,recordId:command.delivery_id,
+            ...changes,callerId,correlationId:command.command_id,recordId:command.delivery_id,workNote:payload.work_note,
           });
         }
         return deliveryService.updateDeliveryWorkItem({
@@ -505,6 +507,7 @@ export function createDeliveryChangeService({
     );
     let effect = {};
     let status = "applied";
+    let dispatchUnconfirmed = false;
     if (acceptedProjection.source_revision !== before.source_revision) {
       status = "rejected";
       effect = {
@@ -525,6 +528,25 @@ export function createDeliveryChangeService({
         reason: "No exact automatic inverse is registered for the target event.",
         target_event_ref: command.operation.payload.target_event_ref,
       };
+    } else if (command.operation.type === "apply_pi_plan") {
+      try {
+        const payload = command.operation.payload;
+        const catalog = await catalogService.project({ callerId, correlationId: command.command_id });
+        const plan = await preparePIPlan({ payload, source: acceptedProjection.package, catalog,
+          loadPlanningFacts: ids => openProjectClient.readDeliveryPlanningFacts({ recordId, ids }) });
+        const result = await deliveryService.applyDeliveryPlan({
+          callerId, correlationId: command.command_id, recordId: deliveryId, plan, reconcileMissing: "ignore",
+        });
+        const readback = await sourceProjection(recordId, deliveryId, events);
+        if (!result || !confirmPIPlan(payload, readback.package.execution_tree)) {
+          throw new DeliveryChangeServiceError("backend_readback_incomplete", "Readback could not confirm the full PI plan.", { statusCode: 502 });
+        }
+        effect = { ...payload, delivery: result };
+      } catch (error) {
+        const observed = await sourceProjection(recordId, deliveryId, events);
+        status = observed.source_revision === before.source_revision ? "rejected" : "partial_failure";
+        effect = { error: mapFailure(error).toResponse() };
+      }
     } else if (command.operation.type === "link_repository") {
       const payload = command.operation.payload;
       let catalogResult = null;
@@ -575,10 +597,14 @@ export function createDeliveryChangeService({
           ).toResponse(),
         };
       }
+      dispatchUnconfirmed = status === "rejected";
     }
 
     const after = await sourceProjection(recordId, deliveryId, events);
-    const nextAction = nextActionFor(status, command.operation.type);
+    if (dispatchUnconfirmed && after.source_revision !== acceptedProjection.source_revision) {
+      status = "partial_failure";
+    }
+    const nextAction = nextActionFor(status, command.operation.type, effect);
     const receipt = {
       ref: `oos://delivery-change-receipts/${command.command_id}`,
       digest: canonicalDigest({

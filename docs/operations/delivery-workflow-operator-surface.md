@@ -61,6 +61,11 @@ That means:
 
 ## Planning Workflow
 
+In the Console, finish Work Design and record preparation in Refinement. Use
+PI Planning for the reviewed objective and dated assignments. Execution reads
+the saved assignments and still checks the exact selected work item before
+starting work. The Refinement runtime documents the preparation boundary.
+
 Broker planning-workflow metadata mirror:
 
 - [delivery-planning-workflow.json](../../src/delivery-planning-workflow.json)
@@ -951,9 +956,11 @@ the same completion-evidence rules used by landing-unit status and submit. All
 deterministic formatting issues are returned together while the packet remains
 repairable.
 
-After capability activation, the same `work close` command also retires only
-resources whose work-session manifest proves they were session-created. It
-does not introduce a second cleanup command. The controller verifies durable
+The implemented work-session resource retirement capability uses the same
+`work close` command to retire resources whose manifest proves they were
+session-created. The Workspace Governance contract records the original ART
+activation as historical evidence. Each installation uses the reviewed
+capability manifest, so its work packages do not need those historical items. The controller verifies durable
 ART closeout first, records explicit close intent, persists the cleanup plan,
 and then processes the owned worktree, local branch, remote branch, and any
 allowlisted managed session state in that order.
@@ -1493,6 +1500,11 @@ This is display metadata and grants no mutation or execution eligibility.
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
 - `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
+Continuation context reports whether the broker has a source session for the
+exact item. This is a custody read independent of the source executor and
+repository eligibility. A null value means custody is unavailable and the
+Console cannot accept non-source completion or PI Objective review.
+
 Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
 elaboration after PI commitment exists, or to record backlog `User story`
 children that remain explicitly non-executable. They are not intended to create
@@ -1948,7 +1960,9 @@ The overview includes a bounded, caller-bound summary of existing local work
 sessions without inspecting Git or a provider for each item. A recorded session
 keeps open work in Execution even when native ART status has not changed. The
 session must still be opened for current progress, readiness and permissions.
-No caller credentials, source paths or provider secrets are part of this summary.
+The current board retains the recorded session entry point after native work-item
+completion so the source closeout can finish. No caller credentials, source paths
+or provider secrets are part of this summary.
 
 Completing the last story, defect or task retains the open Epic under **Closeout
 Pending**. This means review is needed, including remaining parent work or
@@ -1974,6 +1988,30 @@ Non-source work continues through its separate completion and PI-review path.
 Confirmed effects and read-recovered changes refresh the connected board;
 opening a dialog is not a mutation and does not trigger a global refresh.
 Delivery runtime/profile binding and application preview remain separate work.
+
+In Edit Work Structure, select a new item's PI and iteration from Catalog. The
+parent's recorded PI is the default. Choose a dated iteration from that PI's
+saved calendar or an applicable registered program-wide placement. The broker
+checks new or changed leaf assignments before the native write. If the result
+cannot be confirmed and the package changed, reopen the work structure and
+inspect the saved result before retrying. Existing assignments remain readable
+when calendar dates are unavailable. The same saved-calendar check applies to
+new or changed assignments from direct create, update, bulk, repair, and plan
+writes. Existing assignments can be inspected and unrelated notes or edits can
+be saved before those calendars are reconciled. Keep backlog Features
+uncommitted until PI Planning.
+
+To extend a committed Epic, open its Feature board in PI Planning and choose
+**Add Feature**. Select the Feature's delivery target and a dated iteration for
+its first Story or Defect. The first item must finish by the delivery target.
+Review the Epic, choices, and descriptions before saving. The selected PI must
+already have an open objective under that Epic. The plan command adds only the
+reviewed Feature and child and confirms their recorded assignments. Existing
+work and the existing objective keep their identities and assignments.
+
+**Operator Remark** in Edit Work Structure is saved with the work item through
+the standard Operator work notes section. A remark by itself is a reviewable
+change. A remark entered on a new item is part of its reviewed creation.
 
 
 ### Technical plan preparation and human approval in the Console

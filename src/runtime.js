@@ -1,3 +1,4 @@
+import { assertCatalogProjectionResult } from "./catalog/contracts.js";
 import {createRepositoryUseReadiness} from "./repository-custody/use-readiness.js";
 import { loadConfig } from "./config.js";
 import path from "node:path";
@@ -119,14 +120,19 @@ export function createRuntime({
 } = {}) {
   const config = loadConfig(env);
   const audit = createAuditLogger({ sink: auditSink });
+  const catalogBackendClient = createCatalogBackendClient({
+    baseUrl: config.catalog.backendBaseUrl,
+    hostHeader: config.catalog.hostHeader,
+    token: config.catalog.backendToken,
+  });
   const openProjectClient = createOpenProjectClient({
     config: config.openProject,
     fetchImpl,
     requestImpl,
     principalReader: config.catalog.backendBaseUrl ? async () => catalogPrincipalBindings(
-      await createCatalogBackendClient({ baseUrl: config.catalog.backendBaseUrl,
-        hostHeader: config.catalog.hostHeader, token: config.catalog.backendToken }).project(),
+      await catalogBackendClient.project(),
     ) : null,
+    planningCatalogReader: async () => assertCatalogProjectionResult(await catalogBackendClient.project()),
   });
   const wgcfArtReadinessClient = config.wgcf.artReadinessBaseUrl
     ? createWgcfArtReadinessClient({
@@ -267,11 +273,7 @@ export function createRuntime({
   });
   const catalogService = createCatalogService({
     audit,
-    backendClient: createCatalogBackendClient({
-      baseUrl: config.catalog.backendBaseUrl,
-      hostHeader: config.catalog.hostHeader,
-      token: config.catalog.backendToken,
-    }),
+    backendClient: catalogBackendClient,
     readinessClient: createWgcfRepositoryReadinessClient({
       baseUrl: config.catalog.readinessBaseUrl,
       callerId: config.catalog.readinessCallerId,

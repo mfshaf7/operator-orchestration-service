@@ -135,7 +135,7 @@
       ],
       "properties": {
         "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
-        "record_version": { "type": "integer", "minimum": 1 },
+        "record_version": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "record_system": { "const": "openproject" },
         "record_project": { "const": "workspace-delivery-art" },
         "record_type": { "const": "delivery-epic" },

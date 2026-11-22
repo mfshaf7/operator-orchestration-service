@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { instanceSourceLocation, sourceWorktreeRelativePath } from "../src/instance-records/source-location.js";
+import { createDeliveryArtWorkSessionRuntimeStore } from "../src/delivery-art/work-session-runtime.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "../src/delivery-art/work-session-resource-retirement-controller.js";
 import {
@@ -656,6 +658,36 @@ test("local branch retirement preserves a head that changes after inspection", a
     ]),
     competingHead,
   );
+});
+
+test("resource manifests accept the configured installation worktree and reject other namespaces", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const instanceId = "installation:source-retirement";
+  const session = { ...fixture.session, artifacts: { resource_manifest_file: "artifacts/resources.json" } };
+  const env = { OOS_ART_WORK_STATE_ROOT: path.join(fixture.workspaceRoot, "coordination") };
+  const store = createDeliveryArtWorkSessionRuntimeStore({ env: { ...env, OOS_INSTANCE_ID: instanceId } });
+  const manifest = createDeliveryArtWorkSessionResourceManifest({ resources: fixture.ownership.resources, session });
+  const resource = manifest.resources.find(entry => entry.resource_type === "git-worktree");
+  const original = resource.locator.workspace_relative_path;
+  const location = id => instanceSourceLocation(fixture.workspaceRoot, {
+    owner_repo: session.owner_repo,
+    canonical_authority: { kind: "internal-instance-record", instance_id: id, record_id: `repo:${session.owner_repo}` },
+  });
+
+  assert.deepEqual(store.writeResourceManifest(session, manifest), manifest);
+  resource.locator.workspace_relative_path = sourceWorktreeRelativePath(original, location(instanceId));
+  assert.deepEqual(store.writeResourceManifest(session, manifest), manifest);
+  assert.deepEqual(store.readResourceManifest(session), manifest);
+
+  const otherStore = createDeliveryArtWorkSessionRuntimeStore({ env: { ...env, OOS_INSTANCE_ID: "installation:other" } });
+  const legacyStore = createDeliveryArtWorkSessionRuntimeStore({ env });
+  for (const wrongStore of [otherStore, legacyStore]) {
+    assert.throws(() => wrongStore.readResourceManifest(session), { code: "delivery_art_work_session_resource_manifest_mismatch" });
+  }
+  const otherUnit = structuredClone(manifest);
+  otherUnit.resources.find(entry => entry.resource_type === "git-worktree").locator.workspace_relative_path += "-another-unit";
+  assert.throws(() => store.writeResourceManifest(session, otherUnit), { code: "delivery_art_work_session_resource_manifest_mismatch" });
+  assert.deepEqual(store.readResourceManifest(session), manifest);
 });
 
 test("managed session state is removable only below its owned allowlist", async (t) => {

@@ -147,17 +147,16 @@ test("Refinement reads native current forms without business writes and preserve
   assert.equal(snapshot.fieldMetadata[1313], undefined);
   assert.ok(fields.every((field) => !field.target_node_ids.some((id) => ["1312", "1313"].includes(id))));
   const item = (key) => fields.find((field) => field.route_binding.target === "work_item" && field.backend_field === key);
-  assert.equal(item("target_pi").field_kind, "short_text");
-  assert.equal(item("iteration").field_kind, "short_text");
-  assert.equal(item("target_pi").allowed_values, undefined);
+  for (const key of ["target_pi", "iteration", "pi_objective_type", "planned_business_value", "actual_business_value"]) {
+    assert.equal(fields.some((field) => field.backend_field === key), false, `${key} is outside Refinement preparation`);
+  }
+  const nativeFeature = packet.target_tree.children.find((node) => node.id === "1310");
+  assert.equal(nativeFeature.planning.target_pi, "PI-2026-03");
+  assert.equal(nativeFeature.planning.iteration, "PI-2026-03 / Iteration 1");
   assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1311: "Canonical acceptance", 1314: "Canonical acceptance" });
   assert.equal(item("acceptance_criteria").field_kind, "long_text");
   assert.deepEqual(item("execution_classification").target_node_ids, ["1310", "1314"]);
   assert.deepEqual(item("execution_classification").allowed_values, ["Business", "Enabler", "NFR"]);
-  assert.deepEqual(item("pi_objective_type").target_node_ids, ["1311"]);
-  assert.deepEqual(item("pi_objective_type").allowed_values, ["Committed", "Uncommitted"]);
-  assert.equal(item("actual_business_value").required, false);
-  assert.equal(item("actual_business_value").value, "", "never fabricate future earned business value");
   assert.equal(fields.some((field) => field.backend_field === "nfr_category"), false, "unsupported optional fields are not fake editors");
   // A later form can remove edit permission without changing the Epic lockVersion.
   // That capability change must invalidate the packet and block an empty required target.

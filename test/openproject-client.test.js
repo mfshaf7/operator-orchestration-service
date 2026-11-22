@@ -16402,8 +16402,8 @@ test("native integer updates reject partial parsing before any work-package muta
   }
 });
 
-test("native Refinement form projection distinguishes Integer from Float", async () => {
- for(const [type,numericType,value] of [["Integer","integer",8],["Float","decimal",1.5]]) {
+test("native Refinement leaves PI objective business value out of writable preparation", async () => {
+ for(const [type,value] of [["Integer",8],["Float",1.5]]) {
   const root={id:56,lockVersion:1,subject:"Architecture work",customField90:value,_links:{type:{title:"Epic"},status:{title:"new"}}};
   const client=createOpenProjectClient({config,fetchImpl:async(url,options)=>{
    const path=new URL(url).pathname;
@@ -16412,8 +16412,7 @@ test("native Refinement form projection distinguishes Integer from Float", async
    return {ok:true,status:200,text:async()=>JSON.stringify(payload)};
   }});
   const source=await client.getRefinementDeliveryTree({recordId:56});
-  assert.equal(source.fieldMetadata['56'].planned_business_value.numeric_type,numericType);
-  assert.equal(String(source.tree.planned_business_value),String(value));
+  assert.equal(source.fieldMetadata['56'].planned_business_value, undefined);
  }
 });
 

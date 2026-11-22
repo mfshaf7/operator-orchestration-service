@@ -711,6 +711,7 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
   assert.equal(result.delivery_id, "delivery-38");
   assert.equal(result.work_item_id, "work-item-177");
   assert.equal(result.workflow_id, "delivery-work-item-continuation-context");
+  assert.equal(result.source_session_present, null);
   assert.equal(result.continuation_context.target_item.subject.includes("supporting-component"), true);
   assert.equal(
     result.continuation_context.delivery_epic.initiative_family,
@@ -723,6 +724,31 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
   );
   assert.equal(audit.events[0]?.event_type, "delivery.work_item.continuation_context.read");
   assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("continuation context reads source custody for the exact Planning objective without an executor", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      return {
+        continuationContext: { target_item: { id: recordId, type: "PI Objective", owner_repo: null } },
+        deliveryRecordId: 40,
+        deliveryRecordRef: "openproject://work_packages/40",
+        workItemRecordId: recordId,
+        workItemRecordRef: `openproject://work_packages/${recordId}`,
+      };
+    },
+  };
+  let session = null;
+  const workSessionStore = { readByAlias(alias) {
+    assert.equal(alias, "work-item-43");
+    return session;
+  } };
+  const service = createDeliveryService({ audit, openProjectClient, workSessionStore });
+  const request = { callerId: "console", correlationId: "objective-custody", workItemId: "work-item-43" };
+  assert.equal((await service.getDeliveryWorkItemContinuationContext(request)).source_session_present, false);
+  session = { session_id: "source-session" };
+  assert.equal((await service.getDeliveryWorkItemContinuationContext(request)).source_session_present, true);
 });
 
 test("getDeliveryWorkItemStatus projects only authoritative status", async () => {

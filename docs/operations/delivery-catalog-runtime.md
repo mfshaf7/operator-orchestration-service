@@ -49,6 +49,18 @@ coordinated batch's accepted source and composition.
 Reuse the same idempotency key when recovering the same accepted decision.
 Create a new key only for a genuinely different decision.
 
+For a PI calendar, add or edit Target PI with `planning_window_start_date`,
+`iteration_length_days` and `iteration_count`. A connected Catalog with
+`supports_iteration_generation` calculates the inclusive end date and saves
+the PI and all full-length consecutive iterations in one transaction. Send a
+null end date or the exact calculated date. Verify the PI window and each
+dated iteration in `related_values`. An original receipt can be recovered
+with the same accepted request. Only exact numbered keys acquire dates.
+Existing assignments and out-of-calendar labels retain their original values.
+Use this calendar operation to create a PI or change its dates. The Catalog
+rejects standalone Iteration writes. Target PI details can be edited while
+preserving the saved calendar.
+
 ## Activation
 
 Source ships inactive. Later composition, Security review, and Platform

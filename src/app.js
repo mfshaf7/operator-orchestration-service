@@ -6156,6 +6156,7 @@ export function createApp({
           deliveryArtWorkSessionService,
           request,
           response,
+          url,
           workItemId: decodeURIComponent(url.pathname.split("/")[3]),
         });
         return;

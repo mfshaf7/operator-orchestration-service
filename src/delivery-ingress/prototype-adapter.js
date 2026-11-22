@@ -382,11 +382,11 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
         "The Delivery target owner does not match the resolved Prototype custody.",
       );
     }
-    if (!Number.isInteger(target.recordVersion) || target.recordVersion < 1) {
+    if (!Number.isSafeInteger(target.recordVersion) || target.recordVersion < 0) {
       throw new HttpError(
         502,
         "prototype_delivery_target_version_missing",
-        "OpenProject did not return a target record version.",
+        "OpenProject did not return a valid target record version.",
       );
     }
     return {

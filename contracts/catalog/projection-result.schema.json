@@ -68,6 +68,7 @@
         "evidence_refs": { "$ref": "#/$defs/stringList" },
         "last_projected_at": { "type": ["string", "null"], "format": "date-time" },
         "next_action_label": { "$ref": "#/$defs/nonEmptyString" },
+        "supports_iteration_generation": { "type": "boolean" },
         "next_action_detail": { "$ref": "#/$defs/nonEmptyString" }
       }
     },
@@ -88,6 +89,16 @@
         "last_projected_at": { "type": ["string", "null"], "format": "date-time" },
         "parent_catalog_item_id": { "type": ["string", "null"] },
         "parent_catalog_value_key": { "type": ["string", "null"] },
+        "iteration_window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sequence", "start_date", "end_date"],
+          "properties": {
+            "sequence": { "type": "integer", "minimum": 1 },
+            "start_date": { "type": "string", "format": "date" },
+            "end_date": { "type": "string", "format": "date" }
+          }
+        },
         "repository_binding": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-reference.schema.json" }, { "type": "null" }] }
       }
     }

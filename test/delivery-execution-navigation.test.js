@@ -15,6 +15,20 @@ test("preparation routes native New work without changing statuses or granting a
   assert.equal(deliveryExecutionNavigation({...root(),status:"in-progress"}).workflow_phase,"work_design","An active Epic alone does not prove that executable work exists");
   assert.equal(deliveryExecutionNavigation(root(node(3,"Task","new"))).workflow_phase,"refinement");
 });
+test("metadata complete without an iteration is ready to plan while work stays in Refinement", () => {
+  const missingSchedule = { ready_contract_applicable: true, ready_contract_satisfied: false,
+    ready_contract_missing_fields: ["Iteration"] };
+  const tree = root(node(2, "Feature", "new", [
+    node(3, "User story", "new", [], missingSchedule),
+    node(4, "User story", "new", [], { ...missingSchedule, ready_contract_missing_fields: ["Iteration", "Acceptance Criteria"] }),
+  ], missingSchedule));
+  const before = deliveryExecutionNavigation(tree);
+  assert.equal(before.workflow_phase, "refinement");
+  assert.deepEqual(before.planning_prepared_work_item_ids, [2, 3]);
+  assert.deepEqual(before.prepared_work_item_ids, []);
+  tree.children[0].children[0].ready_contract_satisfied = true;
+  assert.equal(deliveryExecutionNavigation(tree).workflow_phase, "execution");
+});
 test("final-child completion and retirement retain closeout, including legacy work without receipts", () => {
   for (const status of ["done","retired"]) for (const epicStatus of ["new","in-progress"]) {
     const result = deliveryExecutionNavigation({...root(node(3,"Task",status)),status:epicStatus});
