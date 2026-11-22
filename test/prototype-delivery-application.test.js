@@ -167,7 +167,7 @@ function createHarness({ readinessOutcome = "allow" } = {}) {
             owner_repo: "workspace-prototype-studio",
             record_id: 901,
             record_ref: "openproject://work_packages/901",
-            record_version: 3,
+            record_version: 0,
           },
         },
         result: { ingress_id: envelope.ingress_id },
@@ -237,6 +237,8 @@ test("Prototype Delivery application creates one target and replays from its tru
 
   assert.equal(created.resolution, "created");
   assert.equal(created.target.record_ref, "openproject://work_packages/901");
+  assert.equal(created.target.record_version, 0);
+  assert.equal(replayed.target.record_version, 0);
   assert.equal(created.receipt.custody.uri, "openproject://work_packages/901/activities/71");
   assert.equal(replayed.resolution, "reused");
   assert.equal(replayed.receipt.receipt_ref, created.receipt.receipt_ref);

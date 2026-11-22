@@ -129,7 +129,7 @@ function isOwnerRepo(item) {
     item?.catalog_item_id === "catalog-owner-repo";
 }
 
-function assertMutationAllowed(request, projection) {
+function assertMutationAllowed(request, projection, calendar) {
   if (projection.projection_status !== "ready") throw new CatalogServiceError("catalog_read_only", "Current Catalog values must be available before applying a new change.", { correlationId: request.correlation_id, statusCode: 409 });
   if (request.source_revision !== projection.source_revision) {
     throw new CatalogServiceError(
@@ -149,6 +149,7 @@ function assertMutationAllowed(request, projection) {
     );
   }
   if (
+    item.catalog_item_id === "catalog-iteration" ||
     ["read_only", "owner_routed"].includes(item.console_capability) ||
     ["read_only", "retired", "stale"].includes(item.lifecycle_state)
   ) {
@@ -185,6 +186,19 @@ function assertMutationAllowed(request, projection) {
       "Catalog values still used by Delivery records cannot be retired.",
       { correlationId: request.correlation_id, statusCode: 409 },
     );
+  }
+  if (item.catalog_item_id === "catalog-target-pi" && request.mode !== "retire" && !calendar) {
+    const dates = projection.values.find(value => value.catalog_item_id === "catalog-pi-planning-date" &&
+      value.parent_catalog_value_key === target?.value_key);
+    const [start, end] = dates?.value_key.split(/\.\.|\//) ?? [];
+    const draft = request.draft;
+    if (request.mode === "add" ||
+        (draft.planning_window_start_date && draft.planning_window_start_date !== start) ||
+        (draft.planning_window_end_date && draft.planning_window_end_date !== end)) {
+      throw new CatalogServiceError("request_invalid", "Save an iteration calendar to create a PI or change its dates.", {
+        correlationId: request.correlation_id,
+      });
+    }
   }
   const repositoryBindingRequired = isOwnerRepo(item) && request.mode !== "retire";
   if (
@@ -223,7 +237,7 @@ function assertMutationReadback({ projection, request, result }) {
   const readback = projection.values.find(
     (value) => value.catalog_value_id === result.value.catalog_value_id,
   );
-  if (!readback || canonicalStringify(readback) !== canonicalStringify(result.value)) {
+  if (!sameCatalogValue(readback, result.value)) {
     throw new CatalogServiceError(
       "backend_readback_incomplete",
       "Catalog mutation result is not present in the canonical projection.",
@@ -238,7 +252,7 @@ function assertMutationReadback({ projection, request, result }) {
     const projected = projection.values.find(
       (value) => value.catalog_value_id === related.catalog_value_id,
     );
-    if (!projected || canonicalStringify(projected) !== canonicalStringify(related)) {
+    if (!sameCatalogValue(projected, related)) {
       throw new CatalogServiceError(
         "backend_readback_incomplete",
         "A related Catalog mutation value is missing from canonical readback.",
@@ -249,6 +263,51 @@ function assertMutationReadback({ projection, request, result }) {
         },
       );
     }
+  }
+}
+
+function sameCatalogValue(current, accepted) {
+  if (!current) return false;
+  return canonicalStringify({ ...current, last_projected_at: null }) ===
+    canonicalStringify({ ...accepted, last_projected_at: null });
+}
+
+const calendarDayMs = 86_400_000;
+
+function requestedCalendar(request) {
+  const { iteration_count: count, iteration_length_days: length, planning_window_start_date: start,
+    planning_window_end_date: submittedEnd } = request.draft;
+  if (count === undefined) return null;
+  const first = Date.parse(start);
+  const last = first + (length * count - 1) * calendarDayMs;
+  if (!Number.isFinite(first) || new Date(first).toISOString().slice(0, 10) !== start ||
+      !Number.isSafeInteger(last) || last > Date.UTC(9999, 11, 31) ||
+      (submittedEnd && new Date(last).toISOString().slice(0, 10) !== submittedEnd)) {
+    throw new CatalogServiceError("request_invalid",
+      "The PI end date must match the number and length of full iterations.", { correlationId: request.correlation_id });
+  }
+  return { count, first, start, end: new Date(last).toISOString().slice(0, 10), step: length * calendarDayMs };
+}
+
+function assertGeneratedCalendar(request, result, calendar) {
+  if (!calendar) return;
+  const { count, first, start, end, step } = calendar;
+  const pi = request.draft.value_key;
+  const dated = result.related_values.filter(value => value.catalog_item_id === "catalog-iteration" &&
+    value.parent_catalog_value_key === pi && value.lifecycle_state === "active" && value.iteration_window);
+  const window = result.related_values.find(value =>
+    value.catalog_item_id === "catalog-pi-planning-date" && value.parent_catalog_value_key === pi);
+  const confirmed = dated.length === count && window?.value_key === `${start}/${end}` &&
+    dated.every(({ value_key, iteration_window: iteration }) => {
+      const expectedStart = first + (iteration.sequence - 1) * step;
+      return value_key === `${pi} / Iteration ${iteration.sequence}` &&
+        iteration.sequence <= count && Date.parse(iteration.start_date) === expectedStart &&
+        Date.parse(iteration.end_date) === expectedStart + step - calendarDayMs;
+    }) && new Set(dated.map(value => value.iteration_window.sequence)).size === count;
+  if (!confirmed) {
+    throw new CatalogServiceError("backend_readback_incomplete", "The saved PI calendar does not match the accepted dates.", {
+      correlationId: request.correlation_id, receiptRef: result.receipt.ref, statusCode: 502,
+    });
   }
 }
 
@@ -328,13 +387,20 @@ export function createCatalogService({
           { correlationId: accepted.correlation_id },
         );
       }
+      const calendar = requestedCalendar(accepted);
       const before = await project({ callerId, correlationId: accepted.correlation_id });
+      if (calendar && !before.items.some(item =>
+        item.catalog_item_id === accepted.catalog_item_id && item.supports_iteration_generation)) {
+        throw new CatalogServiceError("catalog_read_only", "The connected Catalog cannot yet save an iteration calendar.", {
+          correlationId: accepted.correlation_id, statusCode: 409,
+        });
+      }
       // The canonical backend checks an exact request receipt before its stale
       // revision guard. A stale request can therefore recover a prior result,
       // but can never become a new mutation. Do not reauthorize historical
       // readiness evidence or manufacture a replacement acceptance.
       const replayOnly = accepted.source_revision !== before.source_revision;
-      if (!replayOnly) assertMutationAllowed(accepted, before);
+      if (!replayOnly) assertMutationAllowed(accepted, before, calendar);
       let verifiedRequest = accepted;
       if (!replayOnly && verifiedRequest.draft.repository_binding) {
         try {
@@ -375,6 +441,7 @@ export function createCatalogService({
         const after = await project({ callerId, correlationId: accepted.correlation_id });
         assertMutationReadback({ projection: after, request: verifiedRequest, result });
       }
+      assertGeneratedCalendar(verifiedRequest, result, calendar);
       audit?.emit({
         event_type: result.replayed
           ? "delivery.catalog.mutation.replayed"

@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 
+import { instanceSourceWorktreePrefix, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
 import { canonicalDigest } from "./canonical-json.js";
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
@@ -209,6 +210,7 @@ export function deliveryArtWorkStateRoot(env = process.env) {
 
 export function createDeliveryArtWorkSessionStore({
   root = deliveryArtWorkStateRoot(),
+  instanceId = null,
   validateArchitectureSupersessionReceipt,
   validateCleanupReceipt,
   validateDecision,
@@ -228,6 +230,7 @@ export function createDeliveryArtWorkSessionStore({
       "validateArchitectureSupersessionReceipt, validateCleanupReceipt, validateDecision, validateRecoveryReceipt, validateResourceManifest, and validateSession are required",
     );
   }
+  const instanceSource = instanceId ? { worktreePrefix: instanceSourceWorktreePrefix(instanceId) } : null;
   const indexPath = path.join(root, "index.json");
   const cleanupIndexPath = path.join(root, "cleanup-receipts", "index.json");
   const pendingLocks = new Set();
@@ -687,6 +690,8 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   function assertResourceManifestBinding(session, manifest) {
+    const sharedWorktree = deliveryArtWorktreeRelativePath(session);
+    const instanceWorktree = sourceWorktreeRelativePath(sharedWorktree, instanceSource);
     const bindingErrors = [];
     if (
       manifest.session_id !== session.session_id ||
@@ -714,8 +719,8 @@ export function createDeliveryArtWorkSessionStore({
       }
       if (
         resourceType === "git-worktree" &&
-        resource.locator.workspace_relative_path !==
-          deliveryArtWorktreeRelativePath(session)
+        resource.locator.workspace_relative_path !== sharedWorktree &&
+        resource.locator.workspace_relative_path !== instanceWorktree
       ) {
         bindingErrors.push("git-worktree path does not match the Landing Unit");
       }

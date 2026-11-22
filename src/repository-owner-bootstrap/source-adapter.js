@@ -222,8 +222,7 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       return { ...body, receipt_digest: canonicalDigest(body) };
     } finally { if (temporary) rmSync(temporary, { recursive: true, force: true }); }
   }
-  async function exactReview(input, binding, approved = false) {
-    const current = await review(input, binding);
+  async function exactReview(input, binding, current, approved = false) {
     if (current.state !== "open" || current.url !== input.expected_pull_request?.url || current.head_commit !== input.expected_pull_request?.head_commit ||
         (approved && current.review?.approved !== true)) fail("review_changed", "The exact Gary PR head and required human review are not ready.");
     binding.identity.assertHumanMergeAuthority({ repoRoot: binding.root, session: binding.session });
@@ -319,7 +318,7 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       return b.source.publishAgentSource(b.session);
     },
     async approvePullRequest(input) {
-      const b = bound(input); const current = await exactReview(input, b);
+      const b = bound(input); const current = await exactReview(input, b, await review(input, b));
       execute("gh", ["pr", "review", current.url, "--approve", "--body", `Reviewed exact trusted owner-control head ${current.head_commit}; no app acceptance, admission or runtime activation is implied.`],
         { cwd: b.root, encoding: "utf8", timeout: 60_000, maxBuffer: 262_144, stdio: ["ignore", "pipe", "pipe"] });
       const approved = await review(input, b);
@@ -330,7 +329,27 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
       const b = bound(input); const current = await review(input, b);
       if (current.state === "merged" && current.url === input.expected_pull_request?.url && current.head_commit === input.expected_pull_request?.head_commit &&
           /^[0-9a-f]{40}$/.test(current.merge_commit ?? "")) return current;
-      return b.source.mergePullRequest(b.session, await exactReview(input, b, true));
+      await exactReview(input, b, current, true);
+      const repository = input.plan.provider_repository.full_name;
+      const prefix = `https://github.com/${repository}/pull/`;
+      const pullNumber = current.url.startsWith(prefix) ? current.url.slice(prefix.length) : "";
+      if (!/^[1-9][0-9]*$/.test(pullNumber) || current.base_ref !== "main") {
+        fail("review_changed", "The reviewed bootstrap pull request does not match its protected repository and base.");
+      }
+      try {
+        execute("gh", ["api", "--method", "PUT", `repos/${repository}/pulls/${pullNumber}/merge`,
+          "-f", `sha=${current.head_commit}`, "-f", "merge_method=squash"],
+        { cwd: b.root, encoding: "utf8", timeout: 60_000, maxBuffer: 262_144, stdio: ["ignore", "pipe", "pipe"] });
+      } catch {
+        // The provider can commit the merge before responding. Reconcile the
+        // exact protected pull request before a retry can attempt another write.
+      }
+      const merged = await review(input, b);
+      if (merged.state !== "merged" || merged.url !== current.url || merged.head_commit !== current.head_commit ||
+          !/^[0-9a-f]{40}$/.test(merged.merge_commit ?? "")) {
+        fail("merge_unconfirmed", "The provider has not confirmed the protected merge of this exact bootstrap head. Read or retry the original setup request.");
+      }
+      return merged;
     },
     async retirePristineResources(input) {
       const b = bound(input), slot = path.join(stateRoot, `worktree-${canonicalDigest(b.session.session_id).slice(7)}.json`);

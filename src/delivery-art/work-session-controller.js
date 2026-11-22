@@ -1614,20 +1614,9 @@ export function createDeliveryArtWorkSessionController({
     };
   }
 
-  async function resourceRetirementActive() {
-    const activationWorkItemId =
-      resourceRetirementCapability?.activation_work_item_id;
-    if (
-      !activationWorkItemId ||
-      resourceRetirementCapability.normal_path !== true ||
-      !["human-gated", "implemented"].includes(
-        resourceRetirementCapability.state,
-      )
-    ) {
-      return false;
-    }
-    const [status] = await artifactAdapter.statuses([activationWorkItemId]);
-    return CLOSED_ART_STATES.has(String(status).toLowerCase());
+  function resourceRetirementActive() {
+    return resourceRetirementCapability?.state === "implemented" &&
+      resourceRetirementCapability.normal_path === true;
   }
 
   function cleanupNextAction(workItemId, state) {
@@ -1762,7 +1751,7 @@ export function createDeliveryArtWorkSessionController({
       });
     }
     if (coveredScopeClosed(currentContexts)) {
-      if (await resourceRetirementActive()) {
+      if (resourceRetirementActive()) {
         const manifest = retirementController.readManifest(session);
         const state = session.state === "cleanup-blocked"
           ? "cleanup-blocked"
@@ -2817,7 +2806,7 @@ export function createDeliveryArtWorkSessionController({
         );
         const artAlreadyClosed = coveredScopeClosed(authoritativeContexts);
         const current = await statusForSession(session, workItemId, authoritative);
-        if (artAlreadyClosed && !(await resourceRetirementActive())) {
+        if (artAlreadyClosed && !(resourceRetirementActive())) {
           store.removeSession(session);
           return current;
         }
@@ -2864,7 +2853,7 @@ export function createDeliveryArtWorkSessionController({
           closeout = closed.closeout;
           closeoutNextAction = closed.next_action;
         }
-        if (!(await resourceRetirementActive())) {
+        if (!(resourceRetirementActive())) {
           store.removeSession(session);
           const followUp = closeoutNextAction
             ? null

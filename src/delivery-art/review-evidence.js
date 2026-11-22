@@ -284,6 +284,13 @@ function finding(code, message, target) {
   return { code, message, target };
 }
 
+export function deliveryArtRequiresTestEvidence(document, targetReadiness = "merge-ready") {
+  const mode = document?.acquisition?.application_verification?.mode;
+  // Source landing may use validation-only evidence. Operating acceptance and
+  // explicit architecture conformance remain separate requirements.
+  return targetReadiness !== "merge-ready" || !["unconfigured", "manual"].includes(mode);
+}
+
 function projectionFindings(
   evidence,
   requiredCases,
@@ -570,11 +577,7 @@ export function projectDeliveryArtReviewEvidence({
     targetReadiness,
     workStart,
   });
-  const verification = document.acquisition?.application_verification;
-  // This governs source landing only. Explicit architecture conformance and
-  // operating acceptance remain independently required and cannot be satisfied
-  // by source-control validation or a verification plan.
-  const requireTests = !(targetReadiness === "merge-ready" && ["unconfigured", "manual"].includes(verification?.mode));
+  const requireTests = deliveryArtRequiresTestEvidence(document, targetReadiness);
   const findings = projectionFindings(
     evidence,
     cases,

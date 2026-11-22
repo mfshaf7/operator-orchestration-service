@@ -126,6 +126,89 @@ function request(overrides = {}) {
   };
 }
 
+test("PI calendar generation rejects a connected adapter without the calendar capability before writing", async () => {
+  const before = projection();
+  before.items = [item({ catalog_item_id: "catalog-target-pi" })];
+  before.groups[0].item_ids = ["catalog-target-pi"];
+  let writes = 0;
+  const service = createCatalogService({ backendClient: {
+    async project() { return before; },
+    async mutate() { writes += 1; },
+  } });
+  await assert.rejects(service.mutate({
+    callerId: "operator:workspace-owner",
+    catalogItemId: "catalog-target-pi",
+    request: request({
+      catalog_item_id: "catalog-target-pi",
+      draft: {
+        value_key: "PI-2027-01", label: "PI-2027-01", description: "",
+        parent_catalog_value_key: null, repository_binding: null,
+        planning_window_start_date: "2027-01-11", planning_window_end_date: null,
+        iteration_length_days: 14, iteration_count: 5,
+      },
+    }),
+  }), error => error.code === "catalog_read_only");
+  assert.equal(writes, 0);
+});
+
+test("planning rejects standalone iteration writes and date-only PI changes before contacting the backend", async () => {
+  const pi = "PI-2027-01";
+  const planningItems = ["catalog-target-pi", "catalog-iteration"];
+  const before = projection({ values: [value({
+    catalog_item_id: "catalog-target-pi", catalog_value_id: "pi-1",
+    value_key: pi, label: pi, repository_binding: null,
+  })] });
+  before.items = planningItems.map(catalog_item_id => item({ catalog_item_id, value_key: catalog_item_id }));
+  before.groups[0].item_ids = planningItems;
+  before.summary.total_items = planningItems.length;
+  before.summary.requestable_count = planningItems.length;
+  const service = createCatalogService({ backendClient: {
+    async project() { return before; },
+    async mutate() { assert.fail("A retired write path reached the backend"); },
+  } });
+  const draft = {
+    ...request().draft, value_key: pi, label: pi, repository_binding: null,
+    planning_window_start_date: "2027-01-11", planning_window_end_date: "2027-03-21",
+  };
+  for (const change of [
+    { catalog_item_id: "catalog-iteration", draft: { ...draft, value_key: `${pi} / Iteration 1` }, error: "catalog_read_only" },
+    { catalog_item_id: "catalog-target-pi", draft, error: "request_invalid" },
+    { catalog_item_id: "catalog-target-pi", mode: "edit", target_value_id: "pi-1", draft, error: "request_invalid" },
+  ]) {
+    const { error, ...fields } = change;
+    await assert.rejects(service.mutate({
+      callerId: "operator:workspace-owner", catalogItemId: fields.catalog_item_id, request: request(fields),
+    }), failure => failure.code === error);
+  }
+});
+
+test("a retired iteration write can recover its original canonical receipt", async () => {
+  const before = projection({ revision: "calendar-authority" });
+  before.items = [item({ catalog_item_id: "catalog-iteration", console_capability: "owner_routed" })];
+  before.groups[0].item_ids = ["catalog-iteration"];
+  before.summary.requestable_count = 0;
+  before.summary.owner_routed_count = 1;
+  const key = "PI-2027-01 / Iteration 1";
+  const accepted = request({
+    catalog_item_id: "catalog-iteration",
+    draft: { ...request().draft, value_key: key, label: "Iteration 1", repository_binding: null },
+  });
+  const service = createCatalogService({ backendClient: {
+    async project() { return before; },
+    async mutate(id, submitted) {
+      assert.equal(id, "catalog-iteration");
+      assert.deepEqual(submitted, accepted);
+      return result({ replayed: true, value: value({
+        catalog_item_id: id, value_key: key, label: "Iteration 1", repository_binding: null,
+      }) });
+    },
+  } });
+  const response = await service.mutate({
+    callerId: "operator:workspace-owner", catalogItemId: "catalog-iteration", request: accepted,
+  });
+  assert.ok(response.replayed);
+});
+
 function result(overrides = {}) {
   return {
     schema_version: 1,
@@ -144,6 +227,72 @@ function result(overrides = {}) {
     ...overrides,
   };
 }
+
+test("PI calendar verifies the calculated dates and rejects a shortened final iteration", async () => {
+  const pi = "PI-2027-01";
+  const piValue = value({
+    catalog_item_id: "catalog-target-pi", catalog_value_id: "pi-1",
+    value_key: pi, label: pi, repository_binding: null,
+  });
+  const related = (catalogId, id, key) => value({
+    catalog_item_id: catalogId, catalog_value_id: id, value_key: key,
+    label: key, lifecycle_state: "active", repository_binding: null,
+    parent_catalog_item_id: "catalog-target-pi", parent_catalog_value_key: pi,
+  });
+  const window = related("catalog-pi-planning-date", "pi-1-window", "2027-01-11/2027-02-07");
+  const intervals = [
+    { sequence: 1, start_date: "2027-01-11", end_date: "2027-01-24" },
+    { sequence: 2, start_date: "2027-01-25", end_date: "2027-02-07" },
+  ].map(interval => ({
+    ...related("catalog-iteration", `iteration-${interval.sequence}`, `${pi} / Iteration ${interval.sequence}`),
+    iteration_window: interval,
+  }));
+  const before = projection();
+  before.items = [
+    item({ catalog_item_id: "catalog-target-pi", value_key: "target_pi", supports_iteration_generation: true }),
+    item({ catalog_item_id: "catalog-iteration", value_key: "iteration" }),
+    item({ catalog_item_id: "catalog-pi-planning-date", value_key: "pi_planning_date" }),
+  ];
+  before.groups[0].item_ids = before.items.map(entry => entry.catalog_item_id);
+  before.summary.total_items = before.summary.requestable_count = before.items.length;
+  const accepted = request({
+    catalog_item_id: "catalog-target-pi",
+    draft: {
+      value_key: pi, label: pi, description: "", parent_catalog_value_key: null, repository_binding: null,
+      planning_window_start_date: "2027-01-11", planning_window_end_date: null,
+      iteration_count: 2, iteration_length_days: 14,
+    },
+  });
+  let saved;
+  let shortened = false;
+  const service = createCatalogService({ backendClient: {
+    async project() {
+      return saved ? { ...before, source_revision: saved.source_revision, values: [saved.value, ...saved.related_values] } : before;
+    },
+    async mutate() {
+      const last = intervals[1];
+      const finalIteration = shortened ? { ...last, iteration_window: { ...last.iteration_window, end_date: "2027-02-06" } } : last;
+      saved = result({ value: piValue, related_values: [window, intervals[0], finalIteration] });
+      return saved;
+    },
+  } });
+  const submit = draft => service.mutate({
+    callerId: "operator:workspace-owner", catalogItemId: "catalog-target-pi",
+    request: { ...accepted, draft: { ...accepted.draft, ...draft } },
+  });
+  for (const invalid of [
+    { planning_window_start_date: "2027-02-30" },
+    { planning_window_end_date: "2027-02-06" },
+    { iteration_length_days: undefined },
+  ]) {
+    await assert.rejects(submit(invalid), error => error.code === "request_invalid");
+    assert.equal(saved, undefined);
+  }
+  assert.deepEqual((await submit()).related_values, [window, ...intervals]);
+  saved = undefined;
+  shortened = true;
+  await assert.rejects(submit(), error => error.code === "backend_readback_incomplete");
+});
 
 function repositoryAuthority() {
   return {

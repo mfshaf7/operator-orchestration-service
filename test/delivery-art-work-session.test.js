@@ -345,9 +345,8 @@ function createHarness(
       return artifact;
     },
     async statuses(ids) {
-      return ids.map((id) =>
-        gateStatuses[id] ??
-          (id === "work-item-970" && !retirementActive ? "new" : "done"));
+      assert.ok(!ids.includes("work-item-970"), "cleanup must work in an installation without historical ART items");
+      return ids.map((id) => gateStatuses[id] ?? "done");
     },
   };
   const sourceAdapter = {
@@ -613,11 +612,9 @@ function createHarness(
     closeAdapter,
     contextAdapter,
     lifecycleController,
-    resourceRetirementCapability: {
-      activation_work_item_id: "work-item-970",
-      normal_path: true,
-      state: "human-gated",
-    },
+    resourceRetirementCapability: retirementActive
+      ? { normal_path: true, state: "implemented" }
+      : null,
     sourceAdapter,
     store,
   });

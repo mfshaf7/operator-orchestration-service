@@ -1,3 +1,4 @@
+import { hasSavedDeliveryPlacement } from "./delivery-change/pi-planning.js";
 import http from "node:http";
 import { allowedPrincipalLink, allowedPrincipalLogins, principalLoginForLink } from "./openproject-principal-identity.js";
 import https from "node:https";
@@ -2848,6 +2849,7 @@ export function createOpenProjectClient({
   requestImpl,
   fetchImpl,
   principalReader = null,
+  planningCatalogReader = null,
 } = {}) {
   const resolveAllowedValueLink = (options) =>
     resolveAllowedValueLinkFromForm({ ...options, principalReader });
@@ -2856,6 +2858,25 @@ export function createOpenProjectClient({
 
   if (!executeRequest) {
     throw new Error("request implementation is required");
+  }
+
+  async function assertSavedIteration(targetPi, iteration, readCatalog = planningCatalogReader) {
+    const pi = normalizeStringValue(targetPi);
+    const label = normalizeStringValue(iteration);
+    if (!readCatalog || !label || label === DELIVERY_BACKLOG_ITERATION_LABEL) return;
+    let catalog;
+    try {
+      catalog = await readCatalog();
+    } catch (error) {
+      throw new OpenProjectError("backend_unavailable",
+        "The saved PI calendar could not be read. Try again before changing the assignment.",
+        503, "delivery_change_planning_catalog_unavailable", { cause: error });
+    }
+    if (!pi || !hasSavedDeliveryPlacement(catalog, pi, label)) {
+      throw new OpenProjectError("validation_failure",
+        "Choose a saved iteration for this PI. Set up its calendar in PI Planning if needed.",
+        422, "delivery_change_planning_placement_invalid");
+    }
   }
 
   let proposalProjectIdPromise;
@@ -6421,6 +6442,25 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return listWorkPackageActivities(input);
     },
 
+    async readDeliveryPlanningFacts({ recordId, ids }) {
+      const fieldMap = await buildDeliveryReadFieldMap({ initiativeRecordId: recordId });
+      const facts = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const values = await listProjectWorkPackages(config.deliveryProjectIdentifier, {
+          includeAllStatuses: true,
+          filters: [{ id: { operator: "=", values: ids.slice(offset, offset + 100).map(String) } }],
+        });
+        facts.push(...values.map(payload => ({
+          id: payload.id,
+          subject: payload.subject,
+          status: workPackageStatusName(payload),
+          target_pi: readDeliveryFieldValue(payload, fieldMap, "Target PI"),
+          iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+        })));
+      }
+      return facts;
+    },
+
     async getDeliveryChangeSource({ recordId }) {
       const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
       const executionTree = state.buildTree(recordId);
@@ -7365,6 +7405,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       successCriteria,
       systemDemoEvidence,
       targetPi,
+      workNote,
+      workNoteAuthor,
     }) {
       const currentPayload = await getWorkPackagePayload(recordId);
       if (typeof currentPayload?.lockVersion !== "number") {
@@ -7477,9 +7519,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
       }
 
-      if (description !== undefined) {
+      if (description !== undefined || normalizeStringValue(workNote)) {
+        const requestedDescription = description === undefined ? currentDescription : normalizeStringValue(description) ?? "";
         const desiredDescription = preserveDeliveryDescriptionBindings(
-          currentDescription, description === null ? "" : normalizeStringValue(description),
+          currentDescription, normalizeStringValue(workNote)
+            ? appendOperatorWorkNote(requestedDescription, workNote, workNoteAuthor)
+            : requestedDescription,
         );
         if (desiredDescription !== currentDescription) {
           patchPayload.description = {
@@ -8066,7 +8111,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
         return false;
       };
-      const validatePlannedElaboration = ({ items, parentPayload, path }) => {
+      let planningCatalog;
+      const readPlanCatalog = planningCatalogReader ? () => (planningCatalog ??= planningCatalogReader()) : null;
+      let planningFieldMap;
+      const validatePlannedElaboration = async ({ items, parentPayload, path }) => {
         let plannedOpenCommittedScope = false;
         let plannedOpenPiObjectives = 0;
 
@@ -8102,13 +8150,17 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             normalizeStringValue(existing ? workPackageStatusName(existing) : null) ??
             "new";
           const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
-          const effectiveTargetPi = Object.prototype.hasOwnProperty.call(item, "target_pi")
-            ? normalizeStringValue(item.target_pi)
-            : normalizeStringValue(
-                existing
-                  ? readCustomField(existing, config.deliveryCustomFieldTargetPiId)
-                  : null,
-              );
+          const existingPi = normalizeStringValue(existing && readCustomField(existing, config.deliveryCustomFieldTargetPiId));
+          const effectiveTargetPi = Object.hasOwn(item, "target_pi") ? normalizeStringValue(item.target_pi) : existingPi;
+          const changesPlanning = Object.hasOwn(item, "iteration") || (Object.hasOwn(item, "target_pi") && effectiveTargetPi !== existingPi);
+          if (readPlanCatalog && changesPlanning) {
+            planningFieldMap ??= existing ? await buildDeliveryReadFieldMap({ initiativeRecordId: rootPayload.id }) : null;
+            const existingIteration = existing ? readDeliveryFieldValue(existing, planningFieldMap, "Iteration") : null;
+            const effectiveIteration = Object.hasOwn(item, "iteration") ? normalizeStringValue(item.iteration) : existingIteration;
+            if (effectiveTargetPi !== existingPi || effectiveIteration !== existingIteration) {
+              await assertSavedIteration(effectiveTargetPi, effectiveIteration, readPlanCatalog);
+            }
+          }
           const isOpen = !planTerminalStatuses.has(normalizedEffectiveStatus);
 
           if (isOpen && effectiveTargetPi) {
@@ -8123,7 +8175,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           }
 
           if (Array.isArray(item.children) && item.children.length > 0) {
-            const childSummary = validatePlannedElaboration({
+            const childSummary = await validatePlannedElaboration({
               items: item.children,
               parentPayload: existing ?? {
                 id: `planned:${itemPath}`,
@@ -8185,7 +8237,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           plannedOpenPiObjectives,
         };
       };
-      const planSummary = validatePlannedElaboration({
+      const planSummary = await validatePlannedElaboration({
         items: planItems,
         parentPayload: rootPayload,
         path: "items",
@@ -9247,6 +9299,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       subject,
       targetPi,
       type,
+      workNote,
+      workNoteAuthor,
       wsjfJobSize,
       wsjfRiskReductionOpportunityEnablement,
       wsjfTimeCriticality,
@@ -9428,10 +9482,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         creationApplied.responsible_login = resolvedResponsible.title;
       }
 
-      if (normalizeStringValue(description)) {
+      const suppliedDescription = normalizeStringValue(description) ?? "";
+      const createDescription = normalizeStringValue(workNote)
+        ? appendOperatorWorkNote(suppliedDescription, workNote, workNoteAuthor)
+        : suppliedDescription;
+      if (createDescription) {
         payload.description = {
           format: "markdown",
-          raw: description.trim(),
+          raw: createDescription,
         };
         creationApplied.description = {
           present: true,
@@ -9520,6 +9578,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "delivery_planning_state_invalid",
         );
       }
+
+      await assertSavedIteration(desiredTargetPi, iteration);
 
       if (desiredTargetPi) {
         const projection = await applyDeliveryTargetPiProjection({
@@ -10492,6 +10552,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             );
           }
         }
+      }
+
+      if ((clearTargetPi || targetPi !== undefined || iteration !== undefined) &&
+          (targetPiProjectionInput !== currentTargetPi || previewIteration !== currentIteration)) {
+        await assertSavedIteration(targetPiProjectionInput, previewIteration);
       }
 
       if (hasChanges && (targetPiProjectionInput || workPackageVersionName(currentPayload))) {

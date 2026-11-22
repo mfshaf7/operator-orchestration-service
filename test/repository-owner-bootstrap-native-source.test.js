@@ -91,6 +91,7 @@ function harness(t, { existingControls = false, repairControls = false, privateR
   }
   const calls = { clones: 0, privateReads: 0, pushes: 0, providerWrites: 0, authority: 0, identityFactories: 0 };
   let loseWorktreeAck = false;
+  let loseMergeAck = false;
   let pullRequest = null, approvedHead = null, humanReviewer = contract.identity.human_reviewer_id;
   const execute = (executable, argv, options) => {
     const args = [...argv];
@@ -101,11 +102,17 @@ function harness(t, { existingControls = false, repairControls = false, privateR
       if (args[0] === "api" && args[1] === `/repos/${repository}/pulls/1/reviews`) return approvedHead
         ? `${JSON.stringify({ id: 1, commit_id: approvedHead, state: "APPROVED", user: { login: contract.identity.human_reviewer_id } })}\n` : "";
       if (args[0] === "pr" && args[1] === "review") { assert.equal(humanReviewer, contract.identity.human_reviewer_id); approvedHead = pullRequest.headRefOid; return ""; }
-      if (args[0] === "pr" && args[1] === "merge") {
-        assert.equal(args.at(-1), pullRequest.headRefOid); assert.equal(approvedHead, pullRequest.headRefOid);
+      if (args[0] === "api" && args[1] === "--method" && args[2] === "PUT") {
+        assert.deepEqual(args, ["api", "--method", "PUT", `repos/${repository}/pulls/1/merge`,
+          "-f", `sha=${pullRequest.headRefOid}`, "-f", "merge_method=squash"]);
+        assert.equal(humanReviewer, contract.identity.human_reviewer_id);
+        assert.equal(approvedHead, pullRequest.headRefOid);
         nativeGit(providerRoot, "merge", "--squash", session.landing_unit.branch);
         nativeGit(providerRoot, "commit", "-m", "fixture: human-reviewed exact bootstrap squash");
-        pullRequest.state = "MERGED"; pullRequest.mergeCommit = { oid: nativeGit(providerRoot, "rev-parse", "HEAD") }; return "";
+        pullRequest.state = "MERGED";
+        pullRequest.mergeCommit = { oid: nativeGit(providerRoot, "rev-parse", "HEAD") };
+        if (loseMergeAck) throw new Error("Provider merged the pull request before losing the response");
+        return "";
       }
       assert.fail(`Native fixture cannot call an unmodeled real provider CLI: ${args[0]} ${args[1]}`);
     }
@@ -183,7 +190,8 @@ function harness(t, { existingControls = false, repairControls = false, privateR
   return { adapter, input, calls, workspaceRoot, providerRoot, session, plan, readAuthority, canonicalRoot,
     setEligible(value) { eligible = value; }, setProviderReadHook(value) { providerReadHook = value; },
     setHumanReviewer(value) { humanReviewer = value; }, setApprovedHead(value) { approvedHead = value; },
-    loseWorktreeAcknowledgement() { loseWorktreeAck = true; } };
+    loseWorktreeAcknowledgement() { loseWorktreeAck = true; },
+    loseMergeAcknowledgement() { loseMergeAck = true; } };
 }
 
 test("native bootstrap creates a canonical checkout only after proposed checks, commits finite trusted controls as Gary and publishes only that head", async t => {
@@ -246,8 +254,10 @@ test("native bootstrap exact-head human review, squash merge and owned cleanup r
   h.setApprovedHead("a".repeat(40));
   await assert.rejects(h.adapter.mergePullRequest(bound), /required human review/);
   h.setApprovedHead(committed.head_commit);
+  h.loseMergeAcknowledgement();
   const merged = await h.adapter.mergePullRequest(bound); assert.equal(merged.state, "merged");
   assert.notEqual(merged.merge_commit, committed.head_commit, "Squash proof must not pretend the source head is the merge commit");
+  assert.deepEqual(await h.adapter.mergePullRequest(bound), merged);
   const closed = await h.adapter.retireSourceResources(bound);
   assert.equal(closed.complete, true); assert.equal(closed.readback.scope, "trusted-owner-controls-only");
   assert.equal(closed.readback.canonical_commit, merged.merge_commit); assert.equal(closed.readback.app_acceptance, false);

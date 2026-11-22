@@ -108,12 +108,12 @@ function validateCapabilitiesContract(value) {
   );
   if (
     resourceRetirement &&
-    !/^work-item-[1-9][0-9]*$/.test(
-      String(resourceRetirement.activation_work_item_id ?? ""),
-    )
+    (resourceRetirement.state !== "implemented" ||
+      resourceRetirement.normal_path !== true ||
+      Object.hasOwn(resourceRetirement, "activation_work_item_id"))
   ) {
     errors.push(
-      "work-session-resource-retirement.activation_work_item_id must be a work item id",
+      "work-session-resource-retirement must be implemented on the normal path without a runtime work-item dependency",
     );
   }
   for (const gate of value?.human_gates ?? []) {

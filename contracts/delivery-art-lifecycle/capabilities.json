@@ -164,10 +164,9 @@
     },
     {
       "id": "work-session-resource-retirement",
-      "state": "human-gated",
+      "state": "implemented",
       "contract_version": 1,
-      "normal_path": true,
-      "activation_work_item_id": "work-item-970"
+      "normal_path": true
     },
     {
       "id": "resumable-lifecycle-reconciliation",

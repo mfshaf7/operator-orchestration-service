@@ -12,6 +12,7 @@ import {
 import {
   applicableDeliveryArtConformanceCases,
   DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+  deliveryArtRequiresTestEvidence,
   deliveryArtReviewEvidenceProjectionDigest,
 } from "./review-evidence.js";
 import { projectDeliveryArtOwnerEvidence } from "./review-evidence-acquisition.js";
@@ -352,7 +353,7 @@ function evidenceEntries(evidence) {
   ];
 }
 
-function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = null) {
+function evidenceState(document, coveredWorkItemIds, expectedSourceRevision, requireTests) {
   const evidence = document?.evidence ?? document;
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
     return "missing";
@@ -373,7 +374,7 @@ function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = nu
   }
   if (
     evidence.changed_surfaces.length === 0 ||
-    evidence.tests.length === 0 ||
+    (requireTests && evidence.tests.length === 0) ||
     evidence.validations.length === 0
   ) {
     return "incomplete";
@@ -824,6 +825,7 @@ export function createDeliveryArtLifecycleController({
               repo: plan.landing_unit.owner_repo,
             }
           : null,
+        deliveryArtRequiresTestEvidence(evidenceDocument),
       ),
       evidence_projection: terminalReviewPacket
         ? "current"

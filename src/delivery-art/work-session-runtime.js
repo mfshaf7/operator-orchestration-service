@@ -84,6 +84,7 @@ export function deliveryWorkItemStatus(response) {
 export function createDeliveryArtWorkSessionRuntimeStore({ env = process.env } = {}) {
   return createDeliveryArtWorkSessionStore({
     root: deliveryArtWorkStateRoot(env),
+    instanceId: env.OOS_INSTANCE_ID?.trim() || null,
     validateArchitectureSupersessionReceipt:
       validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,

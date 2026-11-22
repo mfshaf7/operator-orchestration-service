@@ -137,7 +137,7 @@ function applicationContext() {
   };
 }
 
-test("Prototype adapter creates a versioned Delivery Epic with durable source markers", async () => {
+test("Prototype adapter accepts the native starting version and saves durable source markers", async () => {
   const targets = [];
   const openProjectClient = {
     async createPrototypeDeliveryApplicationTarget(input) {
@@ -146,7 +146,7 @@ test("Prototype adapter creates a versioned Delivery Epic with durable source ma
         ownerRepo: input.ownerRepo,
         recordId: 901,
         recordRef: "openproject://work_packages/901",
-        recordVersion: 1,
+        recordVersion: 0,
         title: input.title,
       };
       targets.push(target);
@@ -175,6 +175,7 @@ test("Prototype adapter creates a versioned Delivery Epic with durable source ma
   });
 
   assert.equal(applied.target.application_state, "created");
+  assert.equal(applied.detailedTarget.record_version, 0);
   assert.equal(targets.length, 1);
   assert.equal(
     decodePrototypeDeliveryTargetMarker(targets[0].description).application_id,

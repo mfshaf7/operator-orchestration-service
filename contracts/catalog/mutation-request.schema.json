@@ -42,11 +42,31 @@
         "parent_catalog_value_key": { "type": ["string", "null"] },
         "planning_window_start_date": { "type": ["string", "null"], "format": "date" },
         "planning_window_end_date": { "type": ["string", "null"], "format": "date" },
+        "iteration_length_days": { "type": "integer", "minimum": 1 },
+        "iteration_count": { "type": "integer", "minimum": 1, "maximum": 100 },
         "repository_binding": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-reference.schema.json" }, { "type": "null" }] }
       }
     }
   },
   "allOf": [
+    {
+      "if": { "properties": { "draft": { "anyOf": [
+        { "required": ["iteration_length_days"] },
+        { "required": ["iteration_count"] }
+      ] } } },
+      "then": {
+        "properties": {
+          "catalog_item_id": { "const": "catalog-target-pi" },
+          "mode": { "enum": ["add", "edit"] },
+          "draft": {
+            "required": ["iteration_length_days", "iteration_count"],
+            "properties": {
+              "planning_window_start_date": { "type": "string", "format": "date" }
+            }
+          }
+        }
+      }
+    },
     {
       "if": { "properties": { "mode": { "const": "add" } }, "required": ["mode"] },
       "then": { "properties": { "target_value_id": { "type": "null" } } },

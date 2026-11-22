@@ -50,49 +50,19 @@ Done and retired descendants remain visible as history in the complete tree,
 but are excluded from mutable metadata targets and form requests. An open child
 under a closed ancestor still requires its current metadata. Historical work is
 not reopened or assigned new PI/roles merely to refine current work.
-Target PI and Iteration remain text fields when the current form declares
-`String`; actual `CustomOption` fields expose only the current allowed choices.
-Acceptance Criteria, Definition of Ready, Definition of Done, roles,
-classification and typed PI Objective/Risk fields use the same reviewed packet,
-not a second metadata editor. A field applies only to its explicit target ids.
-Changing form capabilities or choices invalidates the packet revision as well
-as changing the canonical tree. An unavailable empty required field stays
-blocked; populated read-only values and unavailable optional fields do not
-invite fake edits. The canonical writer and work-start guards remain decisive.
+Refinement prepares repository, team, roles, classification, acceptance
+criteria, Definition of Ready, Definition of Done and applicable risk fields.
+It preserves the original Target PI, iteration and objective values as work
+context. Starting a new Refinement run authorizes changes to initiative
+governance and work-item metadata by explicit ID. Already accepted runs keep
+their original operations and receipts for recovery.
 
-Work Design's tree schema does not create PI Objectives. Add the genuine
-objective under its Epic through Delivery Execution's existing reviewed
-`add_work_item` operation, preserving it when reconciling the Work Design tree.
-Planning records the objective type and planned business value; it does not
-invent future Actual Business Value or a completed PI review. Those optional
-packet values remain empty until actual outcome review supplies them.
-
-Creation of a new PI Objective requires Target PI and a compatible Iteration
-in that reviewed `add_work_item` input. Do not submit a blank create and expect
-Refinement to repair an item that the native writer correctly rejected.
-
-Accepted Refinement writes run in order: initiative governance, coordinated
-planning, then explicit-id work-item metadata. Target PI and Iteration use the
-existing initiative `plan/apply` authority because generic Feature updates
-cannot PI-commit a Feature. This reconciles only the reviewed existing tree
-with `reconcileMissing: ignore`; native identity remains parent/type/subject.
-Changed or ambiguous hierarchy requires a fresh review. The planning step
-retains current classification, descriptions and status; accepted classification
-changes apply afterward by explicit id, avoiding a new prefixed identity during
-plan reconciliation. Refinement never marks items Ready automatically.
-
-For a plan with current and future work, set PI and compatible Iteration only on
-the reviewed committed scope. Future new backlog Features and their valid planned
-children may keep blank PI and blank/backlog Iteration. Their planning fields are
-optional in their explicit scope; committed/active and structurally required work
-keeps required fields. Do not enter a fake PI to satisfy an unrelated branch.
-Other metadata still follows the current packet and native authority.
-
-When committing a previously uncommitted target, review PI and Iteration together.
-Invalid pairs fail before a durable run starts. Blank optional planning inputs
-retain their original values rather than clearing unreviewed state. If another
-operation changes a retained planning value after acceptance, reload and review
-the current packet; the run must not overwrite it or certify a false readback.
+After preparation is recorded, use PI Planning to confirm the objective,
+Target PI, and dated iteration assignments. A work item with native readiness
+fields complete apart from its iteration can enter planning. Execution and
+work-start checks still use the full native readiness contract. Existing
+assignments keep their original labels. A dated work schedule requires an exact
+match to the item's PI and iteration in the Catalog.
 
 Replay reads accepted fields before repeating any mutation. Final readback
 compares every effectful accepted field against its actual canonical target;

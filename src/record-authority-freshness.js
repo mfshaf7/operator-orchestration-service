@@ -37,6 +37,7 @@ export async function requireRecordAuthorityFreshness({
       throw new Error("stale or mismatched checkpoint");
     }
     await git(authorityRoot, "merge-base", "--is-ancestor", value.reviewed_revision, value.record_revision);
+    return value;
   } catch {
     throw unavailable();
   }
