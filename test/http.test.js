@@ -569,7 +569,7 @@ test("query-shaped source reads bind normalized list windows and ordered file se
     },
     deliveryService: {
       async listDeliveryInitiatives(args) { return { view: "full", include_done: args.includeDone, include_inactive: args.includeInactive }; },
-      async listDeliveryConsoleOverview(args) { return { view: "console", include_done: args.includeDone, include_inactive: args.includeInactive }; },
+      async listDeliveryConsoleOverview(args) { return { view: args.planningOnly ? "planning" : "console", include_done: args.includeDone, include_inactive: args.includeInactive, planning_pi: args.planningPI ?? null }; },
     },
     repositoryOwnerBootstrapService: { async list(args) { return { records: [{ updated_at: time }], limit: args.limit }; } },
     prototypeAuthoringService: {
@@ -603,6 +603,16 @@ test("query-shaped source reads bind normalized list windows and ordered file se
     assert.notDeepEqual(first.body.binding, other.body.binding, route);
   }
   const intake = await get("/v1/delivery-intake/sources");
+  const planning = await get("/v1/delivery-initiatives?view=planning");
+  assert.equal(planning.statusCode, 200);
+  assert.equal(planning.body.projection.view, "planning");
+  assert.notDeepEqual(planning.body.binding, (await get("/v1/delivery-initiatives?view=console")).body.binding);
+  const selectedPI = await get("/v1/delivery-initiatives?view=planning&pi=PI-2026-01");
+  assert.equal(selectedPI.statusCode, 200);
+  assert.equal(selectedPI.body.projection.planning_pi, "PI-2026-01");
+  assert.notDeepEqual(selectedPI.body.binding, planning.body.binding);
+  assert.equal((await get("/v1/delivery-initiatives?view=planning&pi=all")).statusCode, 400);
+  assert.equal((await get("/v1/delivery-initiatives?view=planning&scope=history")).statusCode, 400);
   const intakeDefault = await get("/v1/delivery-intake/sources?limit=020");
   const intakePage = await get("/v1/delivery-intake/sources?page=1");
   const intakePageAgain = await get("/v1/delivery-intake/sources?limit=20&page=01");
@@ -5278,9 +5288,17 @@ test("native register HTTP reads bind authenticated callers and reject duplicate
   assert.equal(calls[0][1].cursor, "abc");
   assert.equal(calls[0][1].includeDone, true);
   assert.equal(calls[0][1].includeInactive, true);
+  assert.equal(calls[0][1].scope, "history");
   assert.equal(calls[1][1].limit, 25);
   assert.equal(calls[1][1].cursor, "abc");
   assert.deepEqual(calls[2][1], { cursor: "abc", id: null });
+  assert.equal((await executeRequest(app, { method:"GET",url:"/v1/delivery-initiatives?view=register&scope=current",headers })).statusCode,200);
+  assert.equal(calls.pop()[1].scope,"current");
+  for (const url of ["/v1/delivery-initiatives?view=console&scope=current",
+    "/v1/delivery-initiatives?view=register&scope=current&scope=history",
+    "/v1/delivery-initiatives?view=register&scope=current&id=delivery-1"]) {
+    assert.equal((await executeRequest(app, {method:"GET",url,headers})).statusCode,400);
+  }
   for (const [, input] of calls.filter(([kind]) => kind !== "prototype")) assert.equal(input.callerId, "openclaw-telegram-enhanced");
   for (const [kind, input] of calls.slice(3)) {
     assert.deepEqual(input.prototypeIds, ["prototype:sample"]);

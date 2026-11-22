@@ -2920,6 +2920,19 @@ export function createOpenProjectClient({
     return headers;
   };
 
+  async function currentDeliveryStatusFilter() {
+    const response = await executeRequestWithRetry(joinUrl(config.baseUrl, "/api/v3/statuses"), {
+      method: "GET", headers: requestHeaders(),
+    }, { retries: 1 });
+    const payload = await readJson(response);
+    if (!response.ok) throw mapOpenProjectError(response.status, payload);
+    const excluded = ["done", "parked", "retired"].map(name => payload?._embedded?.elements?.find(status => status.name === name)?.id);
+    if (excluded.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(excluded).size !== excluded.length) {
+      throw new OpenProjectError("backend_contract_drift", "Current Delivery status scope is unavailable.", 502, "delivery_scope_status_missing");
+    }
+    return { status: { operator: "!", values: excluded.map(String) } };
+  }
+
   async function getProjectPayload(projectIdentifier) {
     let response;
 
@@ -4793,6 +4806,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const relatedIds = new Set();
       for (const relationPayload of relationMap.values()) {
         const relation = mapRelationPayload(relationPayload);
+        if (relation.relationType !== "follows") continue;
         if (relation.fromId && !workPackagesById.has(relation.fromId)) {
           relatedIds.add(relation.fromId);
         }
@@ -6911,14 +6925,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         throw new TypeError("Invalid Delivery register page.");
       }
       const filters = [{ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } }];
-      if (scope === "current") {
-        const response = await executeRequestWithRetry(joinUrl(config.baseUrl, "/api/v3/statuses"), { method: "GET", headers: requestHeaders() }, { retries: 1 });
-        const payload = await readJson(response);
-        if (!response.ok) throw mapOpenProjectError(response.status, payload);
-        const excluded = ["done", "parked", "retired"].map(name => payload?._embedded?.elements?.find(status => status.name === name)?.id);
-        if (excluded.some(id => !Number.isSafeInteger(id))) throw new OpenProjectError("backend_contract_drift", "Current Delivery status scope is unavailable.", 502, "delivery_scope_status_missing");
-        filters.push({ status: { operator: "!", values: excluded.map(String) } });
-      }
+      if (scope === "current") filters.push(await currentDeliveryStatusFilter());
       const id = recordId ?? (/^(?:delivery-)?[1-9][0-9]*$/.test(search) ? Number(search.replace("delivery-", "")) : null);
       if (id) filters.push({ id: { operator: "=", values: [String(id)] } });
       else if (search.trim()) filters.push({ subject: { operator: "~", values: [search.trim()] } });
@@ -6948,9 +6955,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           ...(includeOverviewMetadata?{total:payload.total,anchor:payload._embedded.elements.map(row=>row.id).join(",")}:{}), }, scope };
     },
 
-    async listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata = false, recordIds = null } = {}) {
+    async listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata = false, recordIds = null, currentOnly = false } = {}) {
       if (recordIds !== null && (!Array.isArray(recordIds) || recordIds.length > 100 || recordIds.some(id => !Number.isSafeInteger(id) || id < 1))) throw new TypeError("Invalid scoped Delivery identifiers.");
       if (recordIds?.length === 0) return [];
+      const filters = [];
+      if (Number.isSafeInteger(config.deliveryTopLevelTypeId) && config.deliveryTopLevelTypeId > 0) {
+        filters.push({ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } });
+      }
+      if (recordIds) filters.push({ id: { operator: "=", values: recordIds.map(String) } });
+      if (currentOnly) filters.push(await currentDeliveryStatusFilter());
       const payloads = (await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
         {
@@ -6958,9 +6971,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           // This reader needs current top-level Epic metadata, not every
           // descendant in ART. Explicit filters retain closed/inactive work;
           // local type and parent checks below remain authoritative.
-          filters: Number.isSafeInteger(config.deliveryTopLevelTypeId) && config.deliveryTopLevelTypeId > 0
-            ? [{ type: { operator: "=", values: [String(config.deliveryTopLevelTypeId)] } }, ...(recordIds ? [{ id: { operator: "=", values: recordIds.map(String) } }] : [])]
-            : recordIds ? [{ id: { operator: "=", values: recordIds.map(String) } }] : null,
+          filters: filters.length ? filters : null,
         },
       )).filter(
         (payload) =>
@@ -11691,10 +11702,68 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
-    async listDeliveryScopedInitiatives({ recordIds }) {
+    async listDeliveryScopedInitiatives({ recordIds, planningFacts = false }) {
       if (!Array.isArray(recordIds) || recordIds.length === 0) return [];
       const state = await buildDeliveryProjectState({ initiativeRecordIds: recordIds });
-      return recordIds.map(initiativeId => buildDeliveryInitiativeSummary({ includeDone: true, includeInactive: true, initiativeId, state }));
+      return recordIds.map(initiativeId => {
+        const summary = buildDeliveryInitiativeSummary({ includeDone: true, includeInactive: true, initiativeId, state });
+        if (!planningFacts) return summary;
+        const fact = subject => {
+          const row = state.nodesById.get(subject.id);
+          return { ...subject, target_pi: row.target_pi, iteration: row.iteration, type: row.type };
+        };
+        return { ...summary, planning_relations: summary.dependency_relations.map(relation => ({
+          depends_on: fact(relation.depends_on), target: fact(relation.target),
+        })) };
+      });
+    },
+
+    async readDeliveryPlanningIndex({ recordIds }) {
+      const rootIds = new Set(recordIds);
+      if (rootIds.size !== recordIds.length || recordIds.some(id => !Number.isSafeInteger(id) || id < 1)) {
+        throw new TypeError("Planning requires exact current Delivery root identities.");
+      }
+      const piField = config.deliveryCustomFieldTargetPiId;
+      if (!Number.isSafeInteger(piField) || piField < 1) {
+        throw new OpenProjectError("backend_contract_drift", "Target PI is unavailable.", 502, "delivery_planning_scope_invalid");
+      }
+      const projectsByPI = new Map();
+      const unassigned = new Set();
+      let observed = 0;
+      for (let offset = 0; offset < recordIds.length; offset += 100) {
+        const ids = recordIds.slice(offset, offset + 100);
+        const rows = await listProjectWorkPackages(config.deliveryProjectIdentifier, {
+          filters: [{ ancestor: { operator: "=", values: ids.map(String) } }],
+          includeAllStatuses: true,
+        });
+        observed += rows.length;
+        if (observed > 8192) {
+          throw new OpenProjectError("backend_contract_drift", "PI Planning index exceeds its current read limit.", 502, "delivery_planning_scope_invalid");
+        }
+        const byId = buildWorkPackageMap(rows);
+        const batchRoots = new Set(ids);
+        const rootOf = new Map(ids.map(id => [id, id]));
+        for (const row of rows) {
+          const path = new Set();
+          let id = row.id;
+          while (id && !rootOf.has(id) && !path.has(id)) {
+            path.add(id);
+            id = parseWorkPackageIdFromHref(byId.get(id)?._links?.parent?.href);
+          }
+          const rootId = rootOf.get(id);
+          if (!batchRoots.has(rootId)) {
+            throw new OpenProjectError("backend_contract_drift", "Planning work package has no verified current Epic.", 502, "delivery_planning_scope_invalid");
+          }
+          for (const ancestor of path) rootOf.set(ancestor, rootId);
+          if (!["Feature", "User story", "Defect", "Task", "PI Objective"].includes(workPackageTypeName(row))) continue;
+          const pi = normalizeStringValue(readCustomField(row, piField));
+          if (!pi) { unassigned.add(rootId); continue; }
+          const projects = projectsByPI.get(pi) ?? new Set();
+          projects.add(rootId);
+          projectsByPI.set(pi, projects);
+        }
+      }
+      return { projectsByPI, unassigned };
     },
 
     async listDeliveryInitiatives({

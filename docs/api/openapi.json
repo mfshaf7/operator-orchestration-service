@@ -2769,10 +2769,52 @@
               "type": "string",
               "enum": [
                 "console",
-                "register"
+                "register",
+                "planning"
               ]
             },
-            "description": "console retains the complete global overview and active/parked child graphs. register reads a native root page with only its scoped active graphs; exact closed child graphs remain independently inspectable. Neither read grants mutation authority."
+            "description": "console retains the global overview with active and parked child graphs. register reads a native root page. planning reads current work. With pi it selects current Epics containing work in that increment or unassigned planning work, including their related scheduling facts. These reads grant no mutation authority."
+          },
+          {
+            "in": "query",
+            "name": "pi",
+            "schema": {
+              "type": "string",
+              "pattern": "^PI-[0-9]{4}-[0-9]{2}$"
+            },
+            "description": "Only for view=planning. Select one planning increment and retain eligible unassigned work."
+          },
+          {
+            "in": "query",
+            "name": "fresh",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            },
+            "description": "Only for view=planning. Rebuild indexed membership after a confirmed planning change."
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            },
+            "description": "Only for view=planning. Load one exact current Epic opened from another Delivery workflow. Excludes pi."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "current",
+                "history"
+              ],
+              "default": "history"
+            },
+            "description": "Only for view=register. Current excludes done, parked and retired roots at the source before paging. History retains all statuses. A continuation belongs to its original scope. Exact id lookups retain their history-compatible behavior."
           },
           {
             "name": "cursor",
@@ -93014,6 +93056,19 @@
               }
             }
           },
+          "planning_scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target_pi", "indexed_at"],
+            "properties": {
+              "target_pi": { "type": "string", "pattern": "^PI-[0-9]{4}-[0-9]{2}$" },
+              "indexed_at": { "type": "string", "format": "date-time" }
+            }
+          },
+          "planning_focus": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
           "deferred_history_refs": {
             "type": "array",
             "maxItems": 8192,
@@ -93049,6 +93104,7 @@
               "scope": {
                 "enum": [
                   "root-scan-page",
+                  "current-root-scan-page",
                   "exact-package"
                 ]
               },

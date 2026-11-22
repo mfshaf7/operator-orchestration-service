@@ -64,6 +64,35 @@ const config = {
   projectIdentifier: "workspace-proposals",
 };
 
+test("PI index uses native child assignments and resolves their exact Epic ancestor", async () => {
+  const rows = [
+    {id:11, parent:1, type:"Feature", pi:"PI-2026-02"},
+    {id:12, parent:11, type:"User story", pi:"PI-2026-01"},
+    {id:20, parent:2, type:"Defect", pi:null},
+    {id:21, parent:2, type:"Risk", pi:"PI-2026-01"},
+    {id:30, parent:3, type:"Feature", pi:"PI-2026-03"},
+  ];
+  let reads=0;
+  const client=createOpenProjectClient({config,async fetchImpl(url,options) {
+    reads++;
+    assert.equal(options.method,"GET");
+    const parsed=new URL(url);
+    assert.equal(parsed.pathname,"/api/v3/projects/workspace-delivery-art/work_packages");
+    assert.deepEqual(JSON.parse(parsed.searchParams.get("filters")),[{ancestor:{operator:"=",values:["1","2","3"]}}]);
+    return new Response(JSON.stringify({count:rows.length,total:rows.length,_embedded:{elements:rows.map(row=>({
+      id:row.id, customField14:row.pi,
+      _links:{type:{title:row.type},parent:{href:`/api/v3/work_packages/${row.parent}`}},
+    }))}}));
+  }});
+  const index=await client.readDeliveryPlanningIndex({recordIds:[1,2,3]});
+  assert.deepEqual([...index.projectsByPI.get("PI-2026-01")],[1]);
+  assert.deepEqual([...index.projectsByPI.get("PI-2026-03")],[3]);
+  assert.deepEqual([...index.unassigned],[2]);
+  assert.equal(reads,1);
+  rows.push({id:40,parent:4,type:"Feature",pi:null});
+  await assert.rejects(client.readDeliveryPlanningIndex({recordIds:[1,2,3]}),{details:"delivery_planning_scope_invalid"});
+});
+
 test("Delivery status read stays bounded and rejects cross-project work items", async () => {
   const calls = [];
   let projectId = 4;
