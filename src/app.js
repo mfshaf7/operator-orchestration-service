@@ -1653,22 +1653,42 @@ async function handleListDeliveryInitiatives({
   ) ?? (url.searchParams.get("view")==="register");
 
   const view = url.searchParams.get("view");
-  if (view !== null && !["console","register"].includes(view)) {
-    throw new HttpError(400, "delivery_view_invalid", "The optional view must be console or register.");
+  if (view !== null && !["console","register","planning"].includes(view)) {
+    throw new HttpError(400, "delivery_view_invalid", "Select Console, Register or Planning for the Delivery view.");
   }
-  if(view === "register" && (!includeDone || !includeInactive || [...url.searchParams.keys()].some(key=>!["view","cursor","id","include_done","include_inactive"].includes(key)||url.searchParams.getAll(key).length!==1)))throw new HttpError(400,"delivery_register_selection_invalid","Select one complete-status Delivery root page.");
-  const record = await deliveryService[view === "register" ? "listDeliveryRegisterPage" : view === "console" ? "listDeliveryConsoleOverview" : "listDeliveryInitiatives"]({
+  const planningPI = url.searchParams.get("pi");
+  const planningFocus = url.searchParams.get("focus");
+  const refreshPlanning = url.searchParams.get("fresh");
+  if ([...url.searchParams.keys()].some(key => ["pi", "fresh", "focus"].includes(key)) && view !== "planning" ||
+      view === "planning" && ([...url.searchParams.keys()].some(key => !["view", "pi", "fresh", "focus"].includes(key) || url.searchParams.getAll(key).length !== 1) ||
+        planningPI !== null && (!/^PI-\d{4}-\d{2}$/.test(planningPI) || planningFocus !== null) ||
+        planningFocus !== null && (!/^delivery-[1-9][0-9]*$/.test(planningFocus) || !Number.isSafeInteger(Number(planningFocus.slice(9)))) ||
+        refreshPlanning !== null && refreshPlanning !== "1")) {
+    throw new HttpError(400, "delivery_planning_selection_invalid", "Select the current PI Planning view.");
+  }
+  const scope = url.searchParams.get("scope") ?? "history";
+  if (url.searchParams.has("scope") && (view !== "register" || !["current", "history"].includes(scope) ||
+      (scope === "current" && url.searchParams.has("id")))) {
+    throw new HttpError(400, "delivery_register_selection_invalid", "Select Current or History for a Delivery register page.");
+  }
+  if (view === "register" && (!includeDone || !includeInactive ||
+      [...url.searchParams.keys()].some(key => !["view", "cursor", "id", "include_done", "include_inactive", "scope"].includes(key) || url.searchParams.getAll(key).length !== 1))) {
+    throw new HttpError(400, "delivery_register_selection_invalid", "Select one Delivery root page.");
+  }
+  const record = await deliveryService[view === "register" ? "listDeliveryRegisterPage" : view === "console" || view === "planning" ? "listDeliveryConsoleOverview" : "listDeliveryInitiatives"]({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     includeDone,
     includeInactive,
-    ...(view === "register" ? {cursor:url.searchParams.get("cursor"),deliveryId:url.searchParams.get("id")} : {}),
+    ...(view === "register" ? {cursor:url.searchParams.get("cursor"),deliveryId:url.searchParams.get("id"),scope} : {}),
+    ...(view === "planning" ? { planningOnly: true, planningPI, planningFocus, refreshPlanning: refreshPlanning === "1" } : {}),
   });
 
   sendSourceProjection(response, request, record, () => ({
     recordRef: "openproject://projects/workspace-delivery-art/initiatives",
     sourceOwner: "workspace-delivery-art",
-    sourceRef: sourceReadViewRef(url, { include_done: includeDone, include_inactive: includeInactive, view }),
+    sourceRef: sourceReadViewRef(url, { include_done: view === "planning" ? false : includeDone, include_inactive: includeInactive,
+      view, pi: planningPI, focus: planningFocus }),
     sourceRevision: sourceRevisionDigest(record),
     sourceTimestamp: new Date().toISOString(),
   }));

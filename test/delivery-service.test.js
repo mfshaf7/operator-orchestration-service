@@ -2729,9 +2729,10 @@ test("Delivery global overview retains every root and batches only operational t
     recordRef: `openproject://work_packages/${i + 1}`, title: `Package ${i + 1}`, status, ownerRepo: "sample-owner",
     overview: { initiative_family: i === 0 ? "governed-ai-control-plane" : null } }));
   const service = createDeliveryService({ audit: createAudit(), openProjectClient: {
-    async listPrototypeDeliveryApplicationTargets() { return structuredClone(targets); },
+    async listPrototypeDeliveryApplicationTargets({ currentOnly = false } = {}) {
+      return structuredClone(currentOnly ? targets.filter(t => t.status === "in-progress") : targets);
+    },
     async listDeliveryScopedInitiatives({ recordIds }) {
-      assert.deepEqual(recordIds, [2, 4]);
       return targets.filter(t => recordIds.includes(t.recordId)).map(t => ({epic:{id:t.recordId,record_ref:t.recordRef,status:t.status}}));
     },
     async listDeliveryInitiatives() { throw Error("Must not scan the full execution graph"); },
@@ -2742,6 +2743,12 @@ test("Delivery global overview retains every root and batches only operational t
   assert.equal(all.roots[1].initiative_family, null);
   assert.ok(all.roots.every(p => !("open_child_count" in p) && !("workflow_phase" in p)));
   assert.deepEqual(all.deferred_history_refs, [targets[0].recordRef,targets[2].recordRef]);
+  assert.deepEqual(all.operational_initiatives.map(item => item.epic.id), [2, 4]);
+  const planning = await service.listDeliveryConsoleOverview({ planningOnly: true });
+  assert.deepEqual(planning.roots.map(item => item.id), [4]);
+  assert.deepEqual(planning.operational_initiatives.map(item => item.epic.id), [4]);
+  assert.deepEqual(planning.deferred_history_refs, []);
+  await assert.rejects(service.listDeliveryConsoleOverview({ planningOnly: true, targets }), { code: "delivery_planning_scope_invalid" });
   targets.push(targets[0]);
   await assert.rejects(service.listDeliveryConsoleOverview({}), /identity/);
 });
@@ -2761,17 +2768,72 @@ test("thousands of archived roots do not cause per-project execution scans or hi
   await assert.rejects(service.listDeliveryConsoleOverview({}),/changed/);
 });
 
+test("PI Planning indexes child assignments and reads only matching or unscheduled Epic trees", async () => {
+  const pi = "PI-2026-01", nextPI = "PI-2026-02";
+  const targets = [pi, nextPI, nextPI, nextPI].map((target_pi, index) => ({
+    recordId: index + 1, recordRef: `openproject://work_packages/${index + 1}`,
+    recordVersion: 1, status: "in-progress", title: `Epic ${index+1}`, overview: {target_pi},
+  }));
+  let indexReads = 0;
+  const treeReads = [];
+  const service = createDeliveryService({audit:createAudit(), openProjectClient:{
+    async listPrototypeDeliveryApplicationTargets({recordIds}={}) {
+      return recordIds ? targets.filter(row=>recordIds.includes(row.recordId)) : targets;
+    },
+    async readDeliveryPlanningIndex({recordIds}) {
+      assert.deepEqual(recordIds, [1,2,3,4]);
+      indexReads++;
+      return {projectsByPI:new Map([[pi,new Set(indexReads === 1 ? [2] : [4])]]),unassigned:new Set([3])};
+    },
+    async listDeliveryScopedInitiatives({recordIds,planningFacts}) {
+      assert.equal(planningFacts,true);
+      treeReads.push(recordIds);
+      return recordIds.map(id=>({epic:{id,status:"in-progress",record_ref:`openproject://work_packages/${id}`}}));
+    },
+  }});
+  const first = await service.listDeliveryConsoleOverview({planningOnly:true,planningPI:pi});
+  assert.equal(first.planning_scope.target_pi,pi);
+  assert.deepEqual(first.roots.map(row=>row.id),[1,2,3]);
+  await service.listDeliveryConsoleOverview({planningOnly:true,planningPI:nextPI});
+  await service.listDeliveryConsoleOverview({planningOnly:true,planningPI:pi,refreshPlanning:true});
+  assert.equal(indexReads,2);
+  assert.deepEqual(treeReads,[[1,2,3],[2,3,4],[1,3,4]]);
+  const focus = await service.listDeliveryConsoleOverview({planningOnly:true,planningFocus:"delivery-4"});
+  assert.equal(focus.planning_focus,"delivery-4");
+  assert.deepEqual(focus.roots.map(row=>row.id),[4]);
+  assert.deepEqual(treeReads.at(-1),[4]);
+  assert.equal(indexReads,2);
+});
+
 test("Delivery register scopes child graph reads to the native root page and rejects shifted continuation", async () => {
   const sourceRoots=Array.from({length:31},(_,i)=>({recordId:i+1,recordRef:`openproject://work_packages/${i+1}`,title:`Retained ${i+1}`,status:"done",ownerRepo:null,recordVersion:"1",overview:{target_pi:null,architecture_anchor_ref:null,required_upstream_ref:null}}));
   let changed=false;const reads=[];
   const service=createDeliveryService({config:{},audit:{emit(){}},openProjectClient:{
-    async listDeliveryRegisterPage({page}){
-      reads.push(page);const start=(page-1)*25,targets=sourceRoots.slice(start,start+25);
+    async listDeliveryRegisterPage({page,scope}){
+      reads.push([page,scope]);const start=(page-1)*25,targets=sourceRoots.slice(start,start+25);
       return {targets,page:{number:page,total:sourceRoots.length,has_more:start+25<sourceRoots.length,anchor:changed?'changed':targets.map(row=>row.recordId).join(',')}};
     },
     async listDeliveryScopedInitiatives(){throw Error('Terminal register rows must not load their old child trees.');},
   }});
   const first=await service.listDeliveryRegisterPage({callerId:'synthetic'});assert.equal(first.roots.length,25);assert.ok(first.register_page.next_cursor);
-  const second=await service.listDeliveryRegisterPage({callerId:'synthetic',cursor:first.register_page.next_cursor});assert.equal(second.roots.length,6);assert.equal(second.register_page.next_cursor,null);assert.deepEqual(reads,[1,1,2]);
+  const second=await service.listDeliveryRegisterPage({callerId:'synthetic',cursor:first.register_page.next_cursor});assert.equal(second.roots.length,6);assert.equal(second.register_page.next_cursor,null);assert.deepEqual(reads,[[1,"history"],[1,"history"],[2,"history"]]);
+  await assert.rejects(service.listDeliveryRegisterPage({scope:"current",cursor:first.register_page.next_cursor}), /Refresh the first Delivery register page/);
   changed=true;await assert.rejects(service.listDeliveryRegisterPage({cursor:first.register_page.next_cursor}),/source changed/);
+});
+
+test("Current Delivery register passes scope to the owner and binds its continuation", async () => {
+  const reads = [];
+  const service = createDeliveryService({config:{},audit:{emit(){}},openProjectClient:{
+    async listDeliveryRegisterPage({scope,page}) {
+      reads.push([scope,page]);
+      return { targets:[], page:{ number:page, total:26, has_more:page===1, anchor:"100,101" } };
+    },
+  }});
+  const first = await service.listDeliveryRegisterPage({scope:"current"});
+  assert.equal(first.register_page.scope,"current-root-scan-page");
+  assert.ok(first.register_page.next_cursor);
+  await assert.rejects(service.listDeliveryRegisterPage({scope:"history",cursor:first.register_page.next_cursor}), /Refresh the first Delivery register page/);
+  const next = await service.listDeliveryRegisterPage({scope:"current",cursor:first.register_page.next_cursor});
+  assert.equal(next.register_page.next_cursor,null);
+  assert.deepEqual(reads,[["current",1],["current",1],["current",2]]);
 });

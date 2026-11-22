@@ -476,6 +476,23 @@ export function createDeliveryService({
   const normalizedWgcfArtReadinessMode = normalizeWgcfArtReadinessMode(
     wgcfArtReadinessMode,
   );
+  let planningIndex = null;
+
+  async function currentPlanningIndex(roots, refresh) {
+    const key = JSON.stringify(roots.map(root => [root.id, root.record_version]).sort((a, b) => a[0] - b[0]));
+    if (!refresh && planningIndex?.key === key && planningIndex.expires > Date.now()) return planningIndex.result;
+    const state = { key, expires: Infinity, result: null };
+    planningIndex = state;
+    state.result = Promise.resolve().then(async () => {
+      const index = await openProjectClient.readDeliveryPlanningIndex({ recordIds: roots.map(root => root.id) });
+      state.expires = Date.now() + 30_000;
+      return { ...index, indexed_at: new Date().toISOString() };
+    }).catch(error => {
+      if (planningIndex === state) planningIndex = null;
+      throw error;
+    });
+    return state.result;
+  }
 
   async function closeSourceProposalAfterDelivery({
     callerId,
@@ -1106,7 +1123,10 @@ export function createDeliveryService({
       }
     },
 
-    async listDeliveryRegisterPage({ callerId, correlationId, cursor = null, deliveryId = null }) {
+    async listDeliveryRegisterPage({ callerId, correlationId, cursor = null, deliveryId = null, scope = "history" }) {
+      if (!["current", "history"].includes(scope) || (deliveryId !== null && scope !== "history")) {
+        throw new HttpError(400, "delivery_register_selection_invalid", "Select a Delivery root page or an exact package.");
+      }
       if(deliveryId!==null){
         const id=parseDeliveryId(deliveryId);
         if(!id||cursor!==null)throw new HttpError(400,"delivery_register_selection_invalid","Select one exact Delivery package.");
@@ -1119,23 +1139,36 @@ export function createDeliveryService({
         try{
           if(cursor.length>2048||!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();
           previous=JSON.parse(Buffer.from(cursor,"base64url").toString());
-          if(Object.keys(previous).sort().join(",")!=="anchor,offset,total"||!Number.isSafeInteger(previous.offset)||previous.offset<1||!Number.isSafeInteger(previous.total)||previous.total<0||typeof previous.anchor!=="string"||previous.anchor.length>512)throw Error();
+          const keys = scope === "current" ? "anchor,offset,scope,total" : "anchor,offset,total";
+          if(Object.keys(previous).sort().join(",")!==keys||(previous.scope??"history")!==scope||
+            !Number.isSafeInteger(previous.offset)||previous.offset<1||!Number.isSafeInteger(previous.total)||previous.total<0||typeof previous.anchor!=="string"||previous.anchor.length>512)throw Error();
         }catch{throw new HttpError(400,"delivery_register_page_invalid","Refresh the first Delivery register page.");}
-        const anchor=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope:"history",limit:25,page:previous.offset});
+        const anchor=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope,limit:25,page:previous.offset});
         if(anchor.page.total!==previous.total||anchor.page.anchor!==previous.anchor)throw new HttpError(409,"delivery_register_changed","Delivery source changed. Refresh the first register page.");
       }
-      const page=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope:"history",limit:25,page:previous?previous.offset+1:1});
+      const page=await openProjectClient.listDeliveryRegisterPage({includeOverviewMetadata:true,scope,limit:25,page:previous?previous.offset+1:1});
       if(previous&&page.page.total!==previous.total)throw new HttpError(409,"delivery_register_changed","Delivery source changed. Refresh the first register page.");
+      if (scope === "current" && page.targets.some(target => ["done", "retired", "parked"].includes(target.status))) {
+        throw new HttpError(502, "delivery_register_scope_invalid", "The owner returned a package outside the Current register.");
+      }
       const overview=await this.listDeliveryConsoleOverview({callerId,correlationId,targets:page.targets});
-      const next=page.page.has_more?Buffer.from(JSON.stringify({offset:page.page.number,total:page.page.total,anchor:page.page.anchor})).toString("base64url"):null;
-      return {...overview,register_page:{next_cursor:next,source_total:page.page.total,scope:"root-scan-page"}};
+      const next=page.page.has_more?Buffer.from(JSON.stringify({
+        offset:page.page.number,total:page.page.total,anchor:page.page.anchor,
+        ...(scope === "current" ? { scope } : {}),
+      })).toString("base64url"):null;
+      return {...overview,register_page:{next_cursor:next,source_total:page.page.total,scope:scope === "current" ? "current-root-scan-page" : "root-scan-page"}};
     },
 
-    async listDeliveryConsoleOverview({ callerId, correlationId, targets: scopedTargets = null }) {
-      const targets = scopedTargets ?? await openProjectClient.listPrototypeDeliveryApplicationTargets({ includeOverviewMetadata: true });
+    async listDeliveryConsoleOverview({ callerId, correlationId, targets: scopedTargets = null, planningOnly = false, planningPI = null,
+      planningFocus = null, refreshPlanning = false }) {
+      const focusedId = planningFocus ? Number(planningFocus.slice(9)) : null;
+      const targets = scopedTargets ?? await openProjectClient.listPrototypeDeliveryApplicationTargets({
+        includeOverviewMetadata: true, ...(planningOnly ? { currentOnly: true } : {}),
+        ...(focusedId === null ? {} : {recordIds:[focusedId]}),
+      });
       if (!Array.isArray(targets) || targets.length > 8192) throw new HttpError(502, "delivery_overview_limit", "Delivery overview exceeds its bounded root limit.");
       const seen = new Set();
-      const roots = targets.map(target => {
+      let roots = targets.map(target => {
         if (!Number.isSafeInteger(target.recordId) || target.recordId < 1 || seen.has(target.recordId) ||
             target.recordRef !== `openproject://work_packages/${target.recordId}` ||
             !["new", "ready", "in-progress", "blocked", "done", "parked", "retired"].includes(target.status)) {
@@ -1148,13 +1181,32 @@ export function createDeliveryService({
           target_pi: target.overview?.target_pi ?? null, architecture_anchor_ref: target.overview?.architecture_anchor_ref ?? null,
           required_upstream_ref: target.overview?.required_upstream_ref ?? null };
       });
+      if (planningOnly && roots.some(root => ["done", "parked", "retired"].includes(root.status))) {
+        throw new HttpError(502, "delivery_planning_scope_invalid", "The owner returned a package outside current PI Planning.");
+      }
+      if (focusedId !== null && (roots.length !== 1 || roots[0].id !== focusedId)) {
+        throw new HttpError(404, "delivery_planning_focus_unavailable", "The selected Epic is unavailable for current planning.");
+      }
+      let planningScope;
+      if (planningOnly && planningPI) {
+        const index = await currentPlanningIndex(roots, refreshPlanning);
+        const selected = index.projectsByPI.get(planningPI);
+        roots = roots.filter(root => root.target_pi === planningPI || selected?.has(root.id) || index.unassigned.has(root.id));
+        planningScope = { target_pi: planningPI, indexed_at: index.indexed_at };
+      } else if (planningOnly && refreshPlanning) {
+        // The complete read refreshes this caller's view after a mutation.
+        // Any subsequent scoped board must recompute its membership as well.
+        planningIndex = null;
+      }
       const active = roots.filter(root => !["done", "retired"].includes(root.status));
       const activeIds = new Set(active.map(root => root.id));
       const activeById = new Map(active.map(root => [root.id, root]));
       // Preserve the complete cross-project active and parked board. Terminal child
       // graphs are unrelated to its counts or eligibility and stay with their
       // exact package inspection/readiness workflows instead of every poll.
-      const initiatives = active.length ? await openProjectClient.listDeliveryScopedInitiatives({ recordIds: [...activeIds] }) : [];
+      const initiatives = active.length ? await openProjectClient.listDeliveryScopedInitiatives({
+        recordIds: [...activeIds], ...(planningScope || planningFocus ? { planningFacts: true } : {}),
+      }) : [];
       if (!Array.isArray(initiatives) || initiatives.length !== active.length) throw new HttpError(502, "delivery_overview_scope", "Active Delivery scope is incomplete.");
       for (const item of initiatives) {
         const root = activeById.get(item.epic?.id);
@@ -1190,9 +1242,11 @@ export function createDeliveryService({
       }
       audit?.emit({ caller: { id: callerId }, correlation_id: correlationId, event_type: "delivery.initiatives.read",
         backend: { result: "read", system: "openproject", target_ref: "openproject://projects/workspace-delivery-art" },
-        include_done: true, include_inactive: true, view: "console", outcome: "success", status: "ok" });
+        include_done: !planningOnly, include_inactive: !planningOnly, view: planningOnly ? "planning" : "console", outcome: "success", status: "ok" });
       return { schema_version: 1, workflow_id: "delivery-console-overview", project: { identifier: "workspace-delivery-art" },
-        roots, operational_initiatives: initiatives, deferred_history_refs: roots.filter(root => !activeIds.has(root.id)).map(root => root.record_ref), mutation_authority: "none" };
+        roots, operational_initiatives: initiatives, deferred_history_refs: roots.filter(root => !activeIds.has(root.id)).map(root => root.record_ref),
+        ...(planningScope ? { planning_scope: planningScope } : {}),
+        ...(planningFocus ? { planning_focus: planningFocus } : {}), mutation_authority: "none" };
     },
 
     async listDeliveryInitiatives({
