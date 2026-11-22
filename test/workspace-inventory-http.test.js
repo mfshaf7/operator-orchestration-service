@@ -8,6 +8,7 @@ const caller = "governance-operations-console";
 function config(shared = false) {
   return loadConfig({
     CALLER_ALLOWED_IDS: caller,
+    OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({ [caller]: "operator:test" }),
     ...(shared
       ? { CALLER_AUTH_SHARED_SECRET: "test-secret" }
       : { CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [caller]: "test-secret" }) }),
@@ -20,12 +21,13 @@ async function invoke(app, {
   body = "{}",
   secret = "test-secret",
   callerId = caller,
+  operatorId = null,
 } = {}) {
   const request = Readable.from([Buffer.from(body)]);
   Object.assign(request, {
     url,
     method,
-    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret },
+    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret, ...(operatorId ? {"x-oos-operator-id":operatorId}:{}) },
   });
   let code;
   let output = "";
@@ -59,6 +61,22 @@ test("Workspace Inventory exposes bounded prepare, submit, read, continue and ca
   assert.equal((await invoke(app, { body: '{"a":1,"a":2}' })).code, 400);
   assert.equal((await invoke(app, { body: JSON.stringify({ text: "x".repeat(65536) }) })).code, 413);
   assert.equal((await invoke(app, { url: "/v1/workspace-inventory/promotions/test/cancel", body: '{"force":true}' })).code, 400);
+});
+
+test("legacy repository migration requires the bound Console operator and exact repository selection", async () => {
+  const calls=[];
+  const service={legacyMigration:{
+    prepare:async name=>{calls.push(["prepare",name]);return {canonical_mutation:false};},
+    accept:async (name, value, operator)=>{calls.push(["accept",name,value,operator]);return {reviewed:true};},
+  }};
+  const app=createApp({config:config(),workspaceInventoryService:service});
+  const url="/v1/workspace-inventory/repository-migrations/source-demo";
+  assert.equal((await invoke(app,{url:url+"/preparation",method:"GET"})).code,403);
+  assert.equal((await invoke(app,{url,operatorId:"operator:foreign"})).code,403);
+  assert.equal((await invoke(app,{url:url+"/preparation?force=1",method:"GET",operatorId:"operator:test"})).code,400);
+  assert.equal((await invoke(app,{url:url+"/preparation",method:"GET",operatorId:"operator:test"})).code,200);
+  assert.equal((await invoke(app,{url,operatorId:"operator:test"})).code,200);
+  assert.deepEqual(calls,[["prepare","source-demo"],["accept","source-demo",{},"operator:test"]]);
 });
 
 test("registry reads require caller-bound identity but not mutation authority", async () => {

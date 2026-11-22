@@ -11,6 +11,7 @@ import { createWorkspaceInventoryLifecycleService } from "./lifecycle-service.js
 import { createWorkspaceInventoryGitHubClient } from "./provider-client.js";
 import { createWorkspaceInventorySourceClient } from "./source-client.js";
 import { createWorkspaceInventoryStore } from "./store.js";
+import { createWorkspaceIntakeStore } from "../workspace-intake/store.js";
 import { createWorkspaceInventoryService } from "./service.js";
 import {
   createWgcfWorkspaceInventoryClient,
@@ -18,7 +19,7 @@ import {
 } from "./wgcf-client.js";
 import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 
-export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl }) {
+export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl, legacyIntakeStateRoot = null }) {
   if (!config?.enabled) return null;
   if (!isWorkspaceOperationRuntimeEnabled(inventoryManifest, config.profile)) {
     throw inventoryError("activation_required", "Workspace Inventory routine operation awaits the Console, Security, and Platform activation chain.", 503);
@@ -75,6 +76,17 @@ export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl }) {
   const connection = { baseUrl: instance.baseUrl, instanceId: instance.instanceId,
     callerId: config.wgcfCallerId, callerSecret: config.wgcfCallerSecret, fetchImpl };
   const reader = createInstanceRecordReader(connection), writer = createInstanceRecordWriter(connection);
+  const legacyIntake = legacyIntakeStateRoot ? createWorkspaceIntakeStore({root:legacyIntakeStateRoot}) : null;
+  async function assertLegacyRequestsSettled(name) {
+    const [intake, promotion, lifecycle] = await Promise.all([legacyIntake?.list() ?? [], store.list(), lifecycleStore.list()]);
+    const pending = (records, terminal) => records.some(record => record.request?.target?.kind === "repo" &&
+      record.request.target.name === name && !terminal.has(record.status));
+    const inventoryTerminal = new Set(["succeeded", "cancelled", "rejected", "blocked", "stale"]);
+    if (pending(intake, new Set(["succeeded", "cancelled", "rejected", "requires-action"])) ||
+        pending(promotion, inventoryTerminal) || pending(lifecycle, inventoryTerminal)) {
+      throw inventoryError("migration_legacy_request_pending", "Finish the selected repository’s existing Git-backed requests before transferring it.", 409);
+    }
+  }
   const workflow = (family, legacy, legacyStore, kind) => {
     const journal = createInstanceIntakeJournal({ root: path.join(config.stateRoot, "instance-records", kind), instanceId: instance.instanceId });
     const native = createInstanceInventoryService({ instanceId: instance.instanceId, journal, reader, writer,
@@ -82,6 +94,16 @@ export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl }) {
     return createInstanceInventoryFacade({ legacy, legacyStore, native, journal, reader, enabled: instance.enabled, family });
   };
   return { ...service, ...workflow("workspace-inventory-promotion", service, store, "promotion"),
+    ...(instance.enabled ? { legacyMigration: {
+      async prepare(name) {
+        await assertLegacyRequestsSettled(name);
+        return writer.prepareLegacyMigration(name);
+      },
+      async accept(name, request, operatorRef) {
+        await assertLegacyRequestsSettled(name);
+        return writer.acceptLegacyMigration(name, request, operatorRef);
+      },
+    } } : {}),
     repositorySourceAuthority: async ({repoName}) => {
       const value = await reader.sourceAuthority(repoName, "ordinary-source");
       return value.canonical_authority.kind === "legacy-git" ? null : value.source_authority;

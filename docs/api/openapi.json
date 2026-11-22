@@ -27958,6 +27958,23 @@
               }
             }
           },
+          "429": {
+            "description": "The GitHub public read limit was reached. The optional retry time identifies when another provider check can run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "repository_owner_bootstrap_provider_throttled",
+                  "message": "GitHub temporarily limited public repository reads.",
+                  "details": {
+                    "retry_at": "2026-11-22T14:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
           "502": {
             "description": "Exact authentication, current authority, approval, source, recovery or activation prerequisite is not satisfied.",
             "content": {
@@ -35194,6 +35211,525 @@
             "description": "Invalid selector, denied reader or unavailable internal authority."
           }
         }
+      }
+    },
+    "/v1/workspace-inventory/repository-migrations/{name}/preparation": {
+      "get": {
+        "operationId": "prepareLegacyRepositoryMigration",
+        "summary": "Review the exact retained Git-backed source registration",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installation-bound plan with original Inventory envelope, Git path, record digest, provider identity and plan digest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schema_version",
+                    "artifact_type",
+                    "instance_id",
+                    "canonical_mutation",
+                    "source",
+                    "provider_repository",
+                    "proposed_record",
+                    "plan_digest"
+                  ],
+                  "properties": {
+                    "schema_version": {
+                      "const": 1
+                    },
+                    "artifact_type": {
+                      "const": "legacy-repository-migration-plan"
+                    },
+                    "instance_id": {
+                      "type": "string"
+                    },
+                    "canonical_mutation": {
+                      "const": false
+                    },
+                    "source": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "repository",
+                        "revision",
+                        "path",
+                        "file_digest",
+                        "record_id",
+                        "record_digest",
+                        "original_envelope"
+                      ],
+                      "properties": {
+                        "repository": {
+                          "const": "workspace-governance"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{40}$"
+                        },
+                        "path": {
+                          "const": "contracts/repos.yaml"
+                        },
+                        "file_digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        },
+                        "record_id": {
+                          "type": "string",
+                          "pattern": "^repo:[a-z0-9][a-z0-9._-]{0,185}$"
+                        },
+                        "record_digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        },
+                        "original_envelope": {
+                          "type": "object"
+                        }
+                      }
+                    },
+                    "provider_repository": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "provider",
+                        "full_name",
+                        "provider_repository_id"
+                      ],
+                      "properties": {
+                        "provider": {
+                          "const": "github"
+                        },
+                        "full_name": {
+                          "type": "string"
+                        },
+                        "provider_repository_id": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$"
+                        }
+                      }
+                    },
+                    "proposed_record": {
+                      "type": "object",
+                      "required": [
+                        "phase",
+                        "posture",
+                        "provider_repository",
+                        "record"
+                      ],
+                      "properties": {
+                        "phase": {
+                          "const": "inventory"
+                        },
+                        "posture": {
+                          "const": "active"
+                        },
+                        "provider_repository": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "provider",
+                            "full_name",
+                            "provider_repository_id"
+                          ],
+                          "properties": {
+                            "provider": {
+                              "const": "github"
+                            },
+                            "full_name": {
+                              "type": "string"
+                            },
+                            "provider_repository_id": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$"
+                            }
+                          }
+                        },
+                        "record": {
+                          "type": "object"
+                        }
+                      }
+                    },
+                    "plan_digest": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    }
+                  }
+                },
+                "example": {
+                  "schema_version": 1,
+                  "artifact_type": "legacy-repository-migration-plan",
+                  "source": {
+                    "repository": "workspace-governance",
+                    "revision": "2171a9d7d2d8c9de3d1c0edd81b668f997076505",
+                    "path": "contracts/repos.yaml",
+                    "file_digest": "sha256:0dcddd762ea65214aaa05aed5165075af99e368f41b6c03644a1c99a81495ba7",
+                    "record_id": "repo:synthetic-migrated-project",
+                    "record_digest": "sha256:ca09e32637ab6106ea299bb28a9ad10dbeed7875125f4778368693c78ef96746",
+                    "original_envelope": {
+                      "id": "repo:synthetic-migrated-project",
+                      "last_mutation": {
+                        "readiness_digest": "sha256:59fbebbf0dbce2d565a994ea1cf6ffa1814b60c9f1b60f160638c5ec236df504",
+                        "readiness_ref": "workspace-inventory-readiness:original",
+                        "request_digest": "sha256:8869ad22943e917a9e5aae887407895ca2687608588cb6f5e154e6cc4c617642",
+                        "request_ref": "workspace-inventory-request:original"
+                      },
+                      "lineage": {
+                        "source": "workspace-intake",
+                        "source_ref": "repo:synthetic-migrated-project"
+                      },
+                      "version": 3
+                    }
+                  },
+                  "provider_repository": {
+                    "full_name": "example-org/synthetic-migrated-project",
+                    "provider": "github",
+                    "provider_repository_id": "9876482"
+                  },
+                  "proposed_record": {
+                    "phase": "inventory",
+                    "allowed_authoritative_refs": [],
+                    "lifecycle": "active",
+                    "must_not_own": [
+                      "Shared runtime"
+                    ],
+                    "owns": [
+                      "Reviewed source"
+                    ],
+                    "posture": "active",
+                    "provider_repository": {
+                      "full_name": "example-org/synthetic-migrated-project",
+                      "provider": "github",
+                      "provider_repository_id": "9876482"
+                    },
+                    "record": {
+                      "id": "repo:synthetic-migrated-project",
+                      "last_mutation": {
+                        "readiness_digest": "sha256:59fbebbf0dbce2d565a994ea1cf6ffa1814b60c9f1b60f160638c5ec236df504",
+                        "readiness_ref": "workspace-inventory-readiness:original",
+                        "request_digest": "sha256:8869ad22943e917a9e5aae887407895ca2687608588cb6f5e154e6cc4c617642",
+                        "request_ref": "workspace-inventory-request:original"
+                      },
+                      "lineage": {
+                        "source": "workspace-intake",
+                        "source_ref": "repo:synthetic-migrated-project"
+                      },
+                      "version": 3
+                    },
+                    "repo_class": "product-source",
+                    "requires_security_bindings": false,
+                    "validation_behavior": {
+                      "catalog_refs": [],
+                      "notes": "Source controls.",
+                      "posture": "covered-by-owner-repo",
+                      "wgcf_graph_role": "product-runtime-source"
+                    }
+                  },
+                  "canonical_mutation": false,
+                  "plan_digest": "sha256:50019d62f0957e1440e0d745451997184db82518b06e959c056518e808d65016",
+                  "instance_id": "installation-a"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The bound Console operator is required."
+          },
+          "409": {
+            "description": "The selected registration cannot be transferred from current Git authority."
+          },
+          "400": {
+            "description": "The request cannot identify one exact transfer or has an invalid acceptance."
+          },
+          "503": {
+            "description": "The internal registration authority or transfer path is unavailable."
+          }
+        },
+        "description": "Prepare one installation-bound transfer from current Git authority. Requires the bound Console operator and no unsettled legacy requests for the selected repository.",
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-surface": "workspace-inventory",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-promotion"
+      }
+    },
+    "/v1/workspace-inventory/repository-migrations/{name}": {
+      "post": {
+        "operationId": "acceptLegacyRepositoryMigration",
+        "summary": "Import the reviewed registration after its exact Git cutover",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,185}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schema_version",
+                  "instance_id",
+                  "record_id",
+                  "idempotency_key",
+                  "plan_digest",
+                  "source_revision",
+                  "cutover_revision",
+                  "operator_acceptance"
+                ],
+                "properties": {
+                  "schema_version": {
+                    "const": 1
+                  },
+                  "instance_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "record_id": {
+                    "type": "string",
+                    "pattern": "^repo:[a-z0-9][a-z0-9._-]{0,185}$"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "plan_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "cutover_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "operator_acceptance": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "state",
+                      "operator_ref",
+                      "recorded_at"
+                    ],
+                    "properties": {
+                      "state": {
+                        "const": "accepted"
+                      },
+                      "operator_ref": {
+                        "type": "string",
+                        "minLength": 10,
+                        "maxLength": 256
+                      },
+                      "recorded_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "schema_version": 1,
+                "instance_id": "installation-a",
+                "record_id": "repo:synthetic-migrated-project",
+                "idempotency_key": "exact-migration",
+                "plan_digest": "sha256:50019d62f0957e1440e0d745451997184db82518b06e959c056518e808d65016",
+                "source_revision": "2171a9d7d2d8c9de3d1c0edd81b668f997076505",
+                "cutover_revision": "826d3b0709e4cd6bfa41e49e21416eb5ae45b069",
+                "operator_acceptance": {
+                  "state": "accepted",
+                  "operator_ref": "operator:test",
+                  "recorded_at": "2026-11-04T00:01:00Z"
+                }
+              }
+            }
+          },
+          "description": "The exact prepared transfer, reviewed Git transition, authenticated operator acceptance and replay key."
+        },
+        "responses": {
+          "200": {
+            "description": "Verified private Inventory registration and durable migration receipt. Exact replay returns the original result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record",
+                    "receipt"
+                  ],
+                  "properties": {
+                    "record": {
+                      "type": "object",
+                      "required": [
+                        "phase",
+                        "posture",
+                        "provider_repository",
+                        "record"
+                      ],
+                      "properties": {
+                        "phase": {
+                          "const": "inventory"
+                        },
+                        "posture": {
+                          "const": "active"
+                        },
+                        "provider_repository": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "provider",
+                            "full_name",
+                            "provider_repository_id"
+                          ],
+                          "properties": {
+                            "provider": {
+                              "const": "github"
+                            },
+                            "full_name": {
+                              "type": "string"
+                            },
+                            "provider_repository_id": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$"
+                            }
+                          }
+                        },
+                        "record": {
+                          "type": "object"
+                        }
+                      }
+                    },
+                    "receipt": {
+                      "$ref": "#/components/schemas/InstanceOperationalRecordReceipt"
+                    }
+                  }
+                },
+                "example": {
+                  "record": {
+                    "phase": "inventory",
+                    "allowed_authoritative_refs": [],
+                    "lifecycle": "active",
+                    "must_not_own": [
+                      "Shared runtime"
+                    ],
+                    "owns": [
+                      "Reviewed source"
+                    ],
+                    "posture": "active",
+                    "provider_repository": {
+                      "full_name": "example-org/synthetic-migrated-project",
+                      "provider": "github",
+                      "provider_repository_id": "9876482"
+                    },
+                    "record": {
+                      "id": "repo:synthetic-migrated-project",
+                      "last_mutation": {
+                        "readiness_digest": "sha256:59fbebbf0dbce2d565a994ea1cf6ffa1814b60c9f1b60f160638c5ec236df504",
+                        "readiness_ref": "workspace-inventory-readiness:original",
+                        "request_digest": "sha256:8869ad22943e917a9e5aae887407895ca2687608588cb6f5e154e6cc4c617642",
+                        "request_ref": "workspace-inventory-request:original"
+                      },
+                      "lineage": {
+                        "source": "workspace-intake",
+                        "source_ref": "repo:synthetic-migrated-project"
+                      },
+                      "version": 1
+                    },
+                    "repo_class": "product-source",
+                    "requires_security_bindings": false,
+                    "validation_behavior": {
+                      "catalog_refs": [],
+                      "notes": "Source controls.",
+                      "posture": "covered-by-owner-repo",
+                      "wgcf_graph_role": "product-runtime-source"
+                    }
+                  },
+                  "receipt": {
+                    "schema_version": 1,
+                    "artifact_type": "instance-operational-record-receipt",
+                    "authority": "internal-instance-record",
+                    "instance_id": "installation-a",
+                    "record_id": "repo:synthetic-migrated-project",
+                    "version": 1,
+                    "record_digest": "sha256:b72e9c5fa6411d52e38bb067cdea1c65868c5941c577b4adc4f50f383b7197bc",
+                    "previous": {
+                      "version": null,
+                      "digest": null
+                    },
+                    "idempotency_key": "exact-migration",
+                    "command_digest": "sha256:02f75ab84771f8dec37c1198ba75dd3b7e862f6c235c66e11993e48fe77ac569",
+                    "actor": "operator-orchestration-service",
+                    "action": "inventory.migrate-legacy",
+                    "accepted_at": "2026-11-04T00:02:00+00:00",
+                    "policy_ref": "git://workspace-governance/826d3b0709e4cd6bfa41e49e21416eb5ae45b069/contracts/instance-operational-records.yaml@sha256:a472a3c8bf72ccebe0257c1420729a235fde62d90b66a0c09643b96bf3ba4e00",
+                    "decision_digest": "sha256:8fa31aa3b17385f9fa5b0f80cf6240996d907ff080b010278526ec3b38adb0c6",
+                    "readiness_digest": "sha256:50019d62f0957e1440e0d745451997184db82518b06e959c056518e808d65016",
+                    "operator_ref": "operator:test",
+                    "receipt_digest": "sha256:85785fed754bb0a548ab272e740a293cad6638e0f4563b2b6bb9b7224a057dc3"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The bound Console operator is required."
+          },
+          "409": {
+            "description": "The exact reviewed Git cutover or original migration plan could not be verified."
+          },
+          "400": {
+            "description": "The request cannot identify one exact transfer or has an invalid acceptance."
+          },
+          "503": {
+            "description": "The internal registration authority or transfer path is unavailable."
+          }
+        },
+        "description": "Verify operator acceptance, the approved source transition and the original migration plan, then commit the private registration and its idempotent receipt.",
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-surface": "workspace-inventory",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-promotion"
       }
     },
     "/v1/workspace-inventory/repository-status": {
@@ -46075,7 +46611,7 @@
           "workflow_health": {
             "compatible_views": {
               "pm2_phase_board": {
-                "phase_field": "PM\u00b2 Phase",
+                "phase_field": "PM² Phase",
                 "retired_status": "retired",
                 "truthful": true
               },
@@ -46152,7 +46688,7 @@
           "quality_pack": {
             "compatible_views": {
               "pm2_phase_board": {
-                "phase_field": "PM\u00b2 Phase",
+                "phase_field": "PM² Phase",
                 "retired_status": "retired",
                 "truthful": true
               },
@@ -46722,7 +47258,10 @@
             "type": "string"
           },
           "source_session_present": {
-            "type": ["boolean", "null"],
+            "type": [
+              "boolean",
+              "null"
+            ],
             "description": "Whether broker custody has a source work session for this item. Null means custody is unavailable."
           },
           "work_item_id": {
@@ -93059,10 +93598,19 @@
           "planning_scope": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["target_pi", "indexed_at"],
+            "required": [
+              "target_pi",
+              "indexed_at"
+            ],
             "properties": {
-              "target_pi": { "type": "string", "pattern": "^PI-[0-9]{4}-[0-9]{2}$" },
-              "indexed_at": { "type": "string", "format": "date-time" }
+              "target_pi": {
+                "type": "string",
+                "pattern": "^PI-[0-9]{4}-[0-9]{2}$"
+              },
+              "indexed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
             }
           },
           "planning_focus": {

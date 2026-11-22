@@ -3785,6 +3785,19 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
   if (!workspaceInventoryService) {
     throw new HttpError(503, "workspace_inventory_not_active", "Workspace Inventory promotion is not activated.");
   }
+  if (action === "migration-prepare" || action === "migration-accept") {
+    if (caller.id !== "governance-operations-console") {
+      throw new HttpError(403, "instance_repository_migration_forbidden", "Repository transfer requires the authorized Console operator.");
+    }
+    const operator = deliveryWorkSessionOperatorId(request, config, caller);
+    const migration = workspaceInventoryService.legacyMigration;
+    if (!migration) throw new HttpError(503, "instance_repository_migration_unavailable", "Internal repository transfer is unavailable.");
+    if (new URL(request.url, "http://localhost").search) throw new HttpError(400, "instance_repository_migration_invalid", "Select one exact repository transfer.");
+    const result = action === "migration-prepare" ? await migration.prepare(requestId)
+      : await migration.accept(requestId, await readJsonBody(request, { canonical: true, maxBytes: 16384 }), operator);
+    sendJson(response, 200, result);
+    return;
+  }
   if (action === "instance-status") {
     if (caller.id !== "governance-operations-console") throw new HttpError(403, "instance_registry_reader_forbidden", "Private registration status requires the dedicated Console caller.");
     if (typeof workspaceInventoryService.instanceStatus !== "function") throw new HttpError(503, "instance_registry_unavailable", "The internal registration status protocol is unavailable.");
@@ -6363,6 +6376,16 @@ export function createApp({
 
       if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/repository-status") {
         await handleWorkspaceInventory({ action: "instance-status", config, workspaceInventoryService, request, response });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/workspace-inventory\/repository-migrations\/[a-z0-9][a-z0-9._-]{0,185}\/preparation$/.test(url.pathname)) {
+        const name = url.pathname.split("/")[4];
+        await handleWorkspaceInventory({ action: "migration-prepare", config, workspaceInventoryService, request, response, requestId: name });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/workspace-inventory\/repository-migrations\/[a-z0-9][a-z0-9._-]{0,185}$/.test(url.pathname)) {
+        const name = url.pathname.split("/")[4];
+        await handleWorkspaceInventory({ action: "migration-accept", config, workspaceInventoryService, request, response, requestId: name });
         return;
       }
       if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/instance-records") {

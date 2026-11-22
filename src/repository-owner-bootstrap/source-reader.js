@@ -11,13 +11,31 @@ const fail = message => { throw new HttpError(409, "repository_owner_bootstrap_s
 // Private/client source requires separate qualification; never fall back to an
 // ambient human token or silently make a private repository public.
 export function createPublicBootstrapSourceReader({ fetchImpl = globalThis.fetch } = {}) {
+  const verifiedControls = new Map();
+  let retryAt = 0;
+  const throttled = () => new HttpError(429, "repository_owner_bootstrap_provider_throttled",
+    "GitHub temporarily limited public repository reads.", { retry_at: new Date(retryAt).toISOString() });
+
   async function read(route, maxBytes) {
+    if (Date.now() < retryAt) throw throttled();
     let response;
     try {
       response = await fetchImpl(`https://api.github.com${route}`, {
         method: "GET", redirect: "error", signal: AbortSignal.timeout(15_000),
         headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
       });
+      const remaining = response.headers.get("x-ratelimit-remaining");
+      const retryAfter = response.headers.get("retry-after");
+      if (response.status === 429 || response.status === 403 && (remaining === "0" || retryAfter !== null)) {
+        const now = Date.now();
+        const reset = remaining === "0" ? Number(response.headers.get("x-ratelimit-reset")) * 1_000 : 0;
+        const retryDelay = /^\d+$/.test(retryAfter ?? "") ? Number(retryAfter) * 1_000 : 0;
+        const suggested = Math.max(reset, retryDelay > 0 ? now + retryDelay : 0);
+        retryAt = Math.max(retryAt, Number.isFinite(suggested) && suggested > now && suggested <= 8.64e15
+          ? suggested : now + 60_000);
+        await response.body?.cancel();
+        throw throttled();
+      }
       if (!response.ok || !response.body || Number(response.headers.get("content-length")) > maxBytes) {
         await response.body?.cancel();
         fail("The exact public provider source is unavailable or exceeds its read bound.");
@@ -56,7 +74,7 @@ export function createPublicBootstrapSourceReader({ fetchImpl = globalThis.fetch
         repository.default_branch !== "main") fail("Only the exact active public synthetic repository with main as its default branch is qualified.");
     const commit = await read(`/repos/${providerRepository.full_name}/commits/main`, 262_144);
     if (!SHA.test(commit.sha ?? "")) fail("The provider did not return an exact main commit.");
-    return { repository, commit: commit.sha };
+    return { repository, commit: commit.sha, tree: commit.commit?.tree?.sha };
   }
   return {
     // Read-only companion for native finalized source-import evidence. It does
@@ -117,21 +135,46 @@ export function createPublicBootstrapSourceReader({ fetchImpl = globalThis.fetch
       if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||
           paths.some(value => !SOURCE_OWNER_BOOTSTRAP_PATHS.includes(value))) fail("Inspect only the finite trusted owner paths.");
       const before = await current(providerRepository);
-      const tree = await read(`/repos/${providerRepository.full_name}/git/trees/${before.commit}?recursive=1`, 1_048_576);
-      if (tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > 8192) fail("The complete bounded provider tree is required.");
-      const entries = new Map();
-      for (const entry of tree.tree) {
-        if (typeof entry.path !== "string" || entries.has(entry.path)) fail("The provider tree contains ambiguous source paths.");
-        entries.set(entry.path, entry);
-      }
+      if (!SHA.test(before.tree ?? "")) fail("The provider did not return the exact committed tree.");
+      const cacheKey = JSON.stringify([providerRepository.provider_repository_id, providerRepository.full_name,
+        before.commit, before.tree, [...paths].sort()]);
+      const cached = verifiedControls.get(cacheKey);
+      const result = async observedFiles => {
+        const after = await current(providerRepository);
+        if (before.commit !== after.commit || before.tree !== after.tree) fail("Provider main changed during inspection; prepare against its current source.");
+        return { fetched_base: before.commit, observed_files: observedFiles, visibility: "public", default_branch: "main" };
+      };
+      if (cached) return result(Object.fromEntries(paths.map(path => [path, cached[path]])));
+      const directories = new Map();
+      const readDirectory = async sha => {
+        if (directories.has(sha)) return directories.get(sha);
+        const tree = await read(`/repos/${providerRepository.full_name}/git/trees/${sha}`, 1_048_576);
+        if (tree.sha !== sha || tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > 8192) {
+          fail("The exact source control directory is unavailable.");
+        }
+        const entries = new Map();
+        for (const entry of tree.tree) {
+          if (typeof entry?.path !== "string" || !entry.path || entry.path.includes("/") || entries.has(entry.path)) {
+            fail("The provider tree contains ambiguous source paths.");
+          }
+          entries.set(entry.path, entry);
+        }
+        directories.set(sha, entries);
+        return entries;
+      };
       const observedFiles = {};
       for (const target of paths) {
-        const parents = target.split("/").slice(0, -1);
-        for (let i = 1; i <= parents.length; i++) {
-          const parent = entries.get(parents.slice(0, i).join("/"));
-          if (parent && (parent.type !== "tree" || parent.mode !== "040000")) fail("A bootstrap parent is not a regular source directory.");
+        const parts = target.split("/");
+        let entries = await readDirectory(before.tree);
+        for (const part of parts.slice(0, -1)) {
+          const parent = entries?.get(part);
+          if (!parent) { entries = null; break; }
+          if (parent.type !== "tree" || parent.mode !== "040000" || !SHA.test(parent.sha ?? "")) {
+            fail("A bootstrap parent is not a regular source directory.");
+          }
+          entries = await readDirectory(parent.sha);
         }
-        const entry = entries.get(target);
+        const entry = entries?.get(parts.at(-1));
         if (!entry) { observedFiles[target] = null; continue; }
         if (entry.type !== "blob" || entry.mode !== "100644" || !SHA.test(entry.sha ?? "") ||
             !Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > 65_536) fail("Bootstrap source must be a bounded regular file, not a symlink or submodule.");
@@ -144,9 +187,13 @@ export function createPublicBootstrapSourceReader({ fetchImpl = globalThis.fetch
         try { observedFiles[target] = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); }
         catch { fail("Bootstrap source must be valid UTF-8."); }
       }
-      const after = await current(providerRepository);
-      if (before.commit !== after.commit) fail("Provider main changed during inspection; prepare against its current source.");
-      return { fetched_base: before.commit, observed_files: observedFiles, visibility: "public", default_branch: "main" };
+      const inspected = await result(observedFiles);
+      // The contents are immutable at the verified commit and path. The
+      // repository identity, visibility and current main are proved on every
+      // inspection, including reuse of these public bytes.
+      if (verifiedControls.size >= 8) verifiedControls.delete(verifiedControls.keys().next().value);
+      verifiedControls.set(cacheKey, { ...observedFiles });
+      return inspected;
     },
   };
 }

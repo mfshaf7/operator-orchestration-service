@@ -269,6 +269,7 @@ export function createRuntime({
   const workspaceInventoryService = createWorkspaceInventoryRuntime({
     audit,
     config: config.workspaceInventory,
+    legacyIntakeStateRoot: config.workspaceIntake?.stateRoot,
     fetchImpl,
   });
   const catalogService = createCatalogService({

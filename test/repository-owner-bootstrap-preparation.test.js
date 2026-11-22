@@ -29,6 +29,7 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
   const result = await custody.execute({ callerId, input: request });
   const actualCustody = repositoryCustodyIntakeAuthority({ result, target });
   const calls = [];
+  const sourcePaths = [];
   let observations = 0;
   const intakeReader = { proposedSourceOwner: async ({ target: selected, custodyResult }) => {
       calls.push("intake"); observations++;
@@ -52,6 +53,7 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
     intakeSourceClient: intakeReader,
     sourceReader: { inspect: async ({ providerRepository, paths, ownerAuthority }) => {
       calls.push("source"); assert.deepEqual(providerRepository, actualCustody.binding);
+      sourcePaths.push(paths);
       return inspectSource({ fetched_base: "1".repeat(40), visibility: "public", default_branch: "main",
         observed_files: Object.fromEntries(paths.map(name => [name, name === "README.md" ? "# Actual owner documentation\n" : null])) }, ownerAuthority);
     } },
@@ -62,7 +64,7 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
       { id: "tests", name: "Real project tests", kind: "tests", executable: "node", args: ["app/test.mjs"], fidelity: "pure-unit", conformance_binding: "matching-fidelity", timeout_seconds: 30 },
       { id: "validations", name: "Exact source diff", kind: "validations", executable: "git", args: ["diff", "--check", "{{base_commit}}...{{head_commit}}"], fidelity: "real-git", conformance_binding: "none", timeout_seconds: 30 },
     ] } };
-  return { root, service, input, calls, stateFile: path.join(root, "records", `${createHash("sha256").update(request.request_id).digest("hex")}.json`) };
+  return { root, service, input, calls, sourcePaths, stateFile: path.join(root, "records", `${createHash("sha256").update(request.request_id).digest("hex")}.json`) };
 }
 
 test("caller-bound read-only preparation orders canonical custody and proposed authority before exact source; unrelated authority revisions do not invalidate the selected plan", async t => {
@@ -152,11 +154,14 @@ test("active verification loads the actual current plan and requires an exact re
   }, inspectSource: source => ({ ...source, observed_files: { ...source.observed_files, ...observed } }) });
   const input = { ...active.input, operation: "configure-verification", with_ci: false, application_markers: [], evidence_profile: null };
   const inspect = await active.service.prepare({ callerId, operatorId, input });
+  assert.deepEqual(active.sourcePaths[0], [".github/CODEOWNERS",".github/pull_request_template.md","AGENTS.md","README.md",
+    "contracts/delivery-art-work-session/evidence-profile.json"]);
   assert.equal(inspect.plan, null); assert.equal(inspect.next_action, "configure-application-verification");
   assert.equal(inspect.existing_owner_controls.evidence_profile.application_verification.mode, "unconfigured");
   const profile = structuredClone(inspect.existing_owner_controls.evidence_profile);
   profile.application_verification = { mode: "manual", manual_checks: [{ id: "add-task", action: "Add task", expected_result: "Task appears" }] };
   const prepared = await active.service.prepare({ callerId, operatorId, input: { ...input, evidence_profile: profile } });
+  assert.ok(active.sourcePaths[1].includes("scripts/validate_owner.py"));
   assert.equal(prepared.operation, "configure-verification"); assert.equal(prepared.plan.intake_entry_ref, null);
   assert.equal(prepared.plan.requires_workflow_permission, false);
   assert.ok(prepared.plan.files.filter(file => file.action !== "unchanged").every(file => ["contracts/delivery-art-work-session/evidence-profile.json", "contracts/delivery-art-work-session/evidence-profile.schema.json", "contracts/delivery-art-work-session/source-bootstrap.json", "scripts/validate_owner.py"].includes(file.path)));

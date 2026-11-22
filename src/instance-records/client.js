@@ -269,6 +269,42 @@ export function createInstanceRecordWriter({ baseUrl, instanceId, callerId, call
   const transport = instanceTransport({ baseUrl, instanceId, callerId, callerSecret, fetchImpl });
   const actor = typeof callerId === "string" ? callerId.trim() : "operator-orchestration-service";
   return {
+    async prepareLegacyMigration(name) {
+      const value = await transport.request(`${recordTarget(name)}/migration/preparation`, { method: "GET" });
+      if (!exactKeys(value, ["schema_version", "artifact_type", "instance_id", "source", "provider_repository",
+        "proposed_record", "canonical_mutation", "plan_digest"]) || value.schema_version !== 1 ||
+        value.artifact_type !== "legacy-repository-migration-plan" || value.instance_id !== instanceId ||
+        value.canonical_mutation !== false || value.source?.record_id !== `repo:${name}` ||
+        value.source.path !== "contracts/repos.yaml" || !/^[0-9a-f]{40}$/.test(value.source.revision ?? "") ||
+        !DIGEST.test(value.source.record_digest ?? "") || !DIGEST.test(value.source.file_digest ?? "") ||
+        value.proposed_record?.phase !== "inventory" || value.proposed_record.posture !== "active" ||
+        digest(value.proposed_record.provider_repository) !== digest(value.provider_repository) ||
+        digest(value.proposed_record.record) !== digest(value.source.original_envelope)) fail();
+      const { instance_id: _instance, ...plan } = value;
+      const { phase: _phase, ...original } = value.proposed_record;
+      if (value.plan_digest !== digest(plan, "plan_digest") || value.source.record_digest !== digest(original)) fail();
+      return value;
+    },
+    async acceptLegacyMigration(name, request, operatorRef) {
+      if (!exactKeys(request, ["schema_version", "instance_id", "record_id", "idempotency_key", "plan_digest",
+        "source_revision", "cutover_revision", "operator_acceptance"]) || request.schema_version !== 1 ||
+        request.instance_id !== instanceId || request.record_id !== `repo:${name}` ||
+        !DIGEST.test(request.plan_digest ?? "") ||
+        !exactKeys(request.operator_acceptance, ["state", "operator_ref", "recorded_at"]) ||
+        request.operator_acceptance.state !== "accepted" || request.operator_acceptance.operator_ref !== operatorRef ||
+        typeof operatorRef !== "string" || !operatorRef.startsWith("operator:")) {
+        throw new HttpError(400, "instance_repository_migration_invalid", "Review the exact repository transfer with the authenticated operator.");
+      }
+      const value = recordResult(await transport.request(`${recordTarget(name)}/migration`, {
+        method: "POST", body: intakeStringify(request),
+      }), instanceId, name);
+      if (value.receipt.actor !== actor || value.receipt.operator_ref !== operatorRef || value.receipt.action !== "inventory.migrate-legacy" ||
+        value.receipt.idempotency_key !== request.idempotency_key || value.receipt.readiness_digest !== request.plan_digest ||
+        value.receipt.previous.version !== null || value.receipt.previous.digest !== null ||
+        value.receipt.version !== 1 || value.record.record?.version !== 1 || value.record.record?.id !== request.record_id ||
+        value.record.phase !== "inventory" || value.record.posture !== "active") fail();
+      return value;
+    },
     async accept(name, input, { operation = "intake" } = {}) {
       operationKind(operation);
       const request = input?.request, decision = input?.decision;
