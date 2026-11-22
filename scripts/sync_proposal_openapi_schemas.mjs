@@ -86,13 +86,14 @@ synchronized = upsertOpenApiPath(synchronized, "/v1/proposals/{proposal_id}/proj
 const registerSchema=JSON.parse(readFileSync(path.join(contractRoot,"register-result.schema.json"),"utf8"));
 const registerPath=structuredClone(spec.paths["/v1/ideas"]);
 registerPath.get.operationId="readProposalRegister";
-registerPath.get.summary="Read a bounded Proposal register page without opening record histories";
-registerPath.get.description="Search and workflow/ingress filters cover the source backlog through continuation. Each request scans at most four native collection pages and returns at most 25 metadata records. source_total counts the source inventory, not filtered matches. Linked Delivery reads select exact referenced roots. Read a selected source snapshot before workflow review; load history using its existing cursor reader.";
+registerPath.get.summary="Read a bounded Proposal register page";
+registerPath.get.description="Search and workflow or ingress filters cover the source backlog through continuation. Each request scans at most four native collection pages and returns at most 25 metadata records. source_total counts the unfiltered source inventory. Standard register pages read linked Delivery roots. The overview skips that read and detailed Proposal text, retaining source posture and attention facts. A persisted repository acknowledgement requires verification of the matching journal receipt. Read a selected source snapshot before workflow review.";
 registerPath.get.parameters=[
  {in:"query",name:"query",required:false,description:"Search current idea text, identity, route and repository metadata across the backlog.",schema:{type:"string",maxLength:200,default:""}},
  {in:"query",name:"status",required:false,description:"Read-only workflow posture filter; not a lifecycle mutation.",schema:{...registerSchema.properties.selector.properties.status,type:"string",default:"all"}},
  {in:"query",name:"ingress",required:false,description:"Filter the recorded source kind.",schema:{...registerSchema.properties.selector.properties.ingress,type:"string",default:"all"}},
- {in:"query",name:"cursor",required:false,description:"Continuation for the identical search and filters. A changed inventory requires refresh.",schema:{type:"string",maxLength:600}},
+ {in:"query",name:"cursor",required:false,description:"Continuation for the same view, search and filters. A changed inventory requires refresh.",schema:{type:"string",maxLength:600}},
+ {in:"query",name:"view",required:false,description:"overview reads attention and handoff metadata. Use the default unfiltered selection for this view.",schema:{type:"string",enum:["overview"]}},
 ];
 registerPath.get.responses["200"].content["application/json"]={schema:{$ref:"#/components/schemas/ProposalRegisterV1"},example:registerSchema.example};
 synchronized=upsertOpenApiPath(synchronized,"/v1/proposals/register",addConsoleSourceProjectionMedia(registerPath,"get"));

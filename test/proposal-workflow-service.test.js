@@ -118,6 +118,9 @@ test("cold browser can recover exact persisted acknowledgement after source comm
   const restarted = h.reopen();
   const projection = await restarted.getProjection({ callerId: input.callerId, proposalId: input.proposalId });
   assert.equal(projection.repository_resolution_history_pending, true);
+  const register = await restarted.getRegister({ callerId: input.callerId });
+  assert.equal(register.records[0].projection.repository_resolution_history_pending, true);
+  assert.equal(register.records[0].history.events.length, 0);
   const persisted = projection.repository_resolution;
   const rebuilt = { schema_version: 1, resolution_id: persisted.resolution_id, proposal_id: persisted.proposal_id,
     operator: input.resolution.operator, source: { ...input.resolution.source, record_version: persisted.source_version },
@@ -126,6 +129,7 @@ test("cold browser can recover exact persisted acknowledgement after source comm
   const result = await restarted.resolveRepositoryGate({ ...input, resolution: rebuilt });
   assert.equal(result.replayed, true);
   assert.equal(result.projection.repository_resolution_history_pending, false);
+  assert.equal((await restarted.getRegister({ callerId: input.callerId })).records[0].projection.repository_resolution_history_pending, false);
   assert.equal(result.event.occurred_at, persisted.recorded_at);
   assert.equal(h.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
 });
@@ -337,6 +341,9 @@ function createHarness({
     async getIdea() {
       calls.push(["getIdea"]);
       return structuredClone(storedRecord);
+    },
+    async listIdeas({ limit, offset }) {
+      return { items: [structuredClone(storedRecord)], total: 1, limit, offset };
     },
     async getProposalAutomationUserRef() {
       return AUTOMATION_USER_REF;

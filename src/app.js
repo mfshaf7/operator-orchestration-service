@@ -7295,10 +7295,10 @@ export function createApp({
       if (request.method === "GET" && url.pathname === "/v1/proposals/register") {
         const caller = authenticateCaller(request, config);
         assertProposalWorkflowConfigured(config);
-        if ([...url.searchParams.keys()].some(key => !["query", "status", "ingress", "cursor"].includes(key) || url.searchParams.getAll(key).length !== 1)) throw new HttpError(400, "proposal_register_query_invalid", "Select one Proposal search and filter set.");
+        if ([...url.searchParams.keys()].some(key => !["query", "status", "ingress", "cursor", "view"].includes(key) || url.searchParams.getAll(key).length !== 1)) throw new HttpError(400, "proposal_register_query_invalid", "Select one Proposal search and filter set.");
         const result = await proposalWorkflowService.getRegister({...Object.fromEntries(url.searchParams),callerId:caller.id,correlationId:createCorrelationId(request)});
         sendSourceProjection(response, request, result, () => ({ recordRef: "openproject://projects/workspace-proposals",
-          sourceOwner: "workspace-proposals", sourceRef: sourceReadViewRef(url, {...result.selector,cursor:url.searchParams.get("cursor")}), sourceRevision: sourceRevisionDigest(result), sourceTimestamp: new Date().toISOString() }));
+          sourceOwner: "workspace-proposals", sourceRef: sourceReadViewRef(url, {...result.selector,cursor:url.searchParams.get("cursor"),view:url.searchParams.get("view")}), sourceRevision: sourceRevisionDigest(result), sourceTimestamp: new Date().toISOString() }));
         return;
       }
 

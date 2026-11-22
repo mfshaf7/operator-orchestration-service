@@ -7,7 +7,7 @@ function fixture(count=61, changes={}) {
   const calls=[], rows=Array.from({length:count},(_,index)=>({ideaId:`idea-${count-index}`,recordRef:`openproject://work_packages/${count-index}`,createdAt:"2026-11-05T00:00:00Z",title:`Idea ${count-index}`,body:"Useful source",status:"captured",deliveryRef:null,...changes}));
   const client={async listIdeas({limit,offset}){calls.push(["list",offset]);return {items:rows.slice((offset-1)*limit,offset*limit),total:rows.length,limit,offset};},
     async listProposalActivities(){throw new Error("Register opened history");},async getIdea(){throw new Error("Register fetched individual record");},
-    async listPrototypeDeliveryApplicationTargets({recordIds}){calls.push(["linked",recordIds]);return recordIds.map(id=>({record_ref:`openproject://work_packages/${id}`,status:"retired"}));}};
+    async listPrototypeDeliveryApplicationTargets({recordIds}){calls.push(["linked",recordIds]);return recordIds.map(id=>({recordId:id,recordRef:`openproject://work_packages/${id}`,status:"retired"}));}};
   const read=createProposalRegisterReader({openProjectClient:client,projectRecord:row=>({schema_version:1,proposal_id:row.ideaId,record_ref:row.recordRef,title:row.title,body:row.body,updated_at:row.createdAt,record_version:"version-1",projection_state:"current",status:row.status,
     delivery_ref:row.deliveryRef,source:{ingress:row.ingress??"console"},route:null,handoff:{state:"not-requested"}})});
   return {read,rows,calls,client};
@@ -29,6 +29,17 @@ test("cursor rejects another search/filter and detects an inventory shift instea
 });
 test("page filters retain downstream retired truth using an exact scoped metadata read",async()=>{
  const h=fixture(2,{status:"accepted",deliveryRef:"openproject://work_packages/901"});const page=await h.read({status:"retired"});assert.equal(page.records.length,2);assert.deepEqual(h.calls,[["list",1],["linked",[901]]]);
+ assert.ok(page.records.every(row=>row.deliveryLink.status==="retired" && row.deliveryLink.sourceState==="current"));
+});
+test("overview retains the handoff source reference without loading Delivery or detailed text",async()=>{
+ const h=fixture(26,{status:"accepted",deliveryRef:"openproject://work_packages/901"});
+ const first=await h.read({view:"overview"});
+ assert.deepEqual(h.calls,[["list",1]]);
+ assert.ok(first.records.every(row=>row.projection.body===null && row.projection.delivery_ref==="openproject://work_packages/901" && !row.deliveryLink));
+ await assert.rejects(h.read({cursor:first.next_cursor}),{code:"proposal_register_query_invalid"});
+ const next=await h.read({view:"overview",cursor:first.next_cursor});
+ assert.equal(next.records.length,1);
+ assert.equal(next.next_cursor,null);
 });
 test("native malformed page metadata fails closed",async()=>{
  const h=fixture();h.client.listIdeas=async()=>({items:[],total:61,limit:25,offset:1});await assert.rejects(h.read(),error=>error.code==="proposal_register_source_invalid");

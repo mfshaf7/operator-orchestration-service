@@ -35307,8 +35307,8 @@
         "tags": [
           "Ideas"
         ],
-        "summary": "Read a bounded Proposal register page without opening record histories",
-        "description": "Search and workflow/ingress filters cover the source backlog through continuation. Each request scans at most four native collection pages and returns at most 25 metadata records. source_total counts the source inventory, not filtered matches. Linked Delivery reads select exact referenced roots. Read a selected source snapshot before workflow review; load history using its existing cursor reader.",
+        "summary": "Read a bounded Proposal register page",
+        "description": "Search and workflow or ingress filters cover the source backlog through continuation. Each request scans at most four native collection pages and returns at most 25 metadata records. source_total counts the unfiltered source inventory. Standard register pages read linked Delivery roots. The overview skips that read and detailed Proposal text, retaining source posture and attention facts. A persisted repository acknowledgement requires verification of the matching journal receipt. Read a selected source snapshot before workflow review.",
         "operationId": "readProposalRegister",
         "security": [
           {
@@ -35370,10 +35370,22 @@
             "in": "query",
             "name": "cursor",
             "required": false,
-            "description": "Continuation for the identical search and filters. A changed inventory requires refresh.",
+            "description": "Continuation for the same view, search and filters. A changed inventory requires refresh.",
             "schema": {
               "type": "string",
               "maxLength": 600
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "description": "overview reads attention and handoff metadata. Use the default unfiltered selection for this view.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "overview"
+              ]
             }
           }
         ],

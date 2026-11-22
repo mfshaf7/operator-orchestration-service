@@ -30,7 +30,8 @@ function stateOf(p, deliveryLink) {
   if (p.delivery_ref) return deliveryLink?.status === "retired" && p.status !== "implemented" ? "retired" : "done";
   if (p.handoff.state === "applied" || ["implemented", "rejected"].includes(p.status)) return "done";
   if (["captured", "triaged", "parked"].includes(p.status)) return p.status;
-  return p.route?.source_custody.repository_gate_state === "pending" ? "waiting-on-repository" : "ready-to-route";
+  return p.route?.source_custody.repository_gate_state === "pending" || p.repository_resolution_history_pending === true
+    ? "waiting-on-repository" : "ready-to-route";
 }
 function matches(p, link, selector) {
   const status = stateOf(p, link);
@@ -43,11 +44,15 @@ function matches(p, link, selector) {
     .filter(Boolean).join(" ").toLowerCase().includes(selector.query);
 }
 
-// Summary reads use the canonical collection fields. They never scan activity
-// journals, expand Delivery children or grant authority to submit a command.
+// Summary reads do not expand Delivery children or grant mutation authority.
+// Only a persisted repository acknowledgement requires a journal check.
 export function createProposalRegisterReader({ openProjectClient, projectRecord }) {
-  return async function readRegister({ cursor = null, ...input } = {}) {
-    const selector = selectorOf(input), position = cursorOf(cursor, selector), records = [];
+  return async function readRegister({ cursor = null, view = null, ...input } = {}) {
+    const selector = selectorOf(input);
+    const overview = view === "overview";
+    if (view !== null && (!overview || selector.query || selector.status !== "all" || selector.ingress !== "all")) throw invalid();
+    const cursorScope = overview ? { ...selector, view } : selector;
+    const position = cursorOf(cursor, cursorScope), records = [];
     let { page, index, total, anchor } = position;
     for (let scanned = 0; scanned < SCAN_PAGES; scanned++) {
       const source = await openProjectClient.listIdeas({ limit: PAGE_SIZE, offset: page });
@@ -59,16 +64,18 @@ export function createProposalRegisterReader({ openProjectClient, projectRecord 
       total = source.total;
       const ids = source.items.map(row => row.ideaId);
       if (new Set(ids).size !== ids.length || ids.some(id => !/^idea-[1-9][0-9]*$/.test(id))) throw changed();
-      const linkedIds = [...new Set(source.items.flatMap(row => /^openproject:\/\/work_packages\/([1-9][0-9]*)$/.exec(row.deliveryRef ?? "")?.slice(1).map(Number) ?? []))];
+      const linkedIds = overview ? [] : [...new Set(source.items.flatMap(row => /^openproject:\/\/work_packages\/([1-9][0-9]*)$/.exec(row.deliveryRef ?? "")?.slice(1).map(Number) ?? []))];
       let delivery = null;
       if (linkedIds.length && typeof openProjectClient.listPrototypeDeliveryApplicationTargets === "function") {
         try { delivery = new Map((await openProjectClient.listPrototypeDeliveryApplicationTargets({ recordIds: linkedIds }))
-          .map(row => [row.record_ref, row.status])); }
+          .map(row => [row.recordRef, row.status])); }
         catch (error) { if ([401, 403].includes(error.statusCode)) throw error; }
       }
       for (; index < source.items.length; index++) {
-        const row = source.items[index], projection = projectRecord(row, null), observedAt = new Date().toISOString();
-        const deliveryLink = projection.delivery_ref ? { recordRef: projection.delivery_ref, status: delivery?.get(projection.delivery_ref) ?? null,
+        const row = source.items[index], projected = await projectRecord(row), observedAt = new Date().toISOString();
+        const projection = overview ? { ...projected, body: null, decision_notes: null, triage_summary: null,
+          source: { ...projected.source, context_ref: {}, native_ref: {} } } : projected;
+        const deliveryLink = !overview && projection.delivery_ref ? { recordRef: projection.delivery_ref, status: delivery?.get(projection.delivery_ref) ?? null,
           observedAt, sourceState: delivery?.has(projection.delivery_ref) ? "current" : "unavailable" } : undefined;
         if (!matches(projection, deliveryLink, selector)) continue;
         records.push({ creationKnown:typeof row.createdAt === "string" && Number.isFinite(Date.parse(row.createdAt)), createdAt: row.createdAt ?? projection.updated_at, projection, ...(deliveryLink ? { deliveryLink } : {}), summaryOnly: true,
@@ -77,13 +84,13 @@ export function createProposalRegisterReader({ openProjectClient, projectRecord 
           const nextIndex = index + 1, more = (page - 1) * PAGE_SIZE + nextIndex < total;
           return { schema_version: 1, workflow_id: "proposal-register", selector, records, source_total: total,
             next_cursor: more ? encodeCursor({ page: nextIndex === PAGE_SIZE ? page + 1 : page, index: nextIndex % PAGE_SIZE, total,
-              anchor: nextIndex === PAGE_SIZE ? null : row.ideaId }, selector) : null };
+              anchor: nextIndex === PAGE_SIZE ? null : row.ideaId }, cursorScope) : null };
         }
       }
       page++; index = 0; anchor = null;
       if ((page - 1) * PAGE_SIZE >= total) return { schema_version: 1, workflow_id: "proposal-register", selector, records, source_total: total, next_cursor: null };
     }
     return { schema_version: 1, workflow_id: "proposal-register", selector, records, source_total: total,
-      next_cursor: encodeCursor({ page, index: 0, total, anchor: null }, selector) };
+      next_cursor: encodeCursor({ page, index: 0, total, anchor: null }, cursorScope) };
   };
 }
