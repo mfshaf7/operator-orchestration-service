@@ -41,6 +41,34 @@ test("all three saved-work kinds recover exact content after store restart", asy
     assert.equal(restored.record.revision, 1);
   }
 });
+test("technical plan drafts restore exact private input and cannot store an approval", async t => {
+  const { root, store } = setup(t);
+  const who = { ...identity, kind: "technical-plan" };
+  const value = { schemaVersion: 1, packageId: who.subjectId, draft: {
+    deliveryId: who.subjectId, coveredWorkItemIds: ["work-item-43"], rationale: "Explain the scope.",
+    architectureJson: "{", conformanceJson: "{}", repoRevisionsJson: "[]",
+  } };
+  const first = await store.save(who, command(value, 0, "draft"));
+  assert.deepEqual(createSavedWorkStore({ root }).read(who), first);
+  assert.equal(store.read({ ...who, operatorId: "operator:other" }).record, null);
+  await assert.rejects(store.save(who, command({ ...value, draft: { ...value.draft, approval: true } }, 1, "approval")), { code: "saved_work_input_invalid" });
+  await assert.rejects(store.save(who, command({ ...value, draft: { ...value.draft, deliveryId: "delivery-99" } }, 1, "wrong")), { code: "saved_work_payload_invalid" });
+  await assert.rejects(store.save(who, command(value, 0, "stale")), { code: "saved_work_revision_conflict" });
+  const inactiveArchitectureSections = {
+    authorization_session_execution_model: { summary: "Keep the project access notes." },
+    lifecycle_state_model: { states: ["ready"], transitions: [] },
+  };
+  const starterBasis = { workItemId: 43, scope: '[43,"PI 2","Iteration 1",null,[],[]]' };
+  const changed = { ...value, draft: { ...value.draft, inactiveArchitectureSections, starterBasis } };
+  await store.save(who, command(changed, 1, "switch-options"));
+  assert.deepEqual(JSON.parse(createSavedWorkStore({ root }).read(who).record.payload_json), changed);
+  await assert.rejects(store.save(who, command({ ...value, draft: { ...value.draft, inactiveArchitectureSections: { approval: {} } } }, 2, "invalid-section")),
+    { code: "saved_work_payload_invalid" });
+  await assert.rejects(store.save(who, command({ ...value, draft: { ...value.draft,
+    starterBasis: { ...starterBasis, scope: "" } } }, 2, "invalid-starter-scope")), { code: "saved_work_payload_invalid" });
+  const cleared = await store.save(who, command({ ...value, draft: null }, 2, "clear"));
+  assert.equal(JSON.parse(cleared.record.payload_json).draft, null);
+});
 test("save acknowledgement retries are exact and conflicting reuse fails", async t => {
   const { store } = setup(t); const input = command();
   const first = await store.save(identity, input); assert.deepEqual(await store.save(identity, input), first);

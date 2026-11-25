@@ -102,6 +102,7 @@ const ACTIONS = Object.freeze({
     workSource.readArtifact(input.location),
   "work.publish-agent-source": ({ workSource }, input) =>
     workSource.publishAgentSource(input.session),
+  "work.read-technical-plan-source": ({ workSource }, input) => workSource.readTechnicalPlanSource(input),
   "work.resolve-base": ({ workSource }, input) => workSource.resolveBase(input),
   "work.resolve-worktree": ({ workSource }, input) =>
     workSource.resolveWorktree(input.session),
@@ -515,6 +516,7 @@ export function createDeliveryArtSourceExecutorClient({
     prepareAgentSource: (session) => invoke("work.prepare-agent-source", { session }),
     publishAgentSource: (session) => invoke("work.publish-agent-source", { session }),
     readArtifact: (location) => invoke("work.read-artifact", { location }),
+    readTechnicalPlanSource: (input) => invoke("work.read-technical-plan-source", input),
     resolveBase: (input) => invoke("work.resolve-base", input),
     resolveWorktree: (session) => invoke("work.resolve-worktree", { session }),
     retirePristineSession: (input) =>

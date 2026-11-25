@@ -653,3 +653,56 @@ test("source adapter refuses missing, stale, or superseded exact-head review", a
   );
   assert.equal(merged, false);
 });
+
+test("Technical Plan reads default branch, exact activation values and raw document digests without changing source", async t => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "technical-plan-source-"));
+  t.after(() => rm(workspaceRoot, { recursive: true, force: true }));
+  const repo = path.join(workspaceRoot, "sample");
+  const remote = path.join(workspaceRoot, "remote.git");
+  await mkdir(repo);
+  git(workspaceRoot, ["init", "--bare", "-b", "primary", remote]);
+  git(repo, ["init", "-b", "primary"]);
+  git(repo, ["config", "user.name", "Test"]);
+  git(repo, ["config", "user.email", "test@invalid"]);
+  git(repo, ["remote", "add", "origin", remote]);
+  await mkdir(path.join(repo, "config"));
+  const document = "Authorization for the reviewed change.  \n";
+  await writeFile(path.join(repo, "authorization.md"), document);
+  await writeFile(path.join(repo, "config/runtime.yaml"), "runtime:\n  enabled: false\n  token: sample\n");
+  await symlink("authorization.md", path.join(repo, "linked.md"));
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "Record source evidence"]);
+  git(repo, ["push", "origin", "primary"]);
+  const revision = git(repo, ["rev-parse", "HEAD"]);
+  const source = createDeliveryArtWorkSessionSourceAdapter({ workspaceRoot });
+  assert.deepEqual(await source.readTechnicalPlanSource({ ownerRepo: "sample", kind: "revision" }),
+    { repo: "sample", base_ref: "origin/primary", commit: revision });
+  const pinned = { ownerRepo: "sample", baseRef: "origin/primary", revision };
+  await writeFile(path.join(repo, "notes.md"), "A newer revision.\n");
+  git(repo, ["add", "notes.md"]);
+  git(repo, ["commit", "-m", "Add notes"]);
+  git(repo, ["push", "origin", "primary"]);
+  const head = git(repo, ["rev-parse", "HEAD"]);
+  assert.notEqual(head, revision);
+  assert.deepEqual(await source.readTechnicalPlanSource({ ...pinned, kind: "revision" }),
+    { repo: "sample", base_ref: "origin/primary", commit: revision });
+  await assert.rejects(source.readTechnicalPlanSource({ ...pinned, kind: "revision", revision: "f".repeat(40) }));
+  await writeFile(path.join(repo, "config/runtime.yaml"), "runtime:\n  enabled: true\n");
+  const before = git(repo, ["status", "--porcelain"]);
+  assert.deepEqual(await source.readTechnicalPlanSource({ ...pinned, kind: "activation",
+    filePath: "config/runtime.yaml", field: "runtime.enabled" }), {
+    repo: "sample", revision, path: "config/runtime.yaml", field: "runtime.enabled",
+    observed_value: false, observed_posture: "owner-source-change-required",
+  });
+  await assert.rejects(source.readTechnicalPlanSource({ ...pinned, kind: "activation",
+    filePath: "config/runtime.yaml", field: "runtime.token" }), /name of a setting/);
+  await assert.rejects(source.readTechnicalPlanSource({ ...pinned, kind: "activation",
+    filePath: "../outside.yaml", field: "runtime.enabled" }), /outside the bounded/);
+  await assert.rejects(source.readTechnicalPlanSource({ ...pinned, kind: "authorization",
+    filePath: "linked.md" }), /tracked regular file/);
+  git(repo, ["remote", "set-url", "origin", "https://github.com/example/sample.git"]);
+  assert.deepEqual(await source.readTechnicalPlanSource({ ...pinned, kind: "authorization", filePath: "authorization.md" }),
+    { uri: `https://github.com/example/sample/blob/${revision}/authorization.md`, digest: digest(document) });
+  assert.equal(git(repo, ["status", "--porcelain"]), before);
+  assert.equal(git(repo, ["rev-parse", "HEAD"]), head);
+});

@@ -677,9 +677,9 @@ function normalizeIdeaSource(body) {
   return normalizeSourceIdentity(body.source);
 }
 
-async function buildReadiness(config, openProjectClient) {
+async function buildReadiness(config, openProjectClient, agentConsoleActive) {
   const failing = [];
-  const checks = {};
+  const checks = { agent_console: agentConsoleActive ? "active" : "inactive" };
   const missing = getOpenProjectMissingConfig(config);
 
   if (missing.length > 0) {
@@ -5841,7 +5841,7 @@ export function createApp({
       }
 
       if (request.method === "GET" && url.pathname === "/readyz") {
-        const readiness = await buildReadiness(config, openProjectClient);
+        const readiness = await buildReadiness(config, openProjectClient, Boolean(agentConsoleService));
         sendJson(response, readiness.ready ? 200 : 503, readiness);
         return;
       }
@@ -7760,6 +7760,19 @@ export function createApp({
           request,
           response,
         });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/delivery-art/architecture-packets/facts") {
+        const caller = authenticateCaller(request, config);
+        assertDeliveryMutationAuthority(caller);
+        assertCallerIdentityBound(caller, "Delivery ART technical plan facts");
+        const operatorId = deliveryArtifactOperatorId(request, config, caller);
+        const body = await readDeliveryArtJsonBody(request);
+        assertObject(body.input, "input");
+        sendJson(response, 200, await deliveryArtArtifactService.technicalPlanFacts({
+          callerId: caller.id, operatorId, input: body.input,
+        }));
         return;
       }
 

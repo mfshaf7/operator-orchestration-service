@@ -12,6 +12,8 @@ test("every current draft/editor role has a source-owned work guide; unknown rol
   for (const role of expected) {
     const guide = advisorWorkInstruction(role);
     assert.ok(guide.includes(`Work guide ${advisorWorkInstructionVersion}; role=${role}.`));
+    assert.match(guide, /Use short paragraphs and separate distinct points with blank lines/);
+    assert.match(guide, /destination field's required schema, scaffold, template/);
     for (const source of advisorWorkSources(role)) assert.ok(existsSync(new URL(`../${source}`, import.meta.url)), `${role}: ${source}`);
   }
   assert.throws(() => advisorWorkInstruction("unimplemented-role"), { code: "advisor_work_role_unknown" });
@@ -19,6 +21,8 @@ test("every current draft/editor role has a source-owned work guide; unknown rol
   assert.ok(advisorWorkInstruction().includes(consoleWorkflowGuide));
   assert.match(consoleWorkflowGuide, /Work Design explains architecture/);
   assert.match(consoleWorkflowGuide, /model registration does not load project knowledge/);
+  assert.match(advisorWorkInstruction("work-design-context"), /`# Descriptive title` once and `## Section heading`/);
+  assert.doesNotMatch(advisorWorkInstruction("work-design-tree"), /`# Descriptive title` once/);
 });
 
 test("promotion evidence requirements and completion rule come from the actual canonical maturity contract", () => {

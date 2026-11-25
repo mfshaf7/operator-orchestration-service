@@ -29,6 +29,9 @@ The Console still validates its exact captured source/view and the complete loca
 transaction before editing. Questions and readonly requests cannot change drafts;
 switching views or changing captured content prevents a stale proposal applying.
 Final workflow decisions and canonical actions remain separate explicit controls.
+Drafting advisors share a writing guide for human-facing text. Drafted prose
+uses plain language, short paragraphs and lists where they help the reader.
+Titles, code, structured fields and fixed choices keep their required formats.
 This source batch requires paired Platform schema and composed operating proof
 before it is claimed live.
 
@@ -238,10 +241,11 @@ Only manual requests invoke it. The work guide is source-owned in
 `src/advisor-work-instructions.js` and the activity kind is registered in the
 existing invocation and activity contracts.
 
-The supplied selected section contract and actual project observations guide
-local JSON drafting. The advisor may explain or draft that section when asked;
-it cannot grant architecture approval, record custody, select covered work,
-change source pins, or start/complete execution. Missing Work Design, source
+The advisor can draft the local plan summary in **Choose scope** or a selected
+plan section when explicitly asked. The summary uses plain language and short
+paragraphs. Section edits follow the supplied schema. The operator reviews the
+draft and makes the approval decision separately. Custody, scope selection,
+source pins and execution stay with their existing workflows. Missing Work Design, source
 contents or cross-section evidence remains unknown. The Console explicitly
 identifies which saved diagram and supporting sections are loaded. Final plan
 validation, human approval and recording keep the existing architecture API and

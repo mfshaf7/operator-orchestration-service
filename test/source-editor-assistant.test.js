@@ -18,6 +18,7 @@ function fixture({mode="ask",scope=null}={}){
 for(const scope of [null,{source_root:"prototypes/example",design_profile:"docs/prototypes/example/design-profile.md"}])test(`assistant retains reply, source profile and explicit original replay: ${scope?'Prototype':'Delivery'}`,async()=>{
  const h=fixture({scope}),before=structuredClone(h.state),result=await h.run();assert.equal(result.message,"Explanation");assert.deepEqual(h.state,before);assert.equal(h.calls[0].profile_id,h.state.profileId);assert.equal(h.calls[0].task.kind,"source_editor_assistance");assert.equal(h.calls[0].caller_identity.caller_workflow,h.state.modelCaller.split("/")[1]);assert.equal(h.calls[0].input.model_safe_packet.content,"admitted and redacted");assert.equal((await h.run()).replayed,true);assert.equal(h.calls.length,1);
  assert.match(h.calls[0].input.task_instruction,/role=source-editor\./);
+ assert.match(h.calls[0].input.task_instruction,/separate distinct points with blank lines/);
  const selected=editorContext(h.request);assert.deepEqual(selected.files.map(file=>file.path),h.request.files.map(file=>file.path));
  assert.equal(selected.context_coverage.references_are_loaded_contents,false);
  h.request.prompt="Different prompt";await assert.rejects(h.run(),{code:"assistant_replay_conflict"});

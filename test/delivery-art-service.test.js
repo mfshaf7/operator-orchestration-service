@@ -417,6 +417,7 @@ function deliveryArtScopeProjection(deliveryRecordId, workItemRecordIds, overrid
   const coveredIds = [...workItemRecordIds].sort((left, right) => left - right);
   const records = coveredIds.map((recordId) => ({
     id: recordId,
+    initiative_root_id: deliveryRecordId,
     owner_repo: recordId === 803
       ? "platform-engineering"
       : recordId === 802
@@ -455,6 +456,7 @@ function createHarness({
   mutateRegistryResponse = null,
   projectionFailures = 0,
   readinessArtifact = null,
+  readTechnicalPlanSource = null,
   registerError = null,
   snapshotSequence = null,
   withReadinessClient = false,
@@ -569,6 +571,7 @@ function createHarness({
     },
     openProjectClient,
     readinessClient,
+    readTechnicalPlanSource,
     readinessReceiptResolver: withReadinessResolver
       ? async ({ reference }) => {
           assert.equal(reference.uri, readiness.custody.uri);
@@ -789,6 +792,82 @@ test("architecture authoring rejects design topology that contradicts current AR
       error.details.material_errors.includes("work-item-802 type changed"),
   );
   assert.equal(harness.registry.registrations.length, 0);
+});
+
+test("architecture requires in-scope parents and permits roots with an out-of-scope parent", async () => {
+  const input = architectureV6DraftInput();
+  const { service, registry } = createHarness();
+  const author = () => service.draftArchitecturePacket({
+    callerId: CALLER_ID, input, operatorId: CALLER_ID,
+  });
+  const { architecture_packet: draft } = await author();
+  const ownerMap = draft.architecture.descendant_owner_map;
+  assert.equal(ownerMap.find(row => row.work_item_id === "work-item-801").parent_work_item_id, null);
+  assert.equal(ownerMap.find(row => row.work_item_id === "work-item-802").parent_work_item_id, "work-item-801");
+
+  input.architecture.descendant_owner_map.find(row => row.work_item_id === "work-item-802").parent_work_item_id = null;
+  const mismatchedParent = error =>
+    error.code === "delivery_art_architecture_scope_mismatch" &&
+    error.details.material_errors.includes("work-item-802 parent changed");
+  await assert.rejects(author, mismatchedParent);
+
+  const candidate = architectureV6Candidate();
+  candidate.architecture.descendant_owner_map.find(row => row.work_item_id === "work-item-802").parent_work_item_id = null;
+  candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
+  candidate.integrity.content_digest = artifactContentDigest(candidate);
+  await assert.rejects(
+    () => service.persistArchitecturePacket({ artifact: candidate, callerId: CALLER_ID }),
+    mismatchedParent,
+  );
+  assert.equal(registry.registrations.length, 0);
+});
+
+test("a single-repository plan validates and records with installation rules and no handoff", async () => {
+  const input = architectureV6DraftInput();
+  const work = "work-item-801";
+  const repo = "workspace-governance";
+  const unit = "delivery-698-source";
+  input.covered_work_item_ids = [work];
+  input.repo_revisions = input.repo_revisions.filter(pin => pin.repo === repo);
+  input.architecture = {
+    descendant_owner_map: [{ work_item_id: work, work_item_type: "Enabler", owner_repo: repo, parent_work_item_id: null }],
+    work_item_execution_plan: [{ work_item_id: work, start_after_work_item_ids: [], close_after_work_item_ids: [], emits_human_gate_ids: [] }],
+    landing_units: [{ id: unit, owner_repo: repo, source_backed: true, covered_work_item_ids: [work] }],
+    source_landing_graph: { nodes: [unit], edges: [] },
+    lifecycle_state_model: null,
+    authorization_session_execution_model: null,
+    evidence_receipt_handoffs: [],
+    required_human_gates: [],
+    runtime_activation_chains: [],
+    contradictions_open_decisions: [],
+    rollback_cleanup_terminal_conditions: {
+      rollback_units: ["Restore the previous source revision."], cleanup_obligations: [],
+      terminal_conditions: ["The change works and the reported failure is rejected."],
+    },
+  };
+  const dimension = "Content validation";
+  input.conformance_plan = {
+    required: true,
+    protocol_applicability: { applies: false, rationale: "No integration protocol changes." },
+    dimensions: [dimension],
+    work_item_dimension_applicability: [{ work_item_id: work, dimension_ids: [dimension] }],
+    git_causality: { applies: false, rationale: "No Git dependency to prove.", claims: [] },
+    cases: ["positive", "negative"].map(polarity => ({
+      id: `case:${polarity}`, polarity, fidelity: "real-git", target_readiness: "merge-ready",
+      applies_to_work_item_ids: [work], dimension_ids: [dimension], evidence_owner_landing_unit_id: unit,
+      expected_outcome: polarity === "positive" ? "Accept the supported input." : "Reject the unsupported input.",
+    })),
+  };
+  const { service, registry } = createHarness({ clock: () => new Date("2026-08-08T10:00:00+08:00") });
+  const { architecture_packet: candidate } = await service.draftArchitecturePacket({
+    callerId: CALLER_ID, input, operatorId: CALLER_ID,
+  });
+  assert.deepEqual(candidate.architecture.evidence_receipt_handoffs, []);
+  assert.equal(candidate.architecture.runtime_boundaries.length, 2);
+  assert.equal(candidate.architecture.authorization_session_execution_model, null);
+  const { artifact } = await service.persistArchitecturePacket({ artifact: candidate, callerId: CALLER_ID });
+  assert.equal(artifact.custody.state, "durable");
+  assert.equal(registry.registrations.length, 1);
 });
 
 test("current architecture resolves the latest ART pointer through immutable custody", async () => {
@@ -1849,4 +1928,53 @@ test("finalization fails closed when no trusted readiness receipt resolver exist
   );
   assert.equal(harness.registry.registrations.length, 0);
   assert.equal(harness.projections.length, 0);
+});
+
+test("Technical Plan fact reads bind the caller and respect covered ownership and existing pins", async () => {
+  const calls = [];
+  const { service, projections } = createHarness({
+    callerOperatorBindings: { console: "operator" },
+    readTechnicalPlanSource: async (input, context) => {
+      calls.push({ input, context });
+      if (input.ownerRepo === "platform-engineering") throw Error("private connection details");
+      return { repo: input.ownerRepo, base_ref: "origin/main", commit: "b".repeat(40) };
+    },
+  });
+  const input = { kind: "revision", delivery_id: "delivery-698",
+    covered_work_item_ids: ["work-item-801", "work-item-802", "work-item-803"],
+    preserve_repositories: ["workspace-governance"] };
+  const options = { callerId: "console", operatorId: "operator", input };
+  await assert.rejects(service.technicalPlanFacts({ ...options, operatorId: "other" }), { statusCode: 403 });
+  await assert.rejects(service.technicalPlanFacts({ ...options, input: { ...input, repo: "unrelated" } }), { statusCode: 422 });
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await service.technicalPlanFacts(options), {
+    delivery_id: input.delivery_id, kind: input.kind, facts: [
+      { repo: "operator-orchestration-service", status: "available", fact: {
+        repo: "operator-orchestration-service", base_ref: "origin/main", commit: "b".repeat(40),
+      } },
+      { repo: "platform-engineering", status: "unavailable" },
+      { repo: "workspace-governance", status: "pinned" },
+    ],
+  });
+  assert.deepEqual(calls.map(call => call.context), [
+    { caller_id: "console", operator_id: "operator", work_item_id: "work-item-802" },
+    { caller_id: "console", operator_id: "operator", work_item_id: "work-item-803" },
+  ]);
+  assert.deepEqual(await service.technicalPlanFacts({ ...options, input: { ...input, kind: "recorded-authorization" } }),
+    { delivery_id: input.delivery_id, kind: "recorded-authorization", refs: [] });
+  assert.deepEqual(projections, []);
+});
+
+test("Technical Plan reuses references from the accepted plan for the same initiative", async () => {
+  const { service } = createHarness();
+  const artifact = architectureV6Candidate();
+  const authority = { uri: "https://github.com/example/owner/blob/commit/authorization.md", digest: "sha256:" + "d".repeat(64) };
+  artifact.architecture.authorization_session_execution_model.authority_refs = [authority];
+  artifact.integrity.content_digest = artifactContentDigest(artifact);
+  await service.persistArchitecturePacket({ artifact, callerId: CALLER_ID });
+  const input = { kind: "recorded-authorization", delivery_id: artifact.delivery_id,
+    covered_work_item_ids: artifact.covered_work_item_ids };
+  assert.deepEqual(await service.technicalPlanFacts({ input, callerId: CALLER_ID }),
+    { delivery_id: artifact.delivery_id, kind: "recorded-authorization", refs: [authority] });
+  await assert.rejects(service.technicalPlanFacts({ input: { ...input, delivery_id: "delivery-1" }, callerId: CALLER_ID }), { statusCode: 502 });
 });

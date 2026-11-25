@@ -6,7 +6,7 @@ import { createDeliveryService } from "../src/delivery-service.js";
 const node = (id, type, status, children = [], extra = {}) => ({ id, type, status, children, ...extra });
 const root = (...children) => node(1, "Epic", "new", children);
 test("preparation routes native New work without changing statuses or granting admission", () => {
-  const tree = root(node(2,"Feature","new",[node(3,"User story","new",[],{ready_contract_satisfied:true}),node(4,"Task","new")]));
+  const tree = root(node(2,"Feature","new",[node(3,"User story","new",[],{ready_contract_satisfied:true}),node(4,"Task","new")],{ready_contract_satisfied:true}));
   const original = structuredClone(tree), result = deliveryExecutionNavigation(tree);
   assert.equal(result.workflow_phase,"execution"); assert.equal(result.package_posture,"Ready");
   assert.deepEqual(result.prepared_work_item_ids,[3]); assert.deepEqual(result.refinement_work_item_ids,[4]);
@@ -15,7 +15,7 @@ test("preparation routes native New work without changing statuses or granting a
   assert.equal(deliveryExecutionNavigation({...root(),status:"in-progress"}).workflow_phase,"work_design","An active Epic alone does not prove that executable work exists");
   assert.equal(deliveryExecutionNavigation(root(node(3,"Task","new"))).workflow_phase,"refinement");
 });
-test("metadata complete without an iteration is ready to plan while work stays in Refinement", () => {
+test("only work still missing preparation stays in Refinement", () => {
   const missingSchedule = { ready_contract_applicable: true, ready_contract_satisfied: false,
     ready_contract_missing_fields: ["Iteration"] };
   const tree = root(node(2, "Feature", "new", [
@@ -25,9 +25,33 @@ test("metadata complete without an iteration is ready to plan while work stays i
   const before = deliveryExecutionNavigation(tree);
   assert.equal(before.workflow_phase, "refinement");
   assert.deepEqual(before.planning_prepared_work_item_ids, [2, 3]);
+  assert.deepEqual(before.refinement_work_item_ids, [4]);
   assert.deepEqual(before.prepared_work_item_ids, []);
   tree.children[0].children[0].ready_contract_satisfied = true;
   assert.equal(deliveryExecutionNavigation(tree).workflow_phase, "execution");
+});
+test("package routing keeps both real dependencies and independent Refinement obligations visible", () => {
+  const planningReady = { ready_contract_applicable: true, ready_contract_satisfied: false,
+    ready_contract_missing_fields: ["Iteration"] };
+  const tree = root(
+    node(2, "Feature", "new", [
+      node(3, "User story", "new", [], planningReady),
+      node(4, "User story", "new", [], { ...planningReady, dependency_blocked: true }),
+      node(5, "Task", "parked"),
+    ], planningReady),
+    node(6, "PI Objective", "new", [], { owner_repo: "" }),
+    node(7, "Risk", "new", [], { risk_disposition: "" }),
+  );
+  tree.owner_repo = null;
+  const navigation = deliveryExecutionNavigation(tree);
+  assert.deepEqual(navigation.planning_prepared_work_item_ids, [2, 3, 4]);
+  assert.deepEqual(navigation.refinement_work_item_ids, [7]);
+  assert.equal(navigation.refinement_governance_pending, true);
+  assert.deepEqual(navigation.blocked_work_item_ids, [4]);
+  assert.deepEqual(navigation.prepared_work_item_ids, []);
+  assert.equal(navigation.native_status, "new");
+  assert.equal(navigation.package_posture, "Blocked");
+  assert.deepEqual(deliveryExecutionNavigation({ ...tree, status: "done" }).refinement_work_item_ids, []);
 });
 test("final-child completion and retirement retain closeout, including legacy work without receipts", () => {
   for (const status of ["done","retired"]) for (const epicStatus of ["new","in-progress"]) {

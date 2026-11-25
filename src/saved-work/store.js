@@ -4,7 +4,7 @@ import path from "node:path";
 import { createPrivateFileTransactions } from "../persistence/private-file-transactions.js";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const kinds = new Set(["work-design", "refinement", "orchestration", "advisor-conversation"]);
+const kinds = new Set(["work-design", "refinement", "technical-plan", "orchestration", "advisor-conversation"]);
 const hash = text => createHash("sha256").update(text).digest("hex");
 const digest = text => `sha256:${hash(text)}`;
 const stable = value => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
@@ -16,6 +16,7 @@ const fail = (code, message, status) => { throw new SavedWorkError(code, message
 
 export function savedWorkStorageKey(kind, subjectId) {
   if (kind === "advisor-conversation") return `advisor-conversation:${subjectId}:v1`;
+  if (kind === "technical-plan") return `delivery-technical-plan-draft:${subjectId}:v1`;
   return kind === "work-design" ? `delivery-work-design-session:${subjectId}:v2`
     : kind === "refinement" ? `delivery-refinement-session:${subjectId}:v1`
       : `orchestration-definition-design:${subjectId}:v1`;
@@ -53,6 +54,32 @@ function payloadFor(kind, subjectId, raw) {
     fail("saved_work_subject_mismatch", "The saved-work kind, schema and subject must agree.");
   if (kind === "work-design" && (!value.context || !Array.isArray(value.briefVersions) || !Array.isArray(value.context.sessions)))
     fail("saved_work_payload_invalid", "Work Design requires its context, named sessions and brief versions.");
+  if (kind === "technical-plan") {
+    exact(value, ["schemaVersion", "packageId", "draft"]);
+    if (value.draft !== null) {
+      const hasInactiveSections = Object.hasOwn(value.draft ?? {}, "inactiveArchitectureSections");
+      const hasStarterBasis = Object.hasOwn(value.draft ?? {}, "starterBasis");
+      exact(value.draft, ["deliveryId", "coveredWorkItemIds", "rationale", "architectureJson", "conformanceJson", "repoRevisionsJson",
+        ...(hasInactiveSections ? ["inactiveArchitectureSections"] : []), ...(hasStarterBasis ? ["starterBasis"] : [])]);
+      const { deliveryId, coveredWorkItemIds, inactiveArchitectureSections: inactive, starterBasis, ...fields } = value.draft;
+      if (hasStarterBasis) {
+        exact(starterBasis, ["workItemId", "scope"]);
+        if (!Number.isSafeInteger(starterBasis.workItemId) || starterBasis.workItemId < 1 ||
+            typeof starterBasis.scope !== "string" || !starterBasis.scope.length ||
+            starterBasis.scope.length > 16_000 || !starterBasis.scope.isWellFormed())
+          fail("saved_work_payload_invalid", "Technical plan starter scope is invalid.");
+      }
+      if (deliveryId !== subjectId || !Array.isArray(coveredWorkItemIds) || coveredWorkItemIds.length > 50 ||
+          coveredWorkItemIds.some(id => typeof id !== "string" || !/^work-item-[1-9][0-9]*$/.test(id)) ||
+          new Set(coveredWorkItemIds).size !== coveredWorkItemIds.length ||
+          Object.values(fields).some(text => typeof text !== "string" || !text.isWellFormed()) ||
+          hasInactiveSections && (!inactive || typeof inactive !== "object" || Array.isArray(inactive) ||
+            Object.entries(inactive).some(([key, section]) =>
+              !["lifecycle_state_model", "authorization_session_execution_model"].includes(key) ||
+              !section || typeof section !== "object" || Array.isArray(section))))
+        fail("saved_work_payload_invalid", "Save editable technical plan input for this package.");
+    }
+  }
   return value;
 }
 
@@ -64,6 +91,7 @@ export function createSavedWorkStore({ root, clock = () => new Date() }) {
   const files = createPrivateFileTransactions({ root, failure: (code, message) => new SavedWorkError(code, message, 503) });
   function location({ callerId, operatorId, kind, subjectId }) {
     if (!kinds.has(kind) || typeof subjectId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}$/.test(subjectId) ||
+        kind === "technical-plan" && !/^delivery-[1-9][0-9]*$/.test(subjectId) ||
         ![callerId, operatorId].every(v => typeof v === "string" && v.trim()))
       fail("saved_work_identity_invalid", "A bound operator, workflow kind and subject are required.");
     const binding = { caller_id: callerId, operator_id: operatorId, kind, subject_id: subjectId };

@@ -2,6 +2,7 @@ import {
   architectureScopeFingerprint,
   artifactContentDigest,
   DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+  installationArchitectureRuntimeBoundaries,
   reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
   workStartScopeFingerprint,
@@ -27,6 +28,19 @@ export class DeliveryArtAuthoringError extends Error {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function architectureWithInstallationRules(architecture) {
+  if (!architecture || typeof architecture !== "object" || Array.isArray(architecture)) return architecture;
+  const result = clone(architecture);
+  const existing = result.runtime_boundaries === undefined ? [] : result.runtime_boundaries;
+  if (Array.isArray(existing)) {
+    const configuredOwners = new Set(existing.map((entry) => entry?.owner_repo));
+    result.runtime_boundaries = [...existing, ...clone(installationArchitectureRuntimeBoundaries.filter(
+      (boundary) => !configuredOwners.has(boundary.owner_repo),
+    ))];
+  }
+  return result;
 }
 
 function artifactReference(artifact) {
@@ -116,7 +130,7 @@ export function createDeliveryArtArchitecturePacketDraft({
       repo_revisions: clone(repoRevisions),
     },
     scope_fingerprint: `sha256:${"0".repeat(64)}`,
-    architecture: clone(architecture),
+    architecture: architectureWithInstallationRules(architecture),
     conformance_plan: clone(conformancePlan),
     decision: {
       status,
