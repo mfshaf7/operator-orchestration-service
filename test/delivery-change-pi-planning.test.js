@@ -73,6 +73,39 @@ test("PI planning requires native preparation and a dated PI window before it ac
   await assert.rejects(preparePIPlan({ source, payload, catalog }), /Finish preparing work item #3/);
 });
 
+test("PI planning places existing risks and milestones with their original identities", async () => {
+  const { source, payload, assign } = data();
+  const prepared = {
+    status: "new",
+    children: [],
+    ready_contract_applicable: true,
+    ready_contract_satisfied: false,
+    ready_contract_missing_fields: ["Iteration"],
+  };
+  const risk = { ...prepared, id: 7, type: "Risk", subject: "Risk: Resolve source custody" };
+  const milestone = { ...prepared, id: 8, type: "Milestone", subject: "Review runtime evidence" };
+  const objective = {
+    id: 4, type: "PI Objective", subject: payload.objective.title, status: "new", target_pi: pi,
+    pi_objective_type: "Committed", planned_business_value: 3,
+  };
+  source.execution_tree.children.push(risk, milestone, objective);
+  payload.objective.work_item_id = "4";
+  payload.assignments = [assign(7, first, firstWindow), assign(8, second, secondWindow)];
+
+  const plan = await preparePIPlan({ source, payload, catalog });
+  assert.deepEqual(plan.items.slice(0, 2), [
+    { type: "Risk", subject: risk.subject, target_pi: pi, iteration: first },
+    { type: "Milestone", subject: milestone.subject, target_pi: pi, iteration: second },
+  ]);
+  assert.equal(confirmPIPlan(payload, source.execution_tree), false);
+  Object.assign(risk, { target_pi: pi, iteration: first });
+  Object.assign(milestone, { target_pi: pi, iteration: second });
+  assert.equal(confirmPIPlan(payload, source.execution_tree), true);
+
+  risk.ready_contract_missing_fields = ["Risk Owner", "Iteration"];
+  await assert.rejects(preparePIPlan({ source, payload, catalog }), /Finish preparing work item #7/);
+});
+
 test("PI planning resolves cross-Epic prerequisites from current canonical fields", async () => {
   const { source, payload } = data();
   source.dependency_relations = [{ target: { id: 3 }, depends_on: { id: 17 } }];
