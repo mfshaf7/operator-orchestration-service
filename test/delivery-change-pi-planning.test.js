@@ -64,10 +64,12 @@ test("PI planning rejects stale iteration dates and a delivery target before chi
 });
 
 test("PI planning requires native preparation and a dated PI window before it accepts work", async () => {
-  const { source, payload, story } = data();
+  const { source, payload, story, feature } = data();
   const undated = { ...catalog, values: catalog.values.filter(value => value.catalog_item_id !== "catalog-pi-planning-date") };
   await assert.rejects(preparePIPlan({ source, payload, catalog: undated }), /Set up the planning calendar/);
   story.ready_contract_missing_fields = ["Iteration", "Acceptance Criteria"];
+  await assert.rejects(preparePIPlan({ source, payload, catalog }), /Finish preparing work item #3/);
+  feature.dependency_blocked = true;
   await assert.rejects(preparePIPlan({ source, payload, catalog }), /Finish preparing work item #3/);
 });
 

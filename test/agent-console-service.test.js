@@ -340,6 +340,7 @@ const sharedDraftAdvisors = [
   ["prototype-baseline", "baselineStatement"],
   ["execution-tree", "title"],
   ["execution-architecture", "sectionJson"],
+  ["execution-architecture", "planSummary"],
   ["work-design-blocker", "justification"],
   ["refinement-blocker", "justification"],
   ["definition-design", "identityOwnership.purpose"],
@@ -375,23 +376,28 @@ test("budget-trimmed draft context stops before model dispatch while ordinary bo
 });
 
 for (const [role, field] of sharedDraftAdvisors) {
-  test(`${role}: native drafting, replay and explanation retain their scope; legacy text fails without blocking the next request`, async () => {
+  test(`${role} (${field}): native drafting, replay and explanation retain their scope; legacy text fails without blocking the next request`, async () => {
     const scope = { role, ref: `${role}:selected-record`, sourceRef: "audit:source", sourceRevision: "version-1",
       fields: [{ key: field, label: "Selected explanatory draft", maxLength: 100, value: "Retained manual draft" }] };
     const input = invocationRequest({ prompt: "Draft the selected explanatory field", candidate: candidate(JSON.stringify({ operator_draft: scope })) });
+    const suggestion = field === "planSummary" ? "Publish the verified homepage.\n\nCheck links before release." : "Suggested explanatory draft";
     const native = { intent: "draft", message: "Requested local draft", edits: [{ field, value_type: "text",
-      text_value: "Suggested explanatory draft", board_patch: null, tree_patch: null }] };
+      text_value: suggestion, board_patch: null, tree_patch: null }] };
     let output = { text: "Outer summary", draft_reply: native }, gatewayCalls = 0;
     const { service } = await harness({ gatewayClient: { async invoke(request) {
       gatewayCalls += 1;
       assert.ok(request.input.task_instruction.includes(`role=${role}.`), "The real gateway request must carry the selected workflow guide.");
+      assert.match(request.input.task_instruction, /separate distinct points with blank lines/);
+      if (field === "planSummary") {
+        assert.match(request.input.task_instruction, /planSummary is the editable local summary/);
+      }
       return gatewayFor(request, { output });
     } } });
     await createSession(service);
     const completed = await invoke(service, input);
     assert.equal(completed.latest_invocation.state, "completed");
     assert.deepEqual(JSON.parse(completed.latest_invocation.result.text), { intent: "draft", message: native.message,
-      edits: [{ field, value: "Suggested explanatory draft" }] });
+      edits: [{ field, value: suggestion }] });
     const replay = await invoke(service, input);
     assert.equal(replay.latest_invocation.replayed, true);
     assert.deepEqual(replay.latest_invocation.result, completed.latest_invocation.result);

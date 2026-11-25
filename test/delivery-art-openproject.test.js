@@ -121,7 +121,7 @@ test("Refinement reads native current forms without business writes and preserve
     const record = records.get(Number(match[1]));
     assert.ok(record);
     if (!match[2]) return jsonResponse(record);
-    assert.ok(![1312, 1313].includes(record.id), "terminal work must not request a mutable form");
+    assert.ok(![1311, 1312, 1313].includes(record.id), "PI objectives and terminal work must not request a Refinement form");
     assert.equal(JSON.parse(options.body).lockVersion, record.lockVersion);
     return jsonResponse({ _embedded: { schema } });
   } });
@@ -145,7 +145,7 @@ test("Refinement reads native current forms without business writes and preserve
   assert.equal(packet.target_tree.children.find((node) => node.id === "1313").description, "Completion history");
   assert.equal(snapshot.fieldMetadata[1312], undefined);
   assert.equal(snapshot.fieldMetadata[1313], undefined);
-  assert.ok(fields.every((field) => !field.target_node_ids.some((id) => ["1312", "1313"].includes(id))));
+  assert.ok(fields.every((field) => !field.target_node_ids.some((id) => ["1311", "1312", "1313"].includes(id))));
   const item = (key) => fields.find((field) => field.route_binding.target === "work_item" && field.backend_field === key);
   for (const key of ["target_pi", "iteration", "pi_objective_type", "planned_business_value", "actual_business_value"]) {
     assert.equal(fields.some((field) => field.backend_field === key), false, `${key} is outside Refinement preparation`);
@@ -153,7 +153,7 @@ test("Refinement reads native current forms without business writes and preserve
   const nativeFeature = packet.target_tree.children.find((node) => node.id === "1310");
   assert.equal(nativeFeature.planning.target_pi, "PI-2026-03");
   assert.equal(nativeFeature.planning.iteration, "PI-2026-03 / Iteration 1");
-  assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1311: "Canonical acceptance", 1314: "Canonical acceptance" });
+  assert.deepEqual(item("acceptance_criteria").target_values, { 1310: "Canonical acceptance", 1314: "Canonical acceptance" });
   assert.equal(item("acceptance_criteria").field_kind, "long_text");
   assert.deepEqual(item("execution_classification").target_node_ids, ["1310", "1314"]);
   assert.deepEqual(item("execution_classification").allowed_values, ["Business", "Enabler", "NFR"]);
@@ -161,15 +161,15 @@ test("Refinement reads native current forms without business writes and preserve
   // A later form can remove edit permission without changing the Epic lockVersion.
   // That capability change must invalidate the packet and block an empty required target.
   schema.customField33.writable = false;
-  records.get(1311).customField33.raw = "";
+  records.get(1314).customField33.raw = "";
   const next = await client.getRefinementDeliveryTree({ recordId: 1306 });
   const changed = buildRefinementPacket({ ...input, deliveryTree: next.tree, fieldMetadata: next.fieldMetadata });
   const acceptance = changed.draft_groups.flatMap((group) => group.fields).find((field) => field.backend_field === "acceptance_criteria");
   assert.notEqual(changed.packet_revision, packet.packet_revision);
-  assert.deepEqual(acceptance.target_node_ids, ["1311"], "populated readonly canonical values do not invite edits");
-  assert.equal(acceptance.target_statuses["1311"], "blocked");
+  assert.deepEqual(acceptance.target_node_ids, ["1314"], "populated readonly canonical values do not invite edits");
+  assert.equal(acceptance.target_statuses["1314"], "blocked");
   assert.equal(changed.status, "drafting");
-  assert.ok(calls.some((call) => call.path === "/api/v3/work_packages/1311/form"));
+  assert.ok(calls.some((call) => call.path === "/api/v3/work_packages/1314/form"));
 });
 
 test("captureDeliveryArtScope uses bounded reads and stable material ART fields", async () => {

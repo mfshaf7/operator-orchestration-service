@@ -55,6 +55,28 @@ const READINESS_RANK = new Map([
   ["operating-ready", 2],
 ]);
 export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 6;
+const durableCustodyOwner = "workspace-governance-control-fabric";
+const orchestrationOwner = "operator-orchestration-service";
+const persistCapability = "delivery-art.persist-canonical-artifacts";
+const projectContentCapability = "delivery-art.project-canonical-content-to-openproject";
+
+export const installationArchitectureRuntimeBoundaries = [
+  {
+    owner_repo: orchestrationOwner,
+    allowed_capability_ids: [
+      "delivery-art.author-canonical-artifacts",
+      "delivery-art.submit-canonical-artifacts-to-wgcf",
+      "delivery-art.project-safe-references-to-openproject",
+    ],
+    prohibited_capability_ids: [persistCapability, projectContentCapability],
+  },
+  {
+    owner_repo: durableCustodyOwner,
+    allowed_capability_ids: [persistCapability],
+    prohibited_capability_ids: [projectContentCapability],
+  },
+];
+
 export const DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS = Object.freeze([
   1,
   2,
@@ -628,16 +650,9 @@ function architectureSemanticErrors(artifact) {
       Object.hasOwn(boundary, "allowed_capability_ids") &&
       Object.hasOwn(boundary, "prohibited_capability_ids"));
   if (usesCapabilityBoundaries) {
-    const durableCustodyOwner = "workspace-governance-control-fabric";
-    const orchestrationOwner = "operator-orchestration-service";
-    const persistCapability = "delivery-art.persist-canonical-artifacts";
-    const projectContentCapability =
-      "delivery-art.project-canonical-content-to-openproject";
-    const requiredOrchestrationCapabilities = new Set([
-      "delivery-art.author-canonical-artifacts",
-      "delivery-art.submit-canonical-artifacts-to-wgcf",
-      "delivery-art.project-safe-references-to-openproject",
-    ]);
+    const orchestration = installationArchitectureRuntimeBoundaries.find(
+      (boundary) => boundary.owner_repo === orchestrationOwner,
+    );
     const allowedByOwner = new Map(
       runtimeBoundaries.map((boundary) => [
         boundary.owner_repo,
@@ -656,7 +671,7 @@ function architectureSemanticErrors(artifact) {
       );
     }
     if (
-      ![...requiredOrchestrationCapabilities].every((capability) =>
+      !orchestration.allowed_capability_ids.every((capability) =>
         allowedByOwner.get(orchestrationOwner)?.has(capability))
     ) {
       errors.push(
@@ -664,7 +679,7 @@ function architectureSemanticErrors(artifact) {
       );
     }
     if (
-      ![persistCapability, projectContentCapability].every((capability) =>
+      !orchestration.prohibited_capability_ids.every((capability) =>
         prohibitedByOwner.get(orchestrationOwner)?.has(capability))
     ) {
       errors.push(

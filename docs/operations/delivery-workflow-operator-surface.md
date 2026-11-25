@@ -113,6 +113,13 @@ Primary start-here decision surface:
    - re-target true carryover and decommit work explicitly instead of leaving
      stale PI placement behind
 
+Use the Console's current Refinement register for still-unprepared work. PI
+Planning owns objectives, dates and iteration assignments. The broker checks
+preparation for each assignment, including when another item in the same Epic
+is running or blocked. A dependency can remain visible in Execution while its
+package is being scheduled. Start eligibility still comes from the selected
+work item's owner check.
+
 Before resuming a new ART work period when the next front is not already known,
 start from one broker bootstrap read:
 
@@ -709,12 +716,14 @@ item through a project-checked OpenProject read. The work-item evidence packet
 remains a separate, fuller read for evidence inspection; it is not a status
 polling path.
 
-Architecture Packet approval checks the declared work-item scope, ownership,
-parentage, and dependency edges against the live ART projection even when the
+Architecture Packet validation and approval check declared work-item scope,
+type, ownership, parentage, and dependency edges against the live ART projection even when the
 captured ART digest matches. A digest match alone does not prove that a
 hand-authored execution plan represents the ART graph. Later status or
 description changes may change the digest without invalidating an otherwise
-matching approved packet.
+matching approved packet. Each work item retains its real parent when the
+parent is covered by the plan. Items whose parent falls outside the covered
+scope are roots in the plan.
 
 An architecture-bound session is compared with the latest accepted
 Architecture Packet projected on its Delivery Epic and resolved through WGCF.
@@ -1280,6 +1289,17 @@ Use the direct commands in this section only for bounded diagnosis, recovery,
 or contract verification of artifacts produced against the pinned Delivery ART
 bundle. Do not hand-convert a schema-v1 Review Packet or copy a digest from
 operator notes.
+
+The Technical Plan editor reads source facts using the existing bound
+operator and managed source executor. The broker verifies the selected items
+belong to the Delivery initiative and limits repository reads to their
+recorded owners. Default branch reads pin remote commits without changing a
+checkout. Activation and authorization document reads use exact committed
+files already available from the managed checkout. They return the activation
+setting or the document link and SHA-256, respectively. The original file
+is not returned. Prior authorization references are drawn from the same
+initiative's accepted plan. These reads do not decide approval or modify
+ART, source, or artifact custody.
 
 An operator-approved architecture packet remains a local candidate until the
 architecture persistence command succeeds. It is valid input to that command,
@@ -2022,6 +2042,12 @@ API names and schema v6 remain unchanged. System architecture is read from the
 saved Work Design brief; implementation sequencing is derived from the technical
 plan. The Console does not create a second execution engine or diagram ledger.
 
+In **Choose scope**, review the work and repository facts from Delivery.
+**Work dependencies** schedules the recorded links before start or closeout.
+For a single repository, confirm the prepared group and use **Source revisions**
+to verify its pin. Standard installation access is applied by OOS. Add project
+lifecycle, access, and handoff details where the change requires them.
+
 Validation produces a local draft. Explicit operator approval binds the reviewed
 plan to fresh ART; changed scope/source requires renewed validation and review.
 Recording uses the existing OOS/WGCF custody path and does not start work or grant
@@ -2029,9 +2055,16 @@ release permission. Missing current architecture (`delivery_art_reference_missin
 is distinct from an unavailable owner read and does not establish that a plan is
 unnecessary. A current recorded plan is revised explicitly; history remains read-only.
 
-The `execution-architecture` advisor role uses the ordinary governed Agent Console
-path to explain or draft only an admitted selected local section. The source-owned
-work guide prohibits invented evidence, source revisions, approval and canonical
-effects. Its native activity contracts identify the role without exposing prompts
-or drafts in metadata. Local advice, human approval and durable custody remain
-separate transitions even when presented together in the same workspace.
+The `execution-architecture` advisor role uses the governed Agent Console
+path. In **Check Work Requirements**, it evaluates the selected work and its
+recorded schedule and dependencies on request. If a plan would help, the
+operator can request a starter for that work. The Console opens the private
+Technical Plan draft and preserves existing drafts and approved plans. In
+the Technical Plan editor, the advisor can explain or draft the selected
+summary or section. When asked
+to draft the summary, it writes plain-language paragraphs into **Choose scope**.
+The source-owned work guide prohibits invented evidence and reserves source
+revisions, approval and canonical effects for their existing owners. Its native
+activity contracts identify the role without exposing prompts or drafts in
+metadata. Local drafting, human approval and durable custody remain separate
+transitions.

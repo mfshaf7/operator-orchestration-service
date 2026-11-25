@@ -1,6 +1,6 @@
 import { HttpError } from "../errors.js";
 import { resolveDeliveryTaxonomy } from "../delivery-taxonomy.js";
-import { deliveryExecutionNavigation, preparedForPIPlanning } from "../delivery-execution-navigation.js";
+import { preparedForPIPlanning } from "../delivery-execution-navigation.js";
 
 const schedulableTypes = new Set(["Feature", "User story", "Defect", "Task"]);
 const movableStatuses = new Set(["new", "ready"]);
@@ -104,7 +104,6 @@ export async function preparePIPlan({ payload, source, catalog, loadPlanningFact
   const tree = source.execution_tree;
   if (endedStatuses.has(status(tree))) throw conflict("This Epic is no longer open for planning.");
   if (addition) return prepareFeatureAddition(tree, pi, addition, calendar);
-  const inExecution = deliveryExecutionNavigation(tree).workflow_phase === "execution";
   const scope = flatten(tree);
   const byId = new Map(scope.map(entry => [entry.node.id, entry]));
   const assignments = new Map();
@@ -116,7 +115,7 @@ export async function preparePIPlan({ payload, source, catalog, loadPlanningFact
         item.target_pi && item.target_pi !== pi || assignments.has(number)) {
       throw conflict(`Work item #${number} cannot be scheduled in this PI. Review the current Epic.`);
     }
-    if (!inExecution && !preparedForPIPlanning(item)) {
+    if (!preparedForPIPlanning(item)) {
       throw conflict(`Finish preparing work item #${number} in Refinement before scheduling it.`);
     }
     if (!window || window.start_date !== accepted.start_date || window.end_date !== accepted.end_date) {

@@ -181,7 +181,10 @@ The supported artifact transitions are:
    editable scope, repository revisions, design, conformance, and decision
    intent. OOS binds the configured Console caller to the accountable operator,
    captures fresh scoped ART truth, resolves current supersession, and derives
-   artifact identity, timestamps, custody, fingerprints, and digest. This
+   artifact identity, timestamps, custody, fingerprints, and digest. OOS
+   fills the standard installation runtime rules. A null lifecycle or
+   authorization model means that the work uses the existing lifecycle or
+   access rules. Evidence handoffs may be empty when none apply. This
    transition does not mutate WGCF or OpenProject.
 2. Persist the exact operator-approved local architecture packet through
    `POST /v1/delivery-art/architecture-packets/persist`.

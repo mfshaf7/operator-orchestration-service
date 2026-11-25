@@ -488,6 +488,11 @@ test("context and tree advice send distinct task purposes without widening evide
   assert.match(context, /no required diagram format, component count or keyword test/);
   assert.match(context, /Answer questions without edits/);
   assert.match(tree, /decompose delivery outcomes into ART work/);
+  assert.match(context, /separate distinct points with blank lines/);
+  assert.match(tree, /separate distinct points with blank lines/);
+  assert.match(context, /`# Descriptive title` once and `## Section heading`/);
+  assert.doesNotMatch(tree, /`# Descriptive title` once/);
+  assert.match(tree, /destination field's required schema, scaffold, template/);
   assert.notEqual(context, tree);
 });
 

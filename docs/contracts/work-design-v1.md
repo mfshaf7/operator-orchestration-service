@@ -94,6 +94,13 @@ named views. Build Tree uses the entire supplied accepted brief to decompose
 outcomes, preserving existing branch identities and relevant boundary work.
 Neither guide demands a fixed diagram format or number of work items.
 
+All human-facing advisor drafts follow shared readability guidance. The
+destination field's contract takes precedence, including required scaffold
+headings and ordering for Work Items. When the operator asks for a longer
+Context note draft, the advisor can use `#` for the title and `##` for useful
+section headings, with blank lines between paragraphs. Short notes and existing
+plain-text notes remain valid. Finalized briefs retain the recorded note text.
+
 An optional `draft_scope` carries the actual local note/diagram/tree fields,
 bounded conversation and advice-text format. Its role, package, source and
 revision must match the ordinary request. It enters the canonical context

@@ -17,7 +17,7 @@ const GOVERNANCE_FIELDS = [
   field("sponsor", "sponsor", "Sponsor", "short_text", false),
   field("success-criteria", "success_criteria", "Success Criteria", "long_text", false),
 ];
-const CONTRACT_TYPES = ["Feature", "User story", "Defect", "Task", "PI Objective"];
+const CONTRACT_TYPES = ["Feature", "User story", "Defect", "Task"];
 const WORK_ITEM_FIELDS = [
   field("owner-repo", "owner_repo", "Owner Repo", "short_text", true),
   field("delivery-team", "delivery_team", "Delivery Team", "short_text", true),
@@ -56,10 +56,11 @@ function routeBinding(definition, target) {
   };
 }
 
-// Retain the whole hierarchy as source evidence. Closed work does not acquire
-// new mutable metadata obligations when another branch enters Refinement.
+// Keep the full hierarchy available for inspection. PI Planning owns
+// objectives, and inactive work has no current Refinement metadata obligation.
 export function isRefinementMetadataTarget(node) {
-  return !["done", "retired"].includes(stringValue(node.status).trim().toLowerCase());
+  return node.type !== "PI Objective" &&
+    !["done", "retired", "parked"].includes(stringValue(node.status).trim().toLowerCase());
 }
 
 function fieldProjection(definition, nodes, target, metadata) {

@@ -163,8 +163,13 @@ function client() {
   };
 }
 
-test("Refinement source derives one packet from trusted Work Design and canonical tree truth", async () => {
-  const adapter = createRefinementSourceAdapter({ openProjectClient: client() });
+test("Refinement retains a PI objective in the canonical tree without inheriting its draft obligations", async () => {
+  const native = client();
+  const tree = deliveryTree();
+  const objective = tree.children.find(node => node.type === "PI Objective");
+  Object.assign(objective, { owner_repo: null, planned_business_value: null, pi_objective_type: null });
+  native.getRefinementDeliveryTree = async () => ({ tree, sourceRevision: "version-9" });
+  const adapter = createRefinementSourceAdapter({ openProjectClient: native });
   const packet = await adapter.projectPacket({
     packageRef: "delivery-package:909",
     sourceRef: "openproject://work_packages/909",
@@ -175,6 +180,7 @@ test("Refinement source derives one packet from trusted Work Design and canonica
   assert.equal(packet.target_tree.children[1].kind, "PI Objective");
   assert.equal(packet.status, "ready_for_review");
   const fields = packet.draft_groups.flatMap((group) => group.fields);
+  assert.equal(fields.some(field => field.target_node_ids.includes(String(objective.id))), false);
   assert.deepEqual(fields.find((field) => field.backend_field === "execution_classification").target_node_ids, ["1002"]);
   assert.equal(fields.some(field => ["target_pi", "iteration", "pi_objective_type", "planned_business_value",
     "actual_business_value", "pi_objective_review_outcome"].includes(field.backend_field)), false);
@@ -187,14 +193,14 @@ test("Refinement source derives one packet from trusted Work Design and canonica
 test("Refinement missing fields stay bound to target identity, not numeric object-key order", async () => {
   const native = client();
   const tree = deliveryTree();
-  tree.children.reverse();
-  tree.children[0].acceptance_criteria = "";
+  tree.children.unshift({ ...tree.children[0], id: 1014, subject: "Preparation still needed", acceptance_criteria: "" });
   native.getRefinementDeliveryTree = async () => ({deliveryRef:"openproject://work_packages/884",sourceRevision:"version-9",tree});
   const packet = await createRefinementSourceAdapter({openProjectClient:native}).projectPacket({
     packageRef:"delivery-package:909",sourceRef:"openproject://work_packages/909",
   });
   const field = packet.draft_groups.flatMap(group=>group.fields).find(field=>field.backend_field==="acceptance_criteria");
-  assert.equal(field.target_statuses["1004"], "missing");
+  assert.deepEqual(field.target_node_ids, ["1014", "1002"]);
+  assert.equal(field.target_statuses["1014"], "missing");
   assert.equal(field.target_statuses["1002"], "complete");
   assert.equal(packet.status, "drafting");
   const gate = packet.readiness_gates.find((gate) => gate.label === "Metadata Review");
@@ -225,6 +231,7 @@ test("Refinement preserves planning labels while preparing backlog and existing 
   const acceptance = fields.find(field => field.backend_field === "acceptance_criteria");
   assert.equal(acceptance.target_statuses["1012"], "missing");
   assert.equal(acceptance.target_node_ids.includes("1015"), false);
+  assert.equal(acceptance.target_node_ids.includes("1011"), false);
 });
 
 test("Refinement does not demand or offer a write for an unavailable blank backlog planning field",async()=>{

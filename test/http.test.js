@@ -1271,6 +1271,35 @@ test("Delivery ART architecture authoring binds the Console caller to the accoun
   assert.deepEqual(calls[0].input, input);
 });
 
+test("Technical Plan facts require the same bound Console operator as authoring", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["governance-operations-console"];
+  config.callerAuth.callerSecrets = { "governance-operations-console": "console-specific-secret" };
+  config.deliveryArt.workSession.callerOperatorBindings = { "governance-operations-console": "operator:workspace-owner" };
+  const calls = [];
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async technicalPlanFacts(request) {
+        calls.push(request);
+        return { delivery_id: request.input.delivery_id, kind: request.input.kind, facts: [] };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = { "x-oos-caller-id": "governance-operations-console", "x-oos-caller-secret": "console-specific-secret" };
+  const input = { kind: "revision", delivery_id: "delivery-1275", covered_work_item_ids: ["work-item-1300"] };
+  const request = { body: { input }, method: "POST", url: "/v1/delivery-art/architecture-packets/facts" };
+  const denied = await executeRequest(app, { ...request, headers });
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(calls, []);
+  const response = await executeRequest(app, { ...request, headers: { ...headers, "x-oos-operator-id": "operator:workspace-owner" } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { delivery_id: input.delivery_id, kind: input.kind, facts: [] });
+  assert.deepEqual(calls, [{ callerId: "governance-operations-console", operatorId: "operator:workspace-owner", input }]);
+});
+
 test("Delivery ART architecture persistence accepts only the configured Console operator binding", async () => {
   const config = createBaseConfig();
   config.callerAuth.allowedIds = ["governance-operations-console"];

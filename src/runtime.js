@@ -11,6 +11,7 @@ import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
 import { createDeliveryChangeService } from "./delivery-change/service.js";
 import { createDeliveryCloseoutService } from "./delivery-closeout/service.js";
+import { createDeliveryArtSourceExecutorClient } from "./delivery-art/source-executor.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
 import {
   createDeliveryArtArchitectureCutoverGuard,
@@ -181,7 +182,19 @@ export function createRuntime({
       }),
     });
   const deliveryArtWorkSessionStore = createDeliveryArtWorkSessionRuntimeStore({ env });
+  const sourceExecutorConfig = config.deliveryArt.workSession;
+  const planSourceExecutor = sourceExecutorConfig.executorSecret && sourceExecutorConfig.executorSocketPath
+    ? createDeliveryArtSourceExecutorClient({
+      executorId: sourceExecutorConfig.executorId,
+      secret: sourceExecutorConfig.executorSecret,
+      socketPath: sourceExecutorConfig.executorSocketPath,
+      requireSourceLease: true,
+    })
+    : null;
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
+    readTechnicalPlanSource: planSourceExecutor && ((input, context) => planSourceExecutor.executor.run(
+      context, () => planSourceExecutor.workSource.readTechnicalPlanSource(input),
+    )),
     architectureCutoverGuard: createDeliveryArtArchitectureCutoverGuard({
       store: deliveryArtWorkSessionStore,
     }),

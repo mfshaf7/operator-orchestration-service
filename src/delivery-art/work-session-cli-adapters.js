@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -12,6 +12,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
+import { parseDocument } from "yaml";
 
 import { canonicalDigest } from "./canonical-json.js";
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
@@ -191,6 +193,92 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       return null;
     }
     return output.split(/\s+/)[0] ?? null;
+  }
+
+  async function readTechnicalPlanSource({ kind, ownerRepo, baseRef, revision, filePath, field }) {
+    const repoRoot = canonicalRepo(ownerRepo);
+    if (!realpathSync(repoRoot).startsWith(realpathSync(workspaceRoot) + path.sep)) {
+      throw new Error("The admitted repository moved outside its managed source location.");
+    }
+    const location = ownerLocations.get(repoRoot)?.location;
+    if (kind === "revision") {
+      let branch = baseRef?.replace(/^(?:origin\/|refs\/heads\/)/, "");
+      // The native read connection validates the admitted GitHub default
+      // against main before it returns a branch head.
+      if (!branch && location) branch = "main";
+      let commit;
+      if (branch || location) {
+        if (!branch) throw new Error("Choose a branch for this repository.");
+        command(execFileSyncImpl, ["check-ref-format", `refs/heads/${branch}`], repoRoot);
+        if (location) commit = remoteBranchHead(repoRoot, "origin", branch);
+        else {
+          const { stdout } = await promisify(execFile)("git", ["ls-remote", "--exit-code", "--heads", "origin", `refs/heads/${branch}`],
+            { cwd: repoRoot, timeout: 8_000, maxBuffer: 8192, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+          commit = stdout.trim().split(/\s+/)[0];
+        }
+      } else {
+        const { stdout } = await promisify(execFile)("git", ["ls-remote", "--symref", "origin", "HEAD"],
+          { cwd: repoRoot, timeout: 8_000, maxBuffer: 8192, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+        branch = stdout.match(/^ref: refs\/heads\/([^\t]+)\tHEAD$/m)?.[1];
+        commit = stdout.match(/^([a-f0-9]{40})\tHEAD$/m)?.[1];
+      }
+      if (!branch || !/^[0-9a-f]{40}$/.test(commit ?? "")) throw new Error("The branch has no verified commit.");
+      if (revision !== undefined) {
+        if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Select a valid exact commit.");
+        if (revision !== commit) {
+          command(execFileSyncImpl, ["--no-replace-objects", "merge-base", "--is-ancestor", revision, commit], repoRoot);
+        }
+        commit = revision;
+      }
+      return { repo: ownerRepo, base_ref: `origin/${branch}`, commit };
+    }
+
+    if (!["activation", "authorization"].includes(kind) || !/^[0-9a-f]{40}$/.test(revision ?? "") ||
+        !/^[A-Za-z0-9._/-]{1,240}$/.test(filePath ?? "")) throw new Error("A pinned source file is required.");
+    const file = normalizedRealizationPath(filePath);
+    if (/(?:^|[./_-])(?:secrets?|credentials?|passwords?|tokens?|private[._-]?keys?)(?=[./_-]|$)/i.test(file)) {
+      throw new Error("This file cannot be used for plan evidence.");
+    }
+    const branch = baseRef?.replace(/^(?:origin\/|refs\/heads\/)/, "");
+    if (!branch) throw new Error("This evidence needs the pinned repository branch.");
+    command(execFileSyncImpl, ["check-ref-format", `refs/heads/${branch}`], repoRoot);
+    command(execFileSyncImpl, ["--no-replace-objects", "merge-base", "--is-ancestor", revision, `refs/remotes/origin/${branch}`], repoRoot);
+    const remote = command(execFileSyncImpl, ["remote", "get-url", "origin"], repoRoot)
+      .match(/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+)\/([\w.-]+?)(?:\.git)?$/)?.slice(1);
+    if (location && remote?.join("/") !== location.authority?.provider_repository?.full_name) {
+      throw new Error("The managed checkout does not match the admitted source.");
+    }
+    const object = `${revision}:${file}`;
+    const tree = command(execFileSyncImpl, ["--no-replace-objects", "ls-tree", revision, "--", file], repoRoot);
+    if (!/^100(?:644|755) blob [0-9a-f]+\t/.test(tree)) throw new Error("Evidence must point to a tracked regular file.");
+    if (Number(command(execFileSyncImpl, ["--no-replace-objects", "cat-file", "-s", object], repoRoot)) > MAX_REALIZATION_FILE_BYTES) {
+      throw new Error("This file exceeds the Technical Plan evidence limit.");
+    }
+    const bytes = execFileSyncImpl("git", ["--no-replace-objects", "cat-file", "blob", object], {
+      cwd: repoRoot, maxBuffer: MAX_REALIZATION_FILE_BYTES, stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (kind === "authorization") {
+      const [account, name] = remote ?? [];
+      if (![account, name].every(part => /^[A-Za-z0-9_.-]+$/.test(part ?? "") && ![".", ".."].includes(part))) {
+        throw new Error("This source connection has no supported immutable document link.");
+      }
+      return { uri: `https://github.com/${account}/${name}/blob/${revision}/${file}`, digest: contentDigest(bytes) };
+    }
+    if (!/\.(?:json|ya?ml)$/i.test(file) || !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,11}$/.test(field ?? "") ||
+        /secret|credential|password|token|private.?key|__proto__|constructor|prototype/i.test(field)) {
+      throw new Error("Use the name of a setting in a JSON or YAML configuration file.");
+    }
+    const content = String(bytes);
+    const document = /\.json$/i.test(file) ? JSON.parse(content) : parseDocument(content, { strict: true });
+    if (document.errors?.length) throw new Error("The configuration is not a single valid YAML document.");
+    const parts = field.split(".");
+    const value = /\.json$/i.test(file) ? parts.reduce((item, key) =>
+      item && typeof item === "object" && Object.hasOwn(item, key) ? item[key] : undefined, document) : document.getIn(parts);
+    if (typeof value !== "boolean" && !["source-ready", "owner-source-change-required"].includes(value)) {
+      throw new Error("Select a boolean activation setting or a declared activation posture.");
+    }
+    return { repo: ownerRepo, revision, path: file, field, observed_value: value,
+      observed_posture: value === true ? "source-ready" : value === false ? "owner-source-change-required" : value };
   }
 
   function fetchOrigin(repoRoot, branch) {
@@ -1584,6 +1672,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     prepareAgentSource,
     publishAgentSource,
     readArtifact,
+    readTechnicalPlanSource,
     resolveBase,
     resolveWorktree,
     retirePristineSession,

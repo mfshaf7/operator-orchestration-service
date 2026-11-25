@@ -398,6 +398,7 @@ function architectureMaterialSnapshotErrors(artifact, projection) {
   const errors = [];
   const records = materialRecordMap(projection);
   const covered = [...(artifact.covered_work_item_ids ?? [])].sort();
+  const coveredItems = new Set(covered);
   if (!sameStringValues(projection?.covered_work_item_ids, covered)) {
     errors.push("covered work-item scope changed");
   }
@@ -417,10 +418,9 @@ function architectureMaterialSnapshotErrors(artifact, projection) {
     if (record.type !== entry.work_item_type) {
       errors.push(`${entry.work_item_id} type changed`);
     }
-    if (
-      entry.parent_work_item_id !== null &&
-      `work-item-${record.parent_id}` !== entry.parent_work_item_id
-    ) {
+    const parentRef = `work-item-${record.parent_id}`;
+    const parentInScope = coveredItems.has(parentRef) ? parentRef : null;
+    if (entry.parent_work_item_id !== parentInScope) {
       errors.push(`${entry.work_item_id} parent changed`);
     }
   }
@@ -515,6 +515,7 @@ export function createDeliveryArtArtifactService({
   openProjectClient,
   readinessClient = null,
   readinessReceiptResolver = null,
+  readTechnicalPlanSource = null,
   registryClient,
 } = {}) {
   if (!registryClient || typeof registryClient.register !== "function" || typeof registryClient.read !== "function") {
@@ -1215,6 +1216,70 @@ export function createDeliveryArtArtifactService({
     };
   }
 
+  async function technicalPlanFacts({ callerId, operatorId = callerId, input } = {}) {
+    assertArchitectureCallerOperatorBinding(callerId, operatorId);
+    const deliveryId = deliveryRecordId(input?.delivery_id);
+    const ids = Array.isArray(input?.covered_work_item_ids) && workItemRecordIds(input.covered_work_item_ids);
+    const kind = input?.kind;
+    if (!Number.isSafeInteger(deliveryId) || !ids?.length ||
+        !ids.every(Number.isSafeInteger) || new Set(ids).size !== ids.length ||
+        !["revision", "activation", "authorization", "recorded-authorization"].includes(kind)) {
+      throw new DeliveryArtServiceError("delivery_art_plan_facts_invalid", "Choose a Delivery initiative and its covered work to read plan facts.", 422);
+    }
+    const { projection } = await openProjectClient.captureDeliveryArtScope({
+      deliveryRecordId: deliveryId, workItemRecordIds: ids,
+    });
+    if (projection?.delivery_id !== input.delivery_id || !Array.isArray(projection.records)) {
+      throw new DeliveryArtServiceError("delivery_art_plan_facts_mismatch", "The source scope could not be verified for this initiative.", 502);
+    }
+    const idSet = new Set(ids);
+    const ownerWork = new Map();
+    for (const row of projection.records) {
+      if (idSet.has(row.id) && row.initiative_root_id === deliveryId &&
+          /^[a-z0-9][a-z0-9-]*$/.test(row.owner_repo ?? "")) ownerWork.set(row.owner_repo, row.id);
+    }
+    const result = { delivery_id: input.delivery_id, kind };
+    if (kind === "recorded-authorization") {
+      const projected = await currentArchitectureForCutover(input.delivery_id);
+      if (!projected) return { ...result, refs: [] };
+      const { artifact } = await resolveArtifact({ reference: projected.reference });
+      if (artifact.delivery_id !== input.delivery_id || artifact.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
+          artifact.decision?.status !== "architecture-ready") {
+        throw new DeliveryArtServiceError("delivery_art_plan_facts_mismatch", "Approved authorization evidence could not be verified for this initiative.", 502);
+      }
+      return { ...result, refs: artifact.architecture?.authorization_session_execution_model?.authority_refs ?? [] };
+    }
+    if (input.repo !== undefined && !ownerWork.has(input.repo)) {
+      throw new DeliveryArtServiceError("delivery_art_plan_repository_out_of_scope", "That repository does not own work covered by this plan.", 422);
+    }
+    if (input.base_ref !== undefined && (typeof input.base_ref !== "string" || !/^[\w./-]{1,200}$/.test(input.base_ref))) {
+      throw new DeliveryArtServiceError("delivery_art_plan_branch_invalid", "Use a valid repository branch name.", 422);
+    }
+    if ((kind === "revision" && !input.repo && input.base_ref !== undefined) ||
+        (kind === "revision" && input.revision !== undefined &&
+          (!input.repo || !input.base_ref || typeof input.revision !== "string" || !/^[a-f0-9]{40}$/.test(input.revision))) ||
+        (kind !== "revision" && (!input.repo || !input.base_ref || !/^[a-f0-9]{40}$/.test(input.revision ?? "") ||
+          typeof input.path !== "string" || input.path.length > 240 ||
+          kind === "activation" && (typeof input.field !== "string" || input.field.length > 160)))) {
+      throw new DeliveryArtServiceError("delivery_art_plan_source_input_invalid", "Select the repository, pinned revision and committed file for this read.", 422);
+    }
+    const repositories = input.repo ? [input.repo] : [...ownerWork.keys()].sort();
+    const pinned = new Set(Array.isArray(input.preserve_repositories) ? input.preserve_repositories : []);
+    const facts = await Promise.all(repositories.map(async repo => {
+      if (kind === "revision" && !input.repo && pinned.has(repo)) return { repo, status: "pinned" };
+      try {
+        if (!readTechnicalPlanSource) throw new Error("Source reader unavailable.");
+        const fact = await readTechnicalPlanSource({
+          kind, ownerRepo: repo, baseRef: input.base_ref, revision: input.revision, filePath: input.path, field: input.field,
+        }, { caller_id: callerId, operator_id: operatorId, work_item_id: `work-item-${ownerWork.get(repo)}` });
+        return { repo, status: "available", fact };
+      } catch {
+        return { repo, status: "unavailable" };
+      }
+    }));
+    return { ...result, facts };
+  }
+
   async function draftArchitecturePacket(input = {}) {
     const correlationId = typeof input.correlationId === "string" && input.correlationId.trim()
       ? input.correlationId.trim()
@@ -1827,6 +1892,7 @@ export function createDeliveryArtArtifactService({
   return {
     currentArchitecturePacket,
     draftArchitecturePacket,
+    technicalPlanFacts,
     draftReviewPacket,
     draftReviewPacketFinalization,
     draftWorkStart,
