@@ -2019,7 +2019,10 @@ when calendar dates are unavailable. The same saved-calendar check applies to
 new or changed assignments from direct create, update, bulk, repair, and plan
 writes. Existing assignments can be inspected and unrelated notes or edits can
 be saved before those calendars are reconciled. Keep backlog Features
-uncommitted until PI Planning.
+uncommitted until PI Planning. Schedule existing prepared Risks and Milestones
+from PI Planning's Work items view. The reviewed plan uses the same dated
+calendar, initiative, objective, and dependency checks as other assignments.
+Their evidence and completion still use the non-source completion workflow.
 
 To extend a committed Epic, open its Feature board in PI Planning and choose
 **Add Feature**. Select the Feature's delivery target and a dated iteration for

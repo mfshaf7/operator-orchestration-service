@@ -1,7 +1,7 @@
 import { isRefinementMetadataTarget, REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
 
 const workTypes = new Set(["User story", "Defect", "Task"]);
-const planTypes = new Set(["Feature", ...workTypes]);
+export const piPlanningAssignmentTypes = new Set(["Feature", ...workTypes, "Risk", "Milestone"]);
 
 function hasRefinementPreparation(node) {
   return node.ready_contract_satisfied === true || (
@@ -22,7 +22,7 @@ function hasMissingRefinementFields(node, target) {
 // Read-only navigation from current ART facts, never work-start eligibility.
 // Whole-package navigation must survive partial scopes and the final child close.
 export function preparedForPIPlanning(node) {
-  return planTypes.has(node.type) && ["new", "ready"].includes(node.status) &&
+  return piPlanningAssignmentTypes.has(node.type) && ["new", "ready"].includes(node.status) &&
     hasRefinementPreparation(node);
 }
 
@@ -43,7 +43,7 @@ export function deliveryExecutionNavigation(root) {
   const phase = terminal(root) ? "audit_only" : executionSeen ? "execution" : leaves.length ? "refinement" : "work_design";
   const refinementOpen = phase !== "work_design" && phase !== "audit_only" && root.status !== "parked";
   const needsRefinement = node => isRefinementMetadataTarget(node) && node.status !== "in-progress" &&
-    (planTypes.has(node.type) ? !hasRefinementPreparation(node) : hasMissingRefinementFields(node, "work_item"));
+    (piPlanningAssignmentTypes.has(node.type) ? !hasRefinementPreparation(node) : hasMissingRefinementFields(node, "work_item"));
   const closeoutPending = !terminal(root) && finishedScope;
   const posture = root.status === "done" ? "Done" : root.status === "retired" ? "Retired" :
     root.status === "parked" ? "Deferred" : root.status === "blocked" || blocked.length ? "Blocked" :

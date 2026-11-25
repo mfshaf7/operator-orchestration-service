@@ -1,8 +1,8 @@
 import { HttpError } from "../errors.js";
 import { resolveDeliveryTaxonomy } from "../delivery-taxonomy.js";
-import { preparedForPIPlanning } from "../delivery-execution-navigation.js";
+import { piPlanningAssignmentTypes, preparedForPIPlanning } from "../delivery-execution-navigation.js";
 
-const schedulableTypes = new Set(["Feature", "User story", "Defect", "Task"]);
+const featureForecastTypes = new Set(["Feature", "User story", "Defect", "Task"]);
 const movableStatuses = new Set(["new", "ready"]);
 const endedStatuses = new Set(["done", "parked", "retired"]);
 const itemNumber = id => Number(String(id).replace(/^work-item-/, ""));
@@ -111,7 +111,7 @@ export async function preparePIPlan({ payload, source, catalog, loadPlanningFact
     const number = itemNumber(accepted.work_item_id);
     const item = byId.get(number)?.node;
     const window = calendar.get(accepted.iteration);
-    if (!item || !schedulableTypes.has(item.type) || !movableStatuses.has(status(item)) ||
+    if (!item || !piPlanningAssignmentTypes.has(item.type) || !movableStatuses.has(status(item)) ||
         item.target_pi && item.target_pi !== pi || assignments.has(number)) {
       throw conflict(`Work item #${number} cannot be scheduled in this PI. Review the current Epic.`);
     }
@@ -134,7 +134,7 @@ export async function preparePIPlan({ payload, source, catalog, loadPlanningFact
     if (node.type !== "Feature") continue;
     const target = effective(node);
     const descendants = (node.children ?? []).flatMap(child => flatten(child)).map(({ node: child }) => child)
-      .filter(child => schedulableTypes.has(child.type) && !["parked", "retired"].includes(status(child)));
+      .filter(child => featureForecastTypes.has(child.type) && !["parked", "retired"].includes(status(child)));
     if (!target || !(assignments.has(node.id) || descendants.some(child => assignments.has(child.id)))) continue;
     const childWindows = descendants.map(effective).filter(Boolean);
     const latest = Math.max(0, ...childWindows.map(window => window.sequence));
