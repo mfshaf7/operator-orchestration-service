@@ -49,6 +49,28 @@
       "timeout_seconds": 1200
     },
     {
+      "id": "project-runtime-restart-operating-verification",
+      "kind": "runtime_and_live",
+      "name": "Recover the original project run after a broker restart",
+      "executable": "node",
+      "args": ["scripts/verify_project_runtime_rehearsal.mjs", "recovery"],
+      "fidelity": "sandbox-runtime",
+      "conformance_binding": "matching-fidelity",
+      "conformance_case_ids": ["cases-b17cb044-3324-4788-8202-9e2dfc18947a"],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "project-runtime-rejection-operating-verification",
+      "kind": "runtime_and_live",
+      "name": "Reject invalid source and replays while preserving results",
+      "executable": "node",
+      "args": ["scripts/verify_project_runtime_rehearsal.mjs", "rejected_inputs"],
+      "fidelity": "sandbox-runtime",
+      "conformance_binding": "matching-fidelity",
+      "conformance_case_ids": ["cases-bc81236b-2c49-4aff-9a1f-d211ee142c79"],
+      "timeout_seconds": 30
+    },
+    {
       "id": "api-contract-validation",
       "kind": "validations",
       "name": "Generated API contract validation",

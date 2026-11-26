@@ -38,6 +38,26 @@ owner-preparation requests remain inspect-only; this editor cannot alter their
 automation or control metadata. Prototype app/design and ordinary Delivery
 retain their different source scopes; there is no universal extension allowlist.
 
+## Rehearse the Broker project runtime source cases
+
+For the shared project development runtime's source foundation, run the
+two-case rehearsal with clean exact checkouts of the reviewed Broker and its
+paired Platform source in local Dev Integration. Use an admitted disposable
+target. The Broker checkout needs its lockfile dependencies installed.
+
+```bash
+python3 scripts/project-runtime-rehearsal/recover-in-flight.py \
+  --broker-checkout <broker-checkout> --broker-head <reviewed-broker-commit> \
+  --platform-checkout <reviewed-platform-checkout>
+```
+
+The rehearsal reads actual Platform results for an interrupted Broker run and
+checks rejected source and replay inputs. It records the exact revisions and
+observations after the disposable namespace is removed. The governed work
+session verifies this private receipt through **Verify Runtime Results**.
+The operating commands only verify the receipt. If the revision changes,
+record a fresh rehearsal for the exact reviewed revision before trying again.
+
 ## Inspect, edit or import, and retain a draft
 
 A new ordinary Delivery session has no saved draft yet. Its native `GET <base>/draft`
