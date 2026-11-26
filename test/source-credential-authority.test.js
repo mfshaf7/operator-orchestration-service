@@ -262,6 +262,33 @@ test("cold source readback names original issue and revocation operations even a
   assert.equal(f.authority.read({ callerId: CALLER, operatorId: OPERATOR, intentId: prepared.intent_id }).operation_refs.revoke, read.operation_refs.revoke);
 });
 
+test("a recorded Delivery group retains the same identifier through approval, issuance and session binding", async t => {
+  const landingUnitId = "landing-unit:delivery-42.source_foundation";
+  const sessionId = `work-session:delivery-42:${landingUnitId}`;
+  const current = plan({ landing_unit_id: landingUnitId });
+  current.proof.decision.landing_unit.id = landingUnitId;
+  const f = fixture(t, current);
+  const prepared = await f.prepare();
+  assert.equal(prepared.source_intent.landing_unit_id, landingUnitId);
+  await assert.rejects(f.lease(prepared.intent_id), { code: "platform_source_approval_required" });
+
+  const initial = command(prepared);
+  assert.equal((await f.service.submit({ callerId: CALLER, input: initial })).state, "succeeded");
+  const approved = await f.service.readSourcePreparation({ callerId: CALLER, intentId: prepared.intent_id });
+  assert.equal(approved.authorization.credential_receipt.landing_unit_id, landingUnitId);
+  assert.equal(approved.authorization.credential_receipt.source_intent_digest, prepared.source_intent_digest);
+  assert.equal(await f.lease(prepared.intent_id), "written");
+
+  f.setPlan({ ...current, session_id: sessionId });
+  const renewal = command(prepared, "agent-source.renew", sessionId);
+  assert.equal((await f.service.submit({ callerId: CALLER, input: renewal })).state, "succeeded");
+  assert.equal(f.store.sourcePreparation(prepared.intent_id).session_id, sessionId);
+  assert.equal(await f.lease(prepared.intent_id, sessionId), "written");
+  assert.throws(() => normalizeSourceCredentialInput({ ...initial.input,
+    source_intent: { ...prepared.source_intent, landing_unit_id: "landing-unit:/other" },
+  }), { code: "platform_source_credential_contract_invalid" });
+});
+
 test("historical prospective receipt never unbinds the actual session or downgrades newer expiry", async t => {
   const f = fixture(t); const prepared = await f.prepare(); const initial = command(prepared);
   await f.auth(initial); await f.observe(initial);

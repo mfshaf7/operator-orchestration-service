@@ -1,4 +1,4 @@
-import { SOURCE_CREDENTIAL_ACTIONS, SOURCE_CREDENTIAL_RECEIPT_FIELDS, SOURCE_INTENT_FIELDS } from "../src/platform-operation/source-credentials.js";
+import { SOURCE_CREDENTIAL_ACTIONS, SOURCE_CREDENTIAL_RECEIPT_FIELDS, SOURCE_INTENT_FIELDS, SOURCE_LANDING_UNIT_ID } from "../src/platform-operation/source-credentials.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { SOURCE_OWNER_BOOTSTRAP_PATHS } from "../src/repository-owner-bootstrap/scaffold.js";
 
@@ -15,7 +15,7 @@ const prototypeId = { type: "string", pattern: "^prototype:[a-z0-9]+(?:-[a-z0-9]
 const workItem = { type: "string", pattern: "^work-item-[1-9][0-9]*$" };
 const coordinates = {
   repository, repository_id: positive, installation_id: positive,
-  landing_unit_id: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{2,127}$" },
+  landing_unit_id: { type: "string", pattern: SOURCE_LANDING_UNIT_ID.source },
   branch: { type: "string", pattern: "^(?!main$)(?!.*\\.\\.)(?!.*//)[a-z0-9](?:[a-z0-9._/-]*[a-z0-9._-])?$" },
   fetched_base: commit, human_reviewer_id: id,
 };

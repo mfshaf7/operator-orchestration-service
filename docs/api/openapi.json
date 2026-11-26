@@ -85653,7 +85653,7 @@
           },
           "landing_unit_id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]{2,127}$"
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,255}$"
           },
           "branch": {
             "type": "string",
@@ -85829,7 +85829,7 @@
           },
           "landing_unit_id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]{2,127}$"
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,255}$"
           },
           "branch": {
             "type": "string",
@@ -88965,7 +88965,7 @@
           },
           "landing_unit_id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]{2,127}$"
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,255}$"
           },
           "branch": {
             "type": "string",
@@ -89159,7 +89159,7 @@
           },
           "landing_unit_id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]{2,127}$"
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,255}$"
           },
           "branch": {
             "type": "string",
