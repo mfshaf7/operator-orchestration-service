@@ -907,6 +907,16 @@ head before invoking the existing exact-head merge boundary. Only then does the
 executor use that human identity's configured repository-policy bypass; the
 exact-head, approval, check, and durable Review Packet gates remain mandatory.
 
+When a pull request must include a newer protected `main`, bring the current
+owner history into the existing source branch with a Gary-authored merge
+commit. Continue the same work session. The publisher verifies the exact
+protected branch through the repository-scoped provider before excluding its
+inherited commits from the Gary author check. The protected commit must
+descend from the session's recorded base and be an ancestor of the new head.
+The session base and source approval stay bound to the original work.
+Run the required checks and review the updated pull-request head again
+before merging.
+
 Credentials, private keys, and provider authorization headers are excluded
 from work-session state, logs, command results, and Review Packets. After a
 restart, missing, expired, rotated, revoked, suspended, or mismatched projected
