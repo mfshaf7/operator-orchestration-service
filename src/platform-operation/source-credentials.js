@@ -6,6 +6,7 @@ export const SOURCE_CREDENTIAL_ACTIONS = Object.freeze([
   "agent-source.issue", "agent-source.renew", "agent-source.revoke",
 ]);
 export const SOURCE_INTENT_REFERENCE = /^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,241}$/;
+export const SOURCE_LANDING_UNIT_ID = /^[a-z0-9][a-z0-9._:-]{0,255}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
@@ -78,7 +79,7 @@ function normalizeInput(input, bootstrap = false) {
   for (const field of ["intent_id", "caller_id", "operator_id", "human_reviewer_id"]) match(value[field], IDENTIFIER, field);
   match(value.source_start_digest, DIGEST, "source_start_digest");
   match(value.repository, REPOSITORY, "repository");
-  match(value.landing_unit_id, /^[a-z0-9][a-z0-9-]{2,127}$/, "landing_unit_id");
+  match(value.landing_unit_id, SOURCE_LANDING_UNIT_ID, "landing_unit_id");
   // Platform's existing source contract owns branch syntax. Do not invent a
   // mandatory feature/fix prefix or a project-type-specific branch convention.
   match(value.branch, /^[a-z0-9][a-z0-9._/-]*$/, "branch");
