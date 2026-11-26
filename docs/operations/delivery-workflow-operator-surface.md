@@ -524,6 +524,12 @@ merge-ready architecture fidelity. A missing, invalid, mismatched, or incomplete
 profile blocks before a session, worktree, branch, or source credential is
 created; rerun preflight after the owner profile is repaired on the accepted
 base.
+The source executor resolves the repository location through the same current
+admission reader used for source access. For pre-existing core repositories,
+it supplies the exact provider coordinates from the reviewed identity
+projection. Internally registered repositories use the current protected
+source connection and private checkout. An admission failure blocks both routes.
+
 For architecture v5 or v6, that configured-path request carries both merge-ready and
 operating-ready conformance cases plus the required evidence kinds across the
 authenticated source-executor boundary. The transport must preserve those
