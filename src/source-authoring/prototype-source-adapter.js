@@ -11,6 +11,8 @@ import { prototypeSourcePathAllowed } from "./prototype-context.js";
 import { textDigest } from "./context-contract.js";
 import { prototypeAuthoringError } from "./prototype-contracts.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
+import { captureSavedProjectSource } from "../project-runtime/saved-source.js";
+import { readAcknowledgedProjectDraft } from "./operator-drafts.js";
 import { assertPrototypeOwnerChangeSet, prototypeOwnerChangeSet, prototypeOwnerPreparationPath } from "./prototype-owner-preparation.js";
 import { prototypeDeliveryOwnerChangeSet, prototypeDeliveryPreparationRequest, prototypeDeliveryPreparationPathAllowed } from "./prototype-delivery-preparation.js";
 
@@ -20,7 +22,8 @@ const PROTOTYPE = /^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // Canonical record existence/freshness belongs to the broker's Studio reader.
 // This executor adapter reads only the exact committed Studio snapshot already
 // selected there. It neither trusts browser file coordinates nor mints tokens.
-export function createPrototypeSourceAdapter({ workspaceRoot, python = "python3", execute = execFileSync, agentSourceIdentity = null }) {
+export function createPrototypeSourceAdapter({ workspaceRoot, python = "python3", execute = execFileSync,
+  agentSourceIdentity = null, projectSnapshotRoot = null, projectAuthoringStore = null }) {
   if (!workspaceRoot || !path.isAbsolute(workspaceRoot)) throw new TypeError("An absolute admitted workspace root is required.");
   const owner = path.join(workspaceRoot, "workspace-prototype-studio");
   const env = { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", PYTHONDONTWRITEBYTECODE: "1" };
@@ -193,6 +196,39 @@ export function createPrototypeSourceAdapter({ workspaceRoot, python = "python3"
       if (selected.owner_preparation) throw prototypeAuthoringError("owner_change_set_invalid", "Trusted owner preparations remain read-only in the source editor.");
       assertPrototypeChangeSet(input.change_set, selected);
       return source.validateSourceRealization(selected, input.change_set);
+    },
+    async captureProjectRuntimeSource(input) {
+      if (!projectAuthoringStore || typeof projectSnapshotRoot !== "string" || !path.isAbsolute(projectSnapshotRoot)) {
+        throw new HttpError(503, "project_source_volume_unavailable", "The private project snapshot volume is unavailable.");
+      }
+      const selected = session(input);
+      const { selection } = input;
+      const current = projectAuthoringStore.get(selected.source_request_id);
+      const sourceRoot = selected.model_source_scope.source_root;
+      const appRoot = selection.scope?.app_root;
+      const inPrototype = candidate => candidate === sourceRoot ||
+        (typeof candidate === "string" && candidate.startsWith(`${sourceRoot}/`));
+      if (selected.owner_preparation || !current?.session || !current.realization_ref ||
+          canonicalDigest(current.session) !== canonicalDigest(selected) ||
+          selection.source?.kind !== "saved-draft" || selection.source.session_id !== selected.session_id ||
+          selection.source.base_commit !== selected.landing_unit.base_commit ||
+          !inPrototype(appRoot) || !Array.isArray(selection.scope.dependency_paths) ||
+          selection.scope.dependency_paths.some(candidate => typeof candidate !== "string" ||
+            candidate === "prototypes" || (candidate.startsWith("prototypes/") && !inPrototype(candidate)))) {
+        throw new HttpError(409, "project_source_session_mismatch", "The saved project must match its actual Prototype source scope.");
+      }
+      const admission = await source.inspectRepositoryAdmission(selected);
+      if (admission.state !== "ready" || admission.repository_id !== selection.scope.repository_id) {
+        throw new HttpError(409, "project_source_admission_changed", "Current source admission does not match the Prototype repository custody.");
+      }
+      const saved = readAcknowledgedProjectDraft({
+        session: selected, source: selection.source, record: projectAuthoringStore.readArtifact(current.realization_ref),
+        readArtifact: (_session, ref) => projectAuthoringStore.readArtifact(ref),
+        error: (code, message, options) => new HttpError(options.statusCode, `project_source_${code}`, message),
+      });
+      return captureSavedProjectSource({ repository: owner, snapshotRoot: projectSnapshotRoot,
+        scope: selection.scope, source: selection.source, saved,
+        setup: selection.setup, commandId: selection.command_id, limits: selection.limits });
     },
     async captureRealizationContext(input) {
       const selected = session(input);

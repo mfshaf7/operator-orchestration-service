@@ -90,6 +90,11 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    submitProjectRuntime: binding => request("/v1/console-operations/project-runtime/run", { body: binding, method: "POST" }),
+    readProjectRuntime: ({ scope, command_id, operation_id }) => request("/v1/console-operations/project-runtime/read", {
+      body: { scope, command_id, operation_id }, method: "POST",
+    }),
+    controlProjectRuntime: command => request("/v1/console-operations/project-runtime/control", { body: command, method: "POST" }),
     prepareModelProfile: input => request('/v1/console-operations/model-profiles/prepare',{body:input,method:'POST'}),
     inspectModelProfile: input => request('/v1/console-operations/model-profiles/inspect',{body:input,method:'POST'}),
     controlModelProfile: input => request('/v1/console-operations/model-profiles/control',{body:input,method:'POST',timeoutMs:30000}),

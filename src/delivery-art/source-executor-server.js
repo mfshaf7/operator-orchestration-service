@@ -4,8 +4,10 @@ import path from "node:path";
 import { createDeliveryArtLifecycleSourceAdapter } from "./lifecycle-cli-adapters.js";
 import { createDeliveryArtSourceExecutorServer } from "./source-executor.js";
 import { createPrototypeSourceAdapter } from "../source-authoring/prototype-source-adapter.js";
+import { createPrototypeAuthoringStore } from "../source-authoring/prototype-store.js";
 import { createRepositoryOwnerBootstrapSourceAdapter } from "../repository-owner-bootstrap/source-adapter.js";
 import { applyHostSourceBinding } from "../instance-records/host-source-binding.js";
+import { createDeliveryArtWorkSessionRuntimeStore } from "./work-session-runtime.js";
 import {
   createConfiguredAgentSourceIdentityAdapter,
   createConfiguredSourceLocationResolver,
@@ -46,15 +48,23 @@ if (existsSync(socketPath)) {
 const sourceEnv = applyHostSourceBinding();
 const agentSourceIdentity = createConfiguredAgentSourceIdentityAdapter({ env: sourceEnv });
 const sourceLocation = createConfiguredSourceLocationResolver({ workspaceRoot, env: sourceEnv });
+const projectSnapshotRoot = sourceEnv.OOS_PROJECT_RUNTIME_SNAPSHOT_ROOT ?? null;
+const projectDraftRoot = projectSnapshotRoot && sourceEnv.OOS_ART_WORK_STATE_ROOT ? sourceEnv.OOS_ART_WORK_STATE_ROOT : null;
 const server = createDeliveryArtSourceExecutorServer({
   adapters: {
     bootstrapSource: createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, env: sourceEnv, stateRoot: path.join(resultStoreRoot, "owner-bootstrap") }),
-    prototypeSource: createPrototypeSourceAdapter({ workspaceRoot, agentSourceIdentity }),
+    prototypeSource: createPrototypeSourceAdapter({
+      workspaceRoot, agentSourceIdentity, projectSnapshotRoot,
+      projectAuthoringStore: projectDraftRoot
+        ? createPrototypeAuthoringStore({ root: path.join(projectDraftRoot, "prototype-authoring") }) : null,
+    }),
     lifecycleSource: createDeliveryArtLifecycleSourceAdapter({ providerId: executorId }),
     workSource: createDeliveryArtWorkSessionSourceAdapter({
       agentSourceIdentity,
       sourceLocation,
       sourceGitReader: createConfiguredSourceGitReader({ workspaceRoot, sourceLocation, env: sourceEnv }),
+      projectSnapshotRoot,
+      projectWorkSessionStore: projectDraftRoot ? createDeliveryArtWorkSessionRuntimeStore({ env: sourceEnv }) : null,
       workspaceRoot,
     }),
   },

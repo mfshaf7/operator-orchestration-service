@@ -409,6 +409,48 @@ export function createDeliveryArtWorkSessionService({
     } });
   }
 
+  async function withAuthorizedProjectSource({
+    callerId, operatorId, workItemId: target, commandId, source,
+  }, operation) {
+    await assertExecutorAvailable();
+    if (!sourceCredentials || typeof executor.withSourceLeaseGuard !== "function") {
+      throw new DeliveryArtWorkSessionServiceError("project_source_authority_unavailable",
+        "Project runtime source requires the commissioned owner and scoped source lease.", { statusCode: 503 });
+    }
+    const workItemId = normalizeWorkItemId(target);
+    const session = store.readByAlias(workItemId);
+    if (!session || !session.covered_work_item_ids.includes(workItemId) ||
+        session.session_id !== source?.session_id || session.landing_unit.base_commit !== source.base_commit) {
+      throw new DeliveryArtWorkSessionServiceError("project_source_session_changed",
+        "The saved project does not match the current authorized source session.", { statusCode: 409 });
+    }
+    assertIdentityBinding({ callerId, operatorId, command: {}, session });
+    return runWithExecutorContext({
+      caller_id: callerId, operator_id: operatorId, command_id: commandId,
+      session_id: session.session_id, work_item_id: workItemId,
+    }, async () => {
+      let captured;
+      await authorizedSourceEffect({
+        callerId, operatorId, workItemId, session,
+        async operation() {
+          captured = await operation(session);
+          return {};
+        },
+      });
+      return captured;
+    });
+  }
+
+  function captureProjectRuntimeSource({ callerId, operatorId, workItemId, selection }) {
+    if (typeof sourceRealization?.captureProjectRuntimeSource !== "function") {
+      throw new DeliveryArtWorkSessionServiceError("project_source_unavailable",
+        "The source owner does not have project snapshot capture.", { statusCode: 503 });
+    }
+    return withAuthorizedProjectSource({ callerId, operatorId, workItemId,
+      commandId: selection.command_id, source: selection.source },
+      session => sourceRealization.captureProjectRuntimeSource(session, selection));
+  }
+
   function withLifecycleContext(result, session) {
     return lifecycleContext && session
       ? { ...result, lifecycle_context: lifecycleContext.status(session) }
@@ -844,6 +886,8 @@ export function createDeliveryArtWorkSessionService({
   }
 
   return {
+    captureProjectRuntimeSource,
+    withAuthorizedProjectSource,
     close,
     continue: continueWork,
     execute,

@@ -21,6 +21,10 @@ import { createCanonicalSourceRepositoryReader } from "./source-repository-admis
 import { createConfiguredHostInstanceSourceReader } from "../instance-records/host-source-reader.js";
 import { instanceSourceLocation, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
 import { createHostSourceGitReader } from "../instance-records/host-source-git.js";
+import { captureSavedProjectSource } from "../project-runtime/saved-source.js";
+import { HttpError } from "../errors.js";
+import { readAcknowledgedProjectDraft } from "../source-authoring/operator-drafts.js";
+import { DELIVERY_SOURCE_REALIZATION_RECORD } from "./source-realization.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
   DeliveryArtEvidenceAcquisitionError,
@@ -135,6 +139,8 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   worktreeRelativePath = deliveryArtWorktreeRelativePath,
   sourceLocation = null,
   sourceGitReader = null,
+  projectSnapshotRoot = null,
+  projectWorkSessionStore = null,
   workspaceRoot,
 } = {}) {
   if (!workspaceRoot) {
@@ -776,6 +782,36 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       throw new Error("The admitted source identity metadata adapter is unavailable.");
     }
     return agentSourceIdentity.sourceIntentBinding({ session });
+  }
+
+  async function captureProjectRuntimeSource(session, selection, workItemId) {
+    if (typeof projectSnapshotRoot !== "string" || !path.isAbsolute(projectSnapshotRoot) || !projectWorkSessionStore) {
+      throw new HttpError(503, "project_source_volume_unavailable", "The private project snapshot volume is unavailable.");
+    }
+    const current = projectWorkSessionStore.readByAlias(workItemId);
+    if (!current || canonicalDigest(current) !== canonicalDigest(session)) {
+      throw new HttpError(409, "project_source_session_changed", "The source owner no longer reports this exact session.");
+    }
+    const saved = selection.source.kind === "saved-draft" ? readAcknowledgedProjectDraft({
+      session: current, source: selection.source,
+      record: projectWorkSessionStore.readArtifact(current, DELIVERY_SOURCE_REALIZATION_RECORD),
+      readArtifact: (bound, ref) => projectWorkSessionStore.readArtifact(bound, ref),
+      error: (code, message, options) => new HttpError(options.statusCode, `project_source_${code}`, message),
+    }) : null;
+    if (selection?.source?.base_commit !== session.landing_unit.base_commit ||
+        selection.source.session_id !== session.session_id) {
+      throw new HttpError(409, "project_source_session_mismatch", "The requested snapshot does not match the authorized source session and base.");
+    }
+    const admission = await inspectRepositoryAdmission(session);
+    if (admission.state !== "ready" || admission.repository_id !== selection.scope?.repository_id) {
+      throw new HttpError(409, "project_source_admission_changed", "Current source admission does not match this project's repository custody.");
+    }
+    return captureSavedProjectSource({
+      repository: canonicalRepo(session.owner_repo),
+      snapshotRoot: projectSnapshotRoot,
+      scope: selection.scope, source: selection.source, saved,
+      setup: selection.setup, commandId: selection.command_id, limits: selection.limits,
+    });
   }
 
   async function inspectConfiguredPath(
@@ -1661,6 +1697,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectConfiguredPath,
     inspectRepositoryAdmission,
+    captureProjectRuntimeSource,
     inspectSourceCredentialBinding,
     inspectResourceOwnership,
     inspectPullRequest,

@@ -8,8 +8,9 @@ const REQUEST_PATH = "/v1/source-actions";
 const MAX_BODY_BYTES = 1024 * 1024;
 const AGENT_SOURCE_EFFECTS = new Set([
   "work.ensure-owned-worktree", "work.ensure-worktree", "work.apply-source-realization",
-  "work.prepare-agent-source", "work.publish-agent-source",
+  "work.prepare-agent-source", "work.publish-agent-source", "work.capture-project-runtime-source",
   "prototype.ensure-owned-worktree", "prototype.apply-source-realization", "prototype.publish-agent-source",
+  "prototype.capture-project-runtime-source",
   "bootstrap.ensure-owned-worktree", "bootstrap.apply-source-realization", "bootstrap.publish-agent-source",
 ]);
 const bootstrapAction = method => ({ bootstrapSource }, input) => {
@@ -33,6 +34,7 @@ const ACTIONS = Object.freeze({
   "prototype.ensure-owned-worktree": ({ prototypeSource }, input) => prototypeSource.ensureOwnedWorktree(input),
   "prototype.capture-source-context": ({ prototypeSource }, input) => prototypeSource.captureRealizationContext(input),
   "prototype.validate-source-realization": ({ prototypeSource }, input) => prototypeSource.validateSourceRealization(input),
+  "prototype.capture-project-runtime-source": ({ prototypeSource }, input) => prototypeSource.captureProjectRuntimeSource(input),
   "prototype.prepare-owner": ({ prototypeSource }, input) => prototypeSource.prepareOwner(input),
   "prototype.apply-source-realization": ({ prototypeSource }, input) => prototypeSource.applySourceRealization(input),
   "prototype.inspect-agent-source": ({ prototypeSource }, input) => prototypeSource.inspectAgentSource(input),
@@ -80,6 +82,8 @@ const ACTIONS = Object.freeze({
     }),
   "work.inspect-repository-admission": ({ workSource }, input) =>
     workSource.inspectRepositoryAdmission(input.session),
+  "work.capture-project-runtime-source": ({ workSource }, input, context) =>
+    workSource.captureProjectRuntimeSource(input.session, input.selection, context.work_item_id),
   "work.inspect-source-credential-binding": ({ workSource }, input) =>
     workSource.inspectSourceCredentialBinding(input.session),
   "work.inspect-agent-source": ({ workSource }, input) =>
@@ -278,6 +282,18 @@ export function createDeliveryArtSourceExecutorServer({
         );
       }
       assertContext(envelope.context, envelope.action);
+      if (envelope.action.endsWith(".capture-project-runtime-source")) {
+        const { session, selection } = envelope.input, context = envelope.context;
+        const fields = ["command_id", "scope", "source", "setup", "limits"];
+        if (!session || session.session_id !== context.session_id ||
+            session.caller_id !== context.caller_id || session.operator?.id !== context.operator_id ||
+            (envelope.action.startsWith("work.") && !session.covered_work_item_ids?.includes(context.work_item_id)) ||
+            !context.command_id || selection?.command_id !== context.command_id ||
+            Object.keys(selection).length !== fields.length || fields.some(field => !Object.hasOwn(selection, field))) {
+          throw new DeliveryArtSourceExecutorError("project_source_executor_scope_mismatch",
+            "Snapshot capture requires its exact caller, operator, source session and original command.", { statusCode: 409 });
+        }
+      }
       if (envelope.action === "bootstrap.materialize-existing-owner" &&
           (envelope.context.session_id !== null || envelope.input.bootstrap_request_id !== envelope.context.bootstrap_request_id ||
            envelope.input.preparation?.caller_id !== envelope.context.caller_id || envelope.input.preparation?.operator_id !== envelope.context.operator_id)) {
@@ -327,7 +343,7 @@ export function createDeliveryArtSourceExecutorServer({
         jsonResponse(response, 200, { ok: true, result: replayed });
         return;
       }
-      const result = await action(adapters, envelope.input);
+      const result = await action(adapters, envelope.input, envelope.context);
       resultStore?.write(
         envelope.action,
         envelope.context,
@@ -485,6 +501,8 @@ export function createDeliveryArtSourceExecutorClient({
         requested_paths: requestedPaths,
         session,
       }),
+    captureProjectRuntimeSource: (session, selection) =>
+      invoke("work.capture-project-runtime-source", { session, selection }),
     ensureOwnedWorktree: (session) => invoke("work.ensure-owned-worktree", { session }),
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
     inspectConfiguredPath: (
@@ -543,6 +561,7 @@ export function createDeliveryArtSourceExecutorClient({
       ensureOwnedWorktree: input => invoke("prototype.ensure-owned-worktree", input),
       captureRealizationContext: input => invoke("prototype.capture-source-context", input),
       validateSourceRealization: input => invoke("prototype.validate-source-realization", input),
+      captureProjectRuntimeSource: input => invoke("prototype.capture-project-runtime-source", input),
       prepareOwner: input => invoke("prototype.prepare-owner", input),
       applySourceRealization: input => invoke("prototype.apply-source-realization", input),
       inspectAgentSource: input => invoke("prototype.inspect-agent-source", input),

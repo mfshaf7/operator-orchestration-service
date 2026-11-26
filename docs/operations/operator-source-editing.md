@@ -119,6 +119,38 @@ inference. Failed/cancelled attempts require an explicit `retry_of` pointing to
 the actual predecessor before a new draft. Current Prototype canonical objective
 bounds and Delivery's existing20–12000-character objective bounds are retained.
 
+## Saved project runtime source rehearsal
+
+The Stage 2 source and command foundation builds a runtime snapshot from the
+complete admitted Git tree and an exact operator save. It uses the canonical
+source session, current repository custody, the admitted app and dependency
+roots, and the reviewed Platform setup revision. A source lease is required
+for a new capture or dispatch. Existing Save remains inert.
+
+The host source executor reads the retained draft and its acknowledgement from
+the existing private authoring state. It writes regular files, including
+binary assets, into a private content-addressed snapshot volume. The immutable
+manifest binds the original command, source revision, custody, setup, paths,
+modes, sizes and SHA-256 digests in the
+[source snapshot contract](../../contracts/project-runtime/source-snapshot.schema.json).
+Its publication follows the durable blob
+writes. The executor command carries bounded references and metadata. The
+private snapshot volume must be configured for an isolated composition by its
+owner. The configured runtime is responsible for reading and verifying the
+manifest and blobs before copying them to an isolated project area.
+
+The command journal acknowledges only the original retained intent. A retained
+command does not establish that an application started. Use the original
+operation ID for owner readback after a lost response. The broker verifies
+source and setup identity before accepting an observation, and presents an
+unknown result separately from any previously observed result. A stale
+revision or a changed command ID binding requires an explicit current review.
+
+Keep the new runtime path out of the live Console until the approved Platform
+setup and snapshot consumer, isolated cross-owner rehearsal, and final
+activation review are complete. Use the existing source editor and preview
+path for current operator work.
+
 ## Accept and deliver
 
 Review the exact saved diff and digest, then use the existing separate

@@ -5,6 +5,11 @@ import path from "node:path";
 
 const key = value => createHash("sha256").update(value).digest("hex");
 
+export function syncPrivateDirectory(directory) {
+  const descriptor = openSync(directory, "r");
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+}
+
 function atomicWrite(filePath, value) {
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
@@ -14,8 +19,7 @@ function atomicWrite(filePath, value) {
       fsyncSync(descriptor);
     } finally { closeSync(descriptor); }
     renameSync(temporary, filePath);
-    const parent = openSync(path.dirname(filePath), "r");
-    try { fsyncSync(parent); } finally { closeSync(parent); }
+    syncPrivateDirectory(path.dirname(filePath));
   } finally {
     if (existsSync(temporary)) unlinkSync(temporary);
   }

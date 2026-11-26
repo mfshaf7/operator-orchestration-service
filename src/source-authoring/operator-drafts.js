@@ -22,6 +22,25 @@ export function assertOperatorDraftCommand(value, error) {
   return structuredClone(value);
 }
 
+export function readAcknowledgedProjectDraft({ session, source, record, readArtifact, error }) {
+  const draft = record?.attempts?.at(-1);
+  const save = draft?.operator_draft &&
+    record.operator_saves?.find(entry => entry.command_id === draft.operator_draft.command_id);
+  if (!save || record.revision !== source.revision || draft.state !== "draft-ready" ||
+      !draft.change_set || draft.change_set_digest !== source.change_set_digest ||
+      canonicalDigest(draft.change_set) !== source.change_set_digest ||
+      draft.change_set.session_id !== session.session_id ||
+      draft.change_set.base_commit !== session.landing_unit.base_commit) {
+    throw error("saved_revision_unavailable", "The original source selection must match the current acknowledged save.", { statusCode: 409 });
+  }
+  const acknowledgement = readArtifact(session, save.ack_ref);
+  if (!acknowledgement || canonicalDigest(acknowledgement) !== save.ack_digest ||
+      acknowledgement.revision !== source.revision) {
+    throw error("save_acknowledgement_invalid", "The original source save acknowledgement is unavailable.", { statusCode: 409 });
+  }
+  return { revision: record.revision, change_set: draft.change_set };
+}
+
 export function createOperatorDraftEditor({ enabled, sessionFor, assertIdentity, readRecord, writeRecord,
   withLock, putArtifact, readArtifact, validateDraft, project, nextRevision, clock = () => new Date(),
   canonicalObjective = () => null, assertEditable = () => {}, commitRecord = null, error }) {
