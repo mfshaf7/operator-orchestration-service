@@ -8,6 +8,7 @@ import {
   createDeliveryArtWorkSessionController,
   deliveryArtWorkContractProjection,
 } from "../src/delivery-art/work-session-controller.js";
+import { createDeliveryArtWorkSessionService } from "../src/delivery-art/work-session-service.js";
 import {
   architectureExecutionPrerequisitesForLandingUnit,
   architectureHumanGatesForLandingUnit,
@@ -643,6 +644,12 @@ function createHarness(
     },
     setPullRequest(value) {
       pullRequest = structuredClone(value);
+    },
+    setReconcile(value) {
+      lifecycleController.reconcile = value;
+    },
+    setPrepareAgentSource(value) {
+      sourceAdapter.prepareAgentSource = value;
     },
     setProjection(value) {
       projection = value;
@@ -2463,6 +2470,71 @@ test("recovery preserves an exact durable merge-ready packet after architecture 
     operatorId: original.operator.id,
     recovery,
   })).recovery_receipt, result.recovery_receipt);
+});
+
+test("the exact merged session records operating evidence with expired source access", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-merged-operating-continuation-"));
+  t.after(() => rm(root, { recursive: true }));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  await harness.controller.start("963", { decision: architectureBoundDecision(["work-item-963"]) });
+  const original = harness.store.readByAlias("work-item-963");
+  const pullRequest = {
+    base_ref: "main",
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  };
+  harness.store.writeArtifact(original, original.artifacts.review_packet_file, durableMergeReadyPacket(original, pullRequest));
+  const priorBinding = {
+    schema_version: 1,
+    artifact_type: "delivery-art-source-intent-binding",
+    session_id: original.session_id,
+    source_intent_ref: "source-intent:expired",
+  };
+  harness.store.writeArtifact(original, "artifacts/source-intent.json", priorBinding);
+  harness.relocate("/tmp/retained-review-checkout");
+  harness.setPullRequest(pullRequest);
+  harness.setFacts({ pull_request: "merged", review_packet: "merge-ready", operating_evidence: "required" });
+  harness.setProjection({ complete: false, gate: null, next_action: "acquire-operating-evidence",
+    state: "operating-evidence-acquisition-required", summary: "Verify operating evidence." });
+  let acquisitions = 0;
+  let sourceRequests = 0;
+  const expired = async () => {
+    sourceRequests += 1;
+    throw Object.assign(new Error("Source approval expired."), { code: "platform_source_intent_expired", statusCode: 409 });
+  };
+  harness.setPrepareAgentSource(expired);
+  harness.setReconcile(async (plan, options) => {
+    assert.equal(plan.landing_unit.repo_root, "/tmp/retained-review-checkout");
+    assert.deepEqual(options, { afterMergeOnly: true });
+    acquisitions += 1;
+    harness.setFacts({ pull_request: "merged", review_packet: "merge-ready", operating_evidence: "ready" });
+    harness.setProjection({ complete: false, gate: null, next_action: "draft-finalization",
+      state: "finalization-draft-required", summary: "Review the recorded results." });
+    return { projection: { state: "finalization-draft-required" }, executed_actions: ["acquire-operating-evidence"] };
+  });
+  const service = createDeliveryArtWorkSessionService({
+    controller: harness.controller, store: harness.store,
+    sourceCredentials: { ensureSourceCredential: expired, withSourceLease: expired, stopSourceCredential: expired },
+  });
+  const request = {
+    action: "continue", callerId: original.caller_id, operatorId: original.operator.id, workItemId: "963",
+    command: { command_id: "work-session-command:case:merged-evidence", expected_session_revision: original.updated_at },
+  };
+  harness.setFacts({ pull_request: "open", review_packet: "merge-ready" });
+  await assert.rejects(service.execute(request), { code: "platform_source_intent_expired" });
+  assert.equal(harness.store.readCommandRecord(request.command.command_id), null);
+  harness.setFacts({ pull_request: "merged", review_packet: "merge-ready", operating_evidence: "required" });
+  const recorded = await service.execute(request);
+  assert.equal(recorded.next_action.code, "draft-finalization");
+  assert.equal(recorded.facts.operating_evidence, "ready");
+  assert.equal(recorded.source_authorization.intent_ref, priorBinding.source_intent_ref);
+  assert.deepEqual(harness.store.readArtifact(original, "artifacts/source-intent.json"), priorBinding);
+  assert.equal((await service.execute(request)).replayed, true);
+  assert.equal(acquisitions, 1);
+  assert.equal(sourceRequests, 1);
+  assert.equal(harness.ownedWorktreeCreates(), 0);
 });
 
 test("recovery preserves merge-ready evidence when post-merge operating evidence is invalid", async () => {

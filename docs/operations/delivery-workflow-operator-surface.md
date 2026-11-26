@@ -546,6 +546,14 @@ acquisition attempt and returns the retry action; it does not loop internally.
 The next invocation reacquires the same source/profile identity. A passing
 receipt remains replay-safe and immutable.
 
+After the exact merge is recorded, **Verify Runtime Results** and the existing
+Review Packet finalization actions use the authenticated work session and its
+retained source evidence. An expired source write approval does not prevent
+these actions. The Broker checks the exact merge and uses the existing
+reviewed checkout. Each transition revalidates the current packet and next
+action. Source preparation,
+editing, and publication continue to require their approved source scope.
+
 #### Merged-Session Recovery
 
 Use `work recover` only after confirming that an open ART child has an active

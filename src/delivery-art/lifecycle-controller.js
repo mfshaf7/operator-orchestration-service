@@ -19,6 +19,7 @@ import { projectDeliveryArtOwnerEvidence } from "./review-evidence-acquisition.j
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   deriveDeliveryArtLifecycleState,
+  isDeliveryArtPostMergeAction,
   validateDeliveryArtLifecyclePlan,
 } from "./lifecycle.js";
 
@@ -1198,11 +1199,14 @@ export function createDeliveryArtLifecycleController({
     return projection.next_action;
   }
 
-  async function reconcile(plan, { maxTransitions = 8 } = {}) {
+  async function reconcile(plan, { maxTransitions = 8, afterMergeOnly = false } = {}) {
     const executed = [];
     for (let index = 0; index < maxTransitions; index += 1) {
       const before = await inspect(plan);
       if (before.projection.complete || before.projection.gate) {
+        return { ...before, executed_actions: executed };
+      }
+      if (afterMergeOnly && !isDeliveryArtPostMergeAction(before.facts, before.projection.next_action)) {
         return { ...before, executed_actions: executed };
       }
       const executedAction = await executeAction(before);
