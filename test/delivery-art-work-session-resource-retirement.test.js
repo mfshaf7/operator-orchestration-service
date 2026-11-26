@@ -36,7 +36,11 @@ function git(cwd, args) {
   })).trim();
 }
 
-async function repositoryFixture(t) {
+async function repositoryFixture(t, {
+  deliveryId = "delivery-958",
+  id = "delivery-958-work-item-968",
+  prepareWorkspace = true,
+} = {}) {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-retirement-git-"));
   t.after(() => rm(workspaceRoot, { force: true, recursive: true }));
   const remoteRoot = path.join(workspaceRoot, "remote.git");
@@ -53,9 +57,9 @@ async function repositoryFixture(t) {
   git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
   const baseCommit = git(repoRoot, ["rev-parse", "HEAD"]);
   const session = {
-    session_id: "work-session:delivery-958:delivery-958-work-item-968",
-    delivery_id: "delivery-958",
-    landing_unit_id: "delivery-958-work-item-968",
+    session_id: `work-session:${deliveryId}:${id}`,
+    delivery_id: deliveryId,
+    landing_unit_id: id,
     owner_repo: "operator-orchestration-service",
     operator: { id: "operator:workspace-owner" },
     landing_unit: {
@@ -65,7 +69,7 @@ async function repositoryFixture(t) {
     },
   };
   const adapter = createDeliveryArtWorkSessionSourceAdapter({ workspaceRoot });
-  const ownership = await adapter.ensureOwnedWorktree(session);
+  const ownership = prepareWorkspace ? await adapter.ensureOwnedWorktree(session) : null;
   return { adapter, ownership, remoteRoot, repoRoot, session, workspaceRoot };
 }
 
@@ -187,19 +191,30 @@ test("recovery generations remain valid through resource cleanup", async (t) => 
   assert.equal(receipt.session_id, session.session_id);
 });
 
-test("real Git retirement resumes after a crash without repeating deletion", async (t) => {
-  const fixture = await repositoryFixture(t);
-  assert.equal(
-    fixture.ownership.resources.every(
-      (resource) => resource.ownership_provenance === "session-created",
-    ),
-    true,
-  );
-  const pullRequest = await mergeFixtureBranch(fixture);
-  let manifest = createDeliveryArtWorkSessionResourceManifest({
-    resources: fixture.ownership.resources,
-    session: fixture.session,
+test("real Git retirement for an approved plan group resumes without repeating deletion", async (t) => {
+  const fixture = await repositoryFixture(t, {
+    deliveryId: "delivery-1384",
+    id: "landing-unit:1384-source-command-foundation",
+    prepareWorkspace: false,
   });
+  const session = {
+    ...fixture.session,
+    artifacts: { resource_manifest_file: "artifacts/resources.json" },
+  };
+  const env = { OOS_ART_WORK_STATE_ROOT: path.join(fixture.workspaceRoot, "coordination") };
+  const store = createDeliveryArtWorkSessionRuntimeStore({ env });
+  const retirement = createDeliveryArtWorkSessionResourceRetirementController({
+    sourceAdapter: fixture.adapter,
+    store,
+  });
+  const worktree = await retirement.ensureTrackedWorktree(session);
+  let manifest = store.readResourceManifest(session);
+  assert.ok(manifest.resources.every(resource => resource.ownership_provenance === "session-created"));
+  assert.equal(manifest.session_id, session.session_id);
+  assert.equal(manifest.landing_unit_id, session.landing_unit_id);
+  const reopened = createDeliveryArtWorkSessionRuntimeStore({ env });
+  assert.deepEqual(reopened.readResourceManifest(session), manifest);
+  const pullRequest = await mergeFixtureBranch({ ...fixture, ownership: { path: worktree } });
   let resources = await fixture.adapter.planResourceRetirement({
     manifest,
     pullRequest,
@@ -217,7 +232,7 @@ test("real Git retirement resumes after a crash without repeating deletion", asy
     resource: worktreeResource,
     session: fixture.session,
   });
-  assert.equal(existsSync(fixture.ownership.path), false);
+  assert.equal(existsSync(worktree), false);
 
   // Simulate process loss after deletion but before its outcome was persisted.
   resources = await fixture.adapter.planResourceRetirement({
