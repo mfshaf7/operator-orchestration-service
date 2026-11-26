@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
-import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
+import { createConfiguredSourceLocationResolver, createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { validateDeliveryArtWorkSessionArchitectureSupersessionReceipt } from "../src/delivery-art/work-session.js";
 import { instanceSourceLocation } from "../src/instance-records/source-location.js";
 import { instanceSourceProof } from "./fixtures/instance-source-authority.js";
@@ -23,6 +23,32 @@ function git(cwd, args) {
 function digest(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
+
+test("source location passes trusted core repository coordinates through current admission", () => {
+  const workspaceRoot = path.join(tmpdir(), "oos-location");
+  const env = { OOS_INSTANCE_RECORDS_ENABLED: "true" };
+  const calls = [];
+  const authority = instanceSourceProof({ ownerRepo: "owner-repo" }).source_authority;
+  const location = createConfiguredSourceLocationResolver({
+    workspaceRoot, env,
+    repositoryReader(input) {
+      calls.push(input);
+      return input.ownerRepo === "owner-repo" ? { source_authority: authority } : {};
+    },
+  });
+  assert.equal(location("operator-orchestration-service"), null);
+  assert.deepEqual(location("owner-repo"), { ...instanceSourceLocation(workspaceRoot, authority), authority });
+  assert.deepEqual(calls, [
+    { ownerRepo: "operator-orchestration-service", legacyRepository: { full_name: "mfshaf7/operator-orchestration-service", id: 1213863054 } },
+    { ownerRepo: "owner-repo", legacyRepository: null },
+  ]);
+
+  const denied = createConfiguredSourceLocationResolver({
+    workspaceRoot, env,
+    repositoryReader() { throw new Error("Current source admission unavailable."); },
+  });
+  assert.throws(() => denied("operator-orchestration-service"), /Current source admission unavailable/);
+});
 
 for (const internal of [false, true]) test(`${internal ? "internally registered" : "legacy"} source realization captures bounded context and commits an exact Agent Gary change set`, async t => {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-source-realization-"));

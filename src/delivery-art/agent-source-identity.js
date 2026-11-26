@@ -235,6 +235,14 @@ function loadContract(contractPath) {
   }
 }
 
+function legacyRepositoryForOwner(contract, ownerRepo) {
+  return contract.repositories.find((item) => item.full_name === `mfshaf7/${ownerRepo}`) ?? null;
+}
+
+export function readLegacySourceRepository(ownerRepo, contractPath = CONTRACT_PATH) {
+  return legacyRepositoryForOwner(loadContract(contractPath), ownerRepo);
+}
+
 function sessionDirectory(root, landingUnitId) {
   const digest = createHash("sha256").update(landingUnitId).digest("hex").slice(0, 24);
   return path.join(root, "sessions", digest);
@@ -630,7 +638,7 @@ export function createAgentSourceIdentityAdapter({
     if (!enabled || repositoryReader === null || session === null) return contract;
     if (typeof repositoryReader !== "function") fail("agent_source_repository_authority_unavailable", "Canonical source repository reader is unavailable.");
     try {
-      const legacy = contract.repositories.find((item) => item.full_name === `mfshaf7/${session.owner_repo}`) ?? null;
+      const legacy = legacyRepositoryForOwner(contract, session.owner_repo);
       const resolved = repositoryReader({ ownerRepo: session.owner_repo, legacyRepository: legacy });
       const repository = resolved?.repository;
       const account = contract.identity.installation_accounts.find((item) =>

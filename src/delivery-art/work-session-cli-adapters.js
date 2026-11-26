@@ -16,7 +16,7 @@ import { promisify } from "node:util";
 import { parseDocument } from "yaml";
 
 import { canonicalDigest } from "./canonical-json.js";
-import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+import { createAgentSourceIdentityAdapter, readLegacySourceRepository } from "./agent-source-identity.js";
 import { createCanonicalSourceRepositoryReader } from "./source-repository-admission.js";
 import { createConfiguredHostInstanceSourceReader } from "../instance-records/host-source-reader.js";
 import { instanceSourceLocation, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
@@ -1709,13 +1709,18 @@ export function createConfiguredAgentSourceIdentityAdapter({
 
 // Location is a projection of the same current source admission reader used by
 // identity checks; it does not grant source effects or export registration.
-export function createConfiguredSourceLocationResolver({ workspaceRoot, env = process.env }) {
+export function createConfiguredSourceLocationResolver({ workspaceRoot, env = process.env, repositoryReader = null }) {
   const instanceReader = createConfiguredHostInstanceSourceReader({ env });
   if (instanceReader === null) return null;
-  const read = createCanonicalSourceRepositoryReader({ authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
-    python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3", instanceReader });
+  const read = repositoryReader ?? createCanonicalSourceRepositoryReader({
+    authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim(),
+    python: env.OOS_WORKSPACE_INVENTORY_PYTHON?.trim() || "python3",
+    instanceReader,
+  });
+  const contractPath = env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim() || undefined;
   return ownerRepo => {
-    const current = read({ ownerRepo });
+    const legacyRepository = readLegacySourceRepository(ownerRepo, contractPath);
+    const current = read({ ownerRepo, legacyRepository });
     return current.source_authority ? { ...instanceSourceLocation(workspaceRoot, current.source_authority), authority: current.source_authority } : null;
   };
 }
