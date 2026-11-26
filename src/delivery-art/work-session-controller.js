@@ -549,6 +549,33 @@ function assertArchitecture(artifact, sessionInput) {
   }
 }
 
+function recordedSourceGroup(architecture, workItemId) {
+  if (architecture?.schema_version !== DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION ||
+      architecture.custody?.state !== "durable" ||
+      architecture.decision?.status !== "architecture-ready") return null;
+  return (architecture.architecture?.landing_units ?? []).find(
+    (unit) => unit.source_backed === true && unit.covered_work_item_ids.includes(workItemId),
+  ) ?? null;
+}
+
+function resolveRecordedPlan({ architecture, decision, ownerRepo, sourceGroup }) {
+  if (artifactReference(architecture).digest !== decision.architecture.artifact_location.recorded_artifact_digest) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_architecture_superseded",
+      "The approved Technical Plan changed. Reload the work session and review the current plan.",
+    );
+  }
+  if (!sourceGroup || sourceGroup.owner_repo !== ownerRepo ||
+      sourceGroup.id !== decision.landing_unit.id ||
+      sourceGroup.id !== architectureLandingUnitId({ architecture, coveredWorkItemIds: decision.covered_work_item_ids })) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_landing_unit_mismatch",
+      "Review the complete work scope and repository from the approved Technical Plan.",
+    );
+  }
+  return architecture;
+}
+
 function decisionWithArchitectureBindings(decision, architecture) {
   if (!architecture) {
     return decision;
@@ -1108,14 +1135,6 @@ export function createDeliveryArtWorkSessionController({
       continuation: current,
       ...(operatorId ? { operatorId } : {}),
     });
-    if (!decision) {
-      decisionDraft.landing_unit.supersedes_recoveries =
-        recoveredSourceIntentState({
-          coveredWorkItemIds: decisionDraft.covered_work_item_ids,
-          deliveryId: current.delivery_id,
-          landingUnit: decisionDraft.landing_unit,
-        }).expected;
-    }
 
     try {
       assertOpenTarget(target, workItemId, {
@@ -1165,27 +1184,54 @@ export function createDeliveryArtWorkSessionController({
       }));
     }
 
+    const sourceGroup = recordedSourceGroup(currentArchitecture, workItemId);
+    if (!decision) {
+      if (sourceGroup && sourceGroup.owner_repo === target?.owner_repo) {
+        decisionDraft.covered_work_item_ids = [...sourceGroup.covered_work_item_ids];
+        decisionDraft.landing_unit.id = sourceGroup.id;
+        decisionDraft.landing_unit.decision = sourceGroup.covered_work_item_ids.length > 1
+          ? "feature_single_landing_unit"
+          : "child_isolated_landing_unit";
+        decisionDraft.architecture = {
+          required: true,
+          artifact_location: { recorded_artifact_digest: artifactReference(currentArchitecture).digest },
+        };
+      }
+      decisionDraft.landing_unit.supersedes_recoveries =
+        recoveredSourceIntentState({
+          coveredWorkItemIds: decisionDraft.covered_work_item_ids,
+          deliveryId: current.delivery_id,
+          landingUnit: decisionDraft.landing_unit,
+        }).expected;
+    }
+
     if (decision && blockers.every((entry) =>
       entry.code !== "landing-unit-decision-invalid")) {
       const currentLandingUnitId = architectureLandingUnitId({
         architecture: currentArchitecture,
         coveredWorkItemIds: decision.covered_work_item_ids,
       });
-      if (currentLandingUnitId && decision.architecture.required !== true) {
+      if ((sourceGroup || currentLandingUnitId) && decision.architecture.required !== true) {
         blockers.push(configuredPathBlocker({
           authority: "operator",
           code: "architecture-binding-required",
           inputs: {
             architecture_artifact_id: currentArchitecture.artifact_id,
-            landing_unit_id: currentLandingUnitId,
+            landing_unit_id: sourceGroup?.id ?? currentLandingUnitId,
           },
           reason: "The current architecture defines this Landing Unit and must be bound to work start.",
         }));
       } else if (decision.architecture.required === true) {
         try {
-          architecture = await sourceAdapter.readArtifact(
-            decision.architecture.artifact_location,
-          );
+          const location = decision.architecture.artifact_location;
+          architecture = location.recorded_artifact_digest
+            ? resolveRecordedPlan({
+                architecture: currentArchitecture,
+                decision,
+                ownerRepo: target?.owner_repo,
+                sourceGroup,
+              })
+            : await sourceAdapter.readArtifact(location);
           assertArchitecture(architecture, {
             coveredWorkItemIds: decision.covered_work_item_ids,
             deliveryId: current.delivery_id,
@@ -1506,9 +1552,9 @@ export function createDeliveryArtWorkSessionController({
         : {
             base_ref: null,
             branch: null,
-            covered_work_item_ids: [workItemId],
+            covered_work_item_ids: sourceGroup?.covered_work_item_ids ?? [workItemId],
             decision: null,
-            id: architectureLandingUnitId({
+            id: sourceGroup?.id ?? architectureLandingUnitId({
               architecture: currentArchitecture,
               coveredWorkItemIds: [workItemId],
             }),
@@ -1520,11 +1566,11 @@ export function createDeliveryArtWorkSessionController({
         content_digest: currentArchitecture?.integrity?.content_digest ?? null,
         custody_state: currentArchitecture?.custody?.state ?? "missing",
         decision_status: currentArchitecture?.decision?.status ?? "missing",
-        required: decision?.architecture?.required ??
-          Boolean(architectureLandingUnitId({
+        required: Boolean(sourceGroup || (decision?.architecture?.required ??
+          architectureLandingUnitId({
             architecture: currentArchitecture,
             coveredWorkItemIds: [workItemId],
-          })),
+          }))),
         superseded: Boolean(
           architecture && currentArchitecture && !sameArtifactReference(
             artifactReference(architecture),
