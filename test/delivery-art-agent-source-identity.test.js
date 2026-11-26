@@ -111,6 +111,7 @@ function response(value, status = 200) {
 
 function provider({
   broadScope = false,
+  canonicalBranch = null,
   existingPullRequestHead = null,
   historicalPullRequestHead = null,
   principal = CONTRACT.identity.provider_principal,
@@ -144,6 +145,9 @@ function provider({
       }];
       if (broadScope) repositories.push({ id: 1, full_name: "mfshaf7/other" });
       return response({ total_count: repositories.length, repositories });
+    }
+    if (parsed.pathname === `/repos/${repositoryFullName}/branches/main`) {
+      return response(canonicalBranch);
     }
     if (parsed.pathname.includes("/git/ref/heads/")) {
       return response({ object: { sha: head } });
@@ -619,6 +623,78 @@ test("Agent source rejects human-authored source and non-human merge authority",
     );
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("Agent source accepts only verified protected-base history outside Gary's commits", async t => {
+  for (const scenario of ["current-protected-base", "unprotected-base", "advanced-again", "unapproved-source"]) {
+    await t.test(scenario, async () => {
+      const fixture = setup();
+      const { repoRoot, session } = fixture;
+      try {
+        await testAdapter(fixture, provider()).prepare({ repoRoot, session });
+        writeFileSync(path.join(repoRoot, "source.txt"), "Gary change\n");
+        git(repoRoot, "add", "source.txt");
+        git(repoRoot, "commit", "-m", "Implement source change");
+        const priorHead = git(repoRoot, "rev-parse", "HEAD");
+        const receiver = path.join(path.dirname(repoRoot), "receiver.git");
+        git(repoRoot, "init", "--bare", receiver);
+        git(repoRoot, "push", receiver, `${priorHead}:refs/heads/${session.landing_unit.branch}`);
+
+        git(repoRoot, "switch", "main");
+        writeFileSync(path.join(repoRoot, "upstream.txt"), "Reviewed upstream change\n");
+        git(repoRoot, "add", "upstream.txt");
+        const upstream = () => git(repoRoot, "-c", "user.name=GitHub", "-c",
+          "user.email=noreply@github.com", "commit", "-m", "Merge reviewed change");
+        upstream();
+        const inherited = git(repoRoot, "rev-parse", "HEAD");
+        if (scenario === "advanced-again") {
+          writeFileSync(path.join(repoRoot, "upstream.txt"), "Newer protected base\n");
+          git(repoRoot, "add", "upstream.txt");
+          upstream();
+        }
+        const currentBase = git(repoRoot, "rev-parse", "HEAD");
+        // The local tracking ref alone must never establish trusted history.
+        git(repoRoot, "update-ref", "refs/remotes/origin/main", inherited);
+        git(repoRoot, "switch", session.landing_unit.branch);
+        git(repoRoot, "merge", "--no-ff", "--no-edit", inherited);
+        if (scenario === "unapproved-source") {
+          writeFileSync(path.join(repoRoot, "source.txt"), "Unauthorized change\n");
+          git(repoRoot, "add", "source.txt");
+          git(repoRoot, "-c", "user.name=Other", "-c", "user.email=other@example.test",
+            "commit", "-m", "Change outside the admitted author");
+        }
+        const head = git(repoRoot, "rev-parse", "HEAD");
+        const providerFixture = provider({
+          canonicalBranch: { name: "main", protected: scenario !== "unprotected-base", commit: { sha: currentBase } },
+          existingPullRequestHead: head,
+        });
+        providerFixture.setHead(head);
+        let pushes = 0;
+        const adapter = testAdapter(fixture, providerFixture, {
+          onPush({ args }) {
+            pushes++;
+            assert.equal(args.at(-1), `${head}:refs/heads/${session.landing_unit.branch}`);
+            assert.equal(args.some(arg => arg.startsWith("--force")), false);
+            git(repoRoot, "push", receiver, args.at(-1));
+          },
+        });
+        if (scenario === "current-protected-base") {
+          const result = await adapter.publish({ repoRoot, session });
+          assert.equal(result.state, "published");
+          assert.equal(pushes, 1);
+          assert.equal(git(receiver, "rev-parse", `refs/heads/${session.landing_unit.branch}`), head);
+          assert.equal(result.fetched_base, session.landing_unit.base_commit);
+          assert.equal(providerFixture.calls.some(call => call.method === "POST" && call.path.endsWith("/pulls")), false);
+        } else {
+          await assert.rejects(adapter.publish({ repoRoot, session }), { code: "agent_source_commit_identity_mismatch" });
+          assert.equal(pushes, 0);
+          assert.equal(git(receiver, "rev-parse", `refs/heads/${session.landing_unit.branch}`), priorHead);
+        }
+      } finally {
+        fixture.cleanup();
+      }
+    });
   }
 });
 
