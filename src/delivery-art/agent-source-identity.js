@@ -483,7 +483,16 @@ async function assertProviderScope(fetchImpl, credential, repository) {
   }
 }
 
-function inspectSource(execFileSyncImpl, repoRoot, session, contract) {
+function sourceDescendsFrom(git, base, head) {
+  try {
+    git(["--no-replace-objects", "merge-base", "--is-ancestor", base, head]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function inspectSource(execFileSyncImpl, repoRoot, session) {
   const git = (args) => command(execFileSyncImpl, "git", args, { cwd: repoRoot });
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const head = git(["rev-parse", "HEAD"]);
@@ -494,24 +503,21 @@ function inspectSource(execFileSyncImpl, repoRoot, session, contract) {
   if (dirty) {
     fail("agent_source_worktree_dirty", "Agent source publish requires a clean worktree.");
   }
-  try {
-    command(
-      execFileSyncImpl,
-      "git",
-      ["merge-base", "--is-ancestor", session.landing_unit.base_commit, head],
-      { cwd: repoRoot },
-    );
-  } catch {
+  if (!sourceDescendsFrom(git, session.landing_unit.base_commit, head)) {
     fail("agent_source_base_mismatch", "Source head does not descend from the fetched base.");
   }
-  if (head === session.landing_unit.base_commit) {
+  return { git, head };
+}
+
+function assertSourceCommitIdentities({ git, head }, base, contract) {
+  const identities = git([
+    "--no-replace-objects", "log",
+    "--format=%H%x00%an%x00%ae%x00%cn%x00%ce",
+    `${base}..${head}`,
+  ]).split("\n").filter(Boolean);
+  if (identities.length === 0) {
     fail("agent_source_change_missing", "Agent source publish requires a committed change.");
   }
-  const identities = git([
-    "log",
-    "--format=%H%x00%an%x00%ae%x00%cn%x00%ce",
-    `${session.landing_unit.base_commit}..${head}`,
-  ]).split("\n").filter(Boolean);
   for (const row of identities) {
     const [commit, authorName, authorEmail, committerName, committerEmail] = row.split("\0");
     if (
@@ -528,7 +534,6 @@ function inspectSource(execFileSyncImpl, repoRoot, session, contract) {
       );
     }
   }
-  return { head };
 }
 
 function configureAuthor(execFileSyncImpl, repoRoot, contract) {
@@ -826,7 +831,18 @@ export function createAgentSourceIdentityAdapter({
     }
     assertSession(contract, session);
     configureAuthor(execFileSyncImpl, repoRoot, contract);
-    const source = inspectSource(execFileSyncImpl, repoRoot, session, contract);
+    const source = inspectSource(execFileSyncImpl, repoRoot, session);
+    let sourceIdentityError = null;
+    const canonicalBranch = contract.source_boundary.canonical_branch;
+    try {
+      assertSourceCommitIdentities(source, session.landing_unit.base_commit, contract);
+    } catch (error) {
+      if (error.code !== "agent_source_commit_identity_mismatch" || bootstrap ||
+          credentialPurpose !== null || session.landing_unit.base_ref !== `origin/${canonicalBranch}`) {
+        throw error;
+      }
+      sourceIdentityError = error;
+    }
     if (bootstrap) await bootstrap.assertCommittedSource({ repoRoot, session, headCommit: source.head });
     return lock(
       path.join(credentialRoot, contract.runtime.lock_filename),
@@ -839,6 +855,20 @@ export function createAgentSourceIdentityAdapter({
           credentialPurpose,
         });
         await assertProviderScope(fetchImpl, credential, repository);
+        if (sourceIdentityError) {
+          const branch = await providerRequest(fetchImpl, credential,
+            `/repos/${repository.full_name}/branches/${encodeURIComponent(canonicalBranch)}`);
+          const currentBase = branch?.commit?.sha;
+          if (branch?.name !== canonicalBranch || branch.protected !== true ||
+              !COMMIT_PATTERN.test(currentBase ?? "") || currentBase === session.landing_unit.base_commit ||
+              !sourceDescendsFrom(source.git, session.landing_unit.base_commit, currentBase) ||
+              !sourceDescendsFrom(source.git, currentBase, source.head)) {
+            throw sourceIdentityError;
+          }
+          // Exclude only history reachable through the current, provider-verified
+          // protected base. Keep the original source lease and check every new commit.
+          assertSourceCommitIdentities(source, currentBase, contract);
+        }
         if (repositoryReader !== null) {
           const fresh = currentContract(session);
           const binding = expectedRepository(fresh, session.owner_repo);
