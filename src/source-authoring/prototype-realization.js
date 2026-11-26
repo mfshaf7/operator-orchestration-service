@@ -97,6 +97,22 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
     const metadata = store.get(session.source_request_id);
     return metadata.realization_ref ? store.readArtifact(metadata.realization_ref) : { schema_version: 1, session_id: session.session_id, attempts: [], revision: metadata.updated_at };
   }
+  function withAuthorizedProjectSource({ callerId, operatorId, requestId, commandId, source }, operation) {
+    const metadata = retainedSession({ callerId, operatorId, requestId });
+    if (!configured || metadata.session.owner_preparation ||
+        metadata.session.session_id !== source?.session_id ||
+        metadata.session.landing_unit.base_commit !== source.base_commit) {
+      throw fail("project_source_session_changed", "The saved project must match its authorized Prototype source session.");
+    }
+    return authorized(metadata, metadata.source_intent_ref, commandId, () => operation(metadata));
+  }
+
+  function captureProjectRuntimeSource({ callerId, operatorId, requestId, selection }) {
+    return withAuthorizedProjectSource({ callerId, operatorId, requestId, commandId: selection.command_id,
+      source: selection.source }, metadata => sourceExecutor.prototypeSource.captureProjectRuntimeSource({
+      ...sourceInput(metadata), selection,
+    }));
+  }
   async function writeRecord(session, record) {
     await store.transact(session.source_request_id, ({ current, put }) => {
       if (current.session?.session_id !== session.session_id) throw fail("source_session_changed", "The actual source session changed before retaining its realization.");
@@ -347,6 +363,7 @@ export function createPrototypeSourceRealizationService({ authoringService, stor
     },
   });
   return { configured, read, startSession, generate, assist, continue: apply("continue"), recover: apply("recover"),
+    captureProjectRuntimeSource, withAuthorizedProjectSource,
     saveDraft({ callerId, operatorId, requestId, input }) {
       return save({ callerId, operatorId, subjectRef: { callerId, operatorId, requestId }, request: input });
     },

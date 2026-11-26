@@ -311,3 +311,44 @@ test('malformed UTF-8, binary and linked existing source cannot be silently norm
   await assert.rejects(async()=>f.adapter.validateSourceRealization({...f.input,change_set:{...changeSet(f),operations:[{action:'create',path:'prototypes/sample/ignored/new.txt',content:'must not stage ignored material',expected_digest:null}]}}));
   assert.equal(git(worktree,'status','--porcelain'),'');
 });
+
+test("Prototype snapshot reads the original acknowledged app draft and denies a sibling project dependency", async t => {
+  const f = setup(t);
+  const snapshotRoot = path.join(f.root, "project-snapshots");
+  mkdirSync(snapshotRoot);
+  const revised = "2026-11-26T04:00:00.000Z";
+  const change_set = changeSet(f);
+  const draftDigest = canonicalDigest(change_set);
+  const acknowledgement = { revision: revised };
+  const saved = { revision: revised,
+    operator_saves: [{ command_id: "save:sample", ack_ref: "ack:sample", ack_digest: canonicalDigest(acknowledgement) }],
+    attempts: [{ state: "draft-ready", operator_draft: { command_id: "save:sample" }, change_set, change_set_digest: draftDigest }],
+  };
+  const adapter = createPrototypeSourceAdapter({ workspaceRoot: f.root, projectSnapshotRoot: snapshotRoot,
+    agentSourceIdentity: { async inspectRepositoryAdmission() { return { state: "ready", repository_id: 123 }; } },
+    projectAuthoringStore: {
+      get: id => id === f.record.session.source_request_id ? { ...f.record, realization_ref: "draft:sample" } : null,
+      readArtifact: ref => ref === "draft:sample" ? saved : ref === "ack:sample" ? acknowledgement : null,
+    },
+  });
+  const selection = {
+    command_id: "project:sample:run",
+    scope: { installation_id: "installation:example", repository_id: 123, project_custody_ref: "custody:sample",
+      app_root: "prototypes/sample", dependency_paths: [], environment_ref: "dev-integration:local" },
+    source: { kind: "saved-draft", session_id: f.record.session.session_id, base_commit: f.base,
+      revision: revised, change_set_digest: draftDigest },
+    setup: { recipe_id: "static", configuration_revision: "setup:v1" },
+    limits: { max_files: 100, max_bytes: 1_000_000, max_tree_bytes: 20_000 },
+  };
+  const reference = await adapter.captureProjectRuntimeSource({ ...f.input, selection });
+  const manifest = JSON.parse(readFileSync(path.join(snapshotRoot, reference.manifest_digest.slice(7), "manifest.json")));
+  assert.equal(canonicalDigest(manifest), reference.manifest_digest);
+  assert.deepEqual(manifest.files.map(file => file.path), ["prototypes/sample/README.md", "prototypes/sample/index.html"]);
+  assert.equal(git(f.repo, "status", "--porcelain"), "");
+  await assert.rejects(adapter.captureProjectRuntimeSource({ ...f.input,
+    selection: { ...selection, scope: { ...selection.scope, dependency_paths: ["prototypes/other"] } },
+  }), { code: "project_source_session_mismatch" });
+  await assert.rejects(adapter.captureProjectRuntimeSource({ ...f.input,
+    selection: { ...selection, source: { ...selection.source, revision: "another saved revision" } },
+  }), { code: "project_source_saved_revision_unavailable" });
+});

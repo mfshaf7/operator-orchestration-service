@@ -25,7 +25,8 @@ const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validateChangeSetSchema = ajv.compile(changeSetSchema);
 const validateStartSchema = ajv.compile(startSchema);
-const ARTIFACT_FILE = "source-realization.json";
+export const DELIVERY_SOURCE_REALIZATION_RECORD = "source-realization.json";
+const ARTIFACT_FILE = DELIVERY_SOURCE_REALIZATION_RECORD;
 const TERMINAL_ATTEMPTS = new Set(["cancelled", "failed", "source-created"]);
 
 export class DeliveryArtSourceRealizationError extends Error {
@@ -645,5 +646,6 @@ export function createDeliveryArtSourceRealizationService({
   });
   return { configured, read, start, assist: args => assist({ ...args, input: args.request }), cancel: bind("cancel"), continue: bind("continue"),
     saveDraft: args => save({ ...args, subjectRef: args.workItemId }), files, draft,
+    captureProjectRuntimeSource: (session, selection) => sourceAdapter.captureProjectRuntimeSource(session, selection),
     recover: bind("recover"), readCompletedCommand: bind("readCompletedCommand") };
 }
