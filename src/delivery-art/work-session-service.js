@@ -229,7 +229,7 @@ function boundedExecutionError(error) {
     ? error.code
     : "delivery_art_work_session_dependency_failed";
   const clientError = /(?:decision|invalid|mismatch)$/.test(code);
-  const conflict = /(?:blocked|closed|locked|missing|not_ready|required|superseded|not_pristine|not_required|changed)$/.test(code);
+  const conflict = /(?:blocked|closed|locked|missing|not_ready|required|superseded|not_pristine|not_required|changed|revision_stale)$/.test(code);
   return new DeliveryArtWorkSessionServiceError(
     code,
     error instanceof Error ? error.message : String(error),
@@ -768,7 +768,14 @@ export function createDeliveryArtWorkSessionService({
           assertRevision({ action, command, recoveryReceipt, session });
           const terminalSourceReference = sourceCredentials && session && ["close", "recover", "reconstruct"].includes(action)
             ? sourceReference(session, command.source_intent_ref ?? null) : null;
-          const executeCommand = async (sourceIntentRef = null) => {
+          const executorContext = {
+            caller_id: callerId,
+            command_id: command.command_id,
+            operator_id: operatorId,
+            session_id: session?.session_id ?? null,
+            work_item_id: workItemId,
+          };
+          const executeCommand = async (sourceIntentRef = null, operation = null) => {
             const startedAt = clock().toISOString();
             const pending = {
               schema_version: 1,
@@ -786,13 +793,7 @@ export function createDeliveryArtWorkSessionService({
             store.writeCommandRecord(command.command_id, pending);
 
             try {
-              const raw = await runWithExecutorContext({
-                caller_id: callerId,
-                command_id: command.command_id,
-                operator_id: operatorId,
-                session_id: session?.session_id ?? null,
-                work_item_id: workItemId,
-              }, async () => action === "start"
+              const raw = await runWithExecutorContext(executorContext, operation ?? (async () => action === "start"
                 ? start(workItemId, {
                     ...(command.decision ? { decision: command.decision } : {}),
                     callerId,
@@ -806,14 +807,14 @@ export function createDeliveryArtWorkSessionService({
                     ? controller.recover(workItemId, { operatorId, recovery: command.recovery })
                   : action === "merge"
                     ? merge(workItemId)
-                    : close(workItemId));
+                    : close(workItemId)));
               let result = withLifecycleContext(
                 projectDeliveryArtWorkSessionResult(raw),
                 store.readByAlias(workItemId),
               );
               const actualSession = store.readByAlias(workItemId);
-              if (sourceIntentRef && actualSession && (!session || actualSession.session_id === session.session_id)) {
-                retainSourceReference(actualSession, sourceIntentRef);
+              if ((sourceIntentRef || operation) && actualSession && (!session || actualSession.session_id === session.session_id)) {
+                if (sourceIntentRef) retainSourceReference(actualSession, sourceIntentRef);
                 result = withSourceReference(result, actualSession);
               }
               const retired = session && ["recover", "reconstruct"].includes(action) &&
@@ -868,6 +869,12 @@ export function createDeliveryArtWorkSessionService({
               throw bounded;
             }
           };
+          if (sourceCredentials && action === "continue" && session && typeof controller.continueAfterMerge === "function") {
+            const recorded = await runWithExecutorContext(executorContext, () => controller.continueAfterMerge(
+              workItemId, session, (operation) => executeCommand(null, operation),
+            ));
+            if (recorded !== null) return recorded;
+          }
           if (sourceCredentials && (action === "continue" || (action === "start" && !session && command.decision))) {
             let requestedStartDigest = null;
             if (action === "start") {

@@ -34,6 +34,16 @@ export const DELIVERY_ART_LIFECYCLE_ACTIONS = Object.freeze({
   CLOSE_ART: "close-art",
 });
 
+export function isDeliveryArtPostMergeAction(facts, action) {
+  if (action === DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE ||
+      action === DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_FINALIZATION) {
+    return facts?.review_packet === "merge-ready" && facts.pull_request === "merged";
+  }
+  return facts?.review_packet === "finalization-draft" &&
+    (action === DELIVERY_ART_LIFECYCLE_ACTIONS.ISSUE_OPERATING_READINESS ||
+      action === DELIVERY_ART_LIFECYCLE_ACTIONS.FINALIZE_REVIEW_PACKET);
+}
+
 export const DELIVERY_ART_LIFECYCLE_GATES = Object.freeze({
   ARCHITECTURE_DECISION: "architecture-decision",
   SOURCE_WORK: "source-work",

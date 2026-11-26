@@ -16,6 +16,7 @@ import {
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
+import { isDeliveryArtPostMergeAction } from "./lifecycle.js";
 import {
   architectureDecisionFingerprint,
   artifactContentDigest,
@@ -2316,17 +2317,32 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  async function continueWork(workItemIdInput) {
+  async function continueWork(workItemIdInput, postMerge = null) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
       let session = store.readByAlias(workItemId);
       if (!session) {
+        if (postMerge) return null;
         return status(workItemId);
       }
       return store.withLock(session.session_id, async () => {
+        if (postMerge) {
+          session = store.readByAlias(workItemId);
+          if (session?.session_id !== postMerge.sessionId || session.updated_at !== postMerge.revision) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_revision_stale",
+              "The work session changed before operating verification. Read the current session.",
+            );
+          }
+          const packet = store.readArtifact(session, session.artifacts.review_packet_file);
+          if (packet?.status !== "merge-ready" && !(packet?.status === "draft" && packet.custody?.supersedes)) {
+            return null;
+          }
+        }
         if (typeof sourceAdapter.inspectRepositoryAdmission === "function") {
           const admission = await sourceAdapter.inspectRepositoryAdmission(session);
           if (admission.state === "blocked") {
+            if (postMerge) return null;
             const blocker = repositoryAdmissionBlocker(admission);
             return resultEnvelope({
               nextAction: publicConfiguredPathAction(blocker.next_action),
@@ -2336,11 +2352,36 @@ export function createDeliveryArtWorkSessionController({
             });
           }
         }
-        session = await refreshCompatibleArchitecture(
-          session,
-          await architectureBinding(session),
-        );
+        if (!postMerge) {
+          session = await refreshCompatibleArchitecture(
+            session,
+            await architectureBinding(session),
+          );
+        }
         const current = await statusForSession(session, workItemId);
+        if (postMerge) {
+          if (!isDeliveryArtPostMergeAction(current.facts, current.next_action.code)) return null;
+          return postMerge.execute(async () => {
+            const repoRoot = await sourceAdapter.resolveWorktree(session);
+            if (!repoRoot) return statusForSession(session, workItemId);
+            const reconciled = await lifecycleController.reconcile(
+              buildDeliveryArtLifecycleCompatibilityPlan({
+                artifactPath: (relativeFile) => store.artifactPath(session, relativeFile),
+                repoRoot,
+                session,
+              }),
+              { afterMergeOnly: true },
+            );
+            if (!reconciled.executed_actions.length) return statusForSession(session, workItemId);
+            const updated = {
+              ...session,
+              state: deliveryArtWorkSessionState(reconciled.projection),
+              updated_at: clock().toISOString(),
+            };
+            store.writeSession(updated);
+            return statusForSession(updated, workItemId);
+          });
+        }
         if ([
           "architecture-human-gate-required",
           "architecture-prerequisite-required",
@@ -2930,6 +2971,11 @@ export function createDeliveryArtWorkSessionController({
   return {
     close,
     continue: continueWork,
+    continueAfterMerge: (workItemId, session, execute) => continueWork(workItemId, {
+      sessionId: session.session_id,
+      revision: session.updated_at,
+      execute,
+    }),
     merge,
     preflight,
     prepareSourceCredential,

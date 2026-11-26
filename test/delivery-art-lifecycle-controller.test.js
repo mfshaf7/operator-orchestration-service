@@ -604,7 +604,7 @@ test("reconcile advances merged evidence to finalized custody then stops for ART
   };
   const controller = createDeliveryArtLifecycleController(setup);
 
-  const result = await controller.reconcile(finalizationPlan);
+  const result = await controller.reconcile(finalizationPlan, { afterMergeOnly: true });
 
   assert.deepEqual(result.executed_actions, [
     "draft-finalization",
@@ -842,6 +842,10 @@ test("failed pre-merge evidence retries once per reconciliation and advances aft
   assert.equal(status.projection.gate, null);
   assert.equal(status.projection.state, "review-evidence-retry-required");
   assert.equal(status.projection.next_action, "project-review-evidence");
+
+  const bounded = await controller.reconcile(finalizationPlan, { afterMergeOnly: true });
+  assert.deepEqual(bounded.executed_actions, []);
+  assert.equal(attempts, 0);
 
   const stillFailed = await controller.reconcile(finalizationPlan);
   assert.deepEqual(stillFailed.executed_actions, ["project-review-evidence"]);
