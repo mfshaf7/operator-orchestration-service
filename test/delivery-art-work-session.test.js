@@ -2877,6 +2877,73 @@ test("work start accepts an API decision object and binds decision drafts to the
   );
 });
 
+test("the recorded Technical Plan binds the exact source group through preparation and start", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recorded-plan-"));
+  const covered = ["work-item-963", "work-item-965"];
+  const architecture = architecturePacket("d", covered);
+  const harness = createHarness(root, { architectureArtifact: architecture, covered });
+  harness.setSourceArchitecture(null);
+
+  const drafted = await harness.controller.start("963");
+  const draft = drafted.decision_draft;
+  assert.deepEqual(draft.covered_work_item_ids, covered);
+  assert.equal(draft.landing_unit.id, "delivery-958-work-item-963");
+  assert.equal(draft.landing_unit.decision, "feature_single_landing_unit");
+  assert.deepEqual(draft.architecture, {
+    required: true,
+    artifact_location: { recorded_artifact_digest: architecture.integrity.content_digest },
+  });
+  assert.equal(drafted.configured_path.architecture.required, true);
+
+  const decision = acceptedDecision(covered);
+  decision.architecture = draft.architecture;
+  decision.landing_unit = {
+    ...decision.landing_unit,
+    id: draft.landing_unit.id,
+    decision: draft.landing_unit.decision,
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  const source = await harness.controller.prepareSourceCredential("963", {
+    callerId: decision.caller_id,
+    operatorId: decision.operator.id,
+    decision,
+  });
+  assert.deepEqual(source.proof.decision.architecture, draft.architecture);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  const started = await harness.controller.start("963", { decision });
+  assert.equal(started.state, "implementation-ready");
+  const session = harness.store.readByAlias("work-item-965");
+  assert.deepEqual(session.covered_work_item_ids, covered);
+  assert.deepEqual(harness.store.readArtifact(session, session.architecture.artifact_file), architecture);
+});
+
+test("recorded plan work start rejects stale, partial, and unbound decisions", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recorded-plan-scope-"));
+  const covered = ["work-item-963", "work-item-965"];
+  const architecture = architecturePacket("d", covered);
+  const harness = createHarness(root, { architectureArtifact: architecture, covered });
+
+  const partial = acceptedDecision();
+  const unbound = await harness.controller.start("963", { decision: partial });
+  assert.ok(unbound.configured_path.blockers.some(({ code }) => code === "architecture-binding-required"));
+
+  partial.architecture = {
+    required: true,
+    artifact_location: { recorded_artifact_digest: architecture.integrity.content_digest },
+  };
+  const mismatched = await harness.controller.start("963", { decision: partial });
+  assert.ok(mismatched.configured_path.blockers.some(({ code }) => code === "delivery_art_work_session_landing_unit_mismatch"));
+
+  const stale = acceptedDecision(covered);
+  stale.architecture = {
+    required: true,
+    artifact_location: { recorded_artifact_digest: `sha256:${"e".repeat(64)}` },
+  };
+  const replaced = await harness.controller.start("963", { decision: stale });
+  assert.ok(replaced.configured_path.blockers.some(({ code }) => code === "delivery_art_work_session_architecture_superseded"));
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
 test("one Landing Unit can be resumed from every covered work-item alias", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-multi-"));
   const harness = createHarness(root, {

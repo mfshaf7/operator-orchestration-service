@@ -1374,6 +1374,15 @@ The equivalent lower-level command sequence is:
 7. finalize with that exact receipt:
    - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
+When a recorded Technical Plan defines the selected source work, **Prepare
+Session** reads that plan from durable custody and proposes its exact work
+group. Review the branch and rollback boundary, then use the existing source
+access approval and start steps. The broker verifies that the approved plan
+digest, complete work group and owner repository still match before it
+prepares access or starts the session. If the plan changes, reload and review
+the current decision. Existing file-backed decision callers still use their
+verified repository artifact location.
+
 For a schema-v6 architecture packet, a lifecycle compatibility plan must carry
 `landing_unit.id` with the exact evidence-owner Landing Unit identifier from
 the architecture packet. The normal work-session path derives this value from
