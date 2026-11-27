@@ -1,5 +1,6 @@
 import { credentialFile, installationCredentialFile } from "../repository-custody/credential-files.js";
 import { HttpError } from "../errors.js";
+import { githubReadHeaders, githubReadResponse } from "../github-read.js";
 import { repositoryConnections } from "../repository-custody/connections.js";
 import { withRepositoryLifecycleIntegrity } from "./contracts.js";
 
@@ -12,9 +13,7 @@ function configured(value) {
 
 function headers(token, { json = false } = {}) {
   return {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
-    "X-GitHub-Api-Version": "2022-11-28",
+    ...githubReadHeaders(token),
     ...(json ? { "Content-Type": "application/json" } : {}),
   };
 }
@@ -96,7 +95,11 @@ export function createGitHubRepositoryLifecycleClient({
   }
 
   async function providerRequest(url, options = {}) {
-    try { return await fetchImpl(url, { ...options, redirect: "error" }); } catch {
+    try {
+      if (options.method === undefined || options.method === "GET") return await githubReadResponse(fetchImpl, url, options);
+      return await fetchImpl(url, { ...options, redirect: "error" });
+    } catch (error) {
+      if (error?.code === "github_read_throttled") throw error;
       throw new HttpError(503, "repository_provider_unavailable", "Repository provider could not be reached.");
     }
   }

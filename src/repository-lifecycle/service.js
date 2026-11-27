@@ -402,7 +402,7 @@ export function createRepositoryLifecycleService({
           const failureValue = failure(
             error?.code ?? "repository_lifecycle_operation_failed",
             error?.message ?? "Repository lifecycle operation failed.",
-            error?.statusCode >= 500,
+            error?.statusCode >= 500 || Boolean(githubReadFailure(error)),
           );
           const terminal = terminalArtifacts({
             aggregate,
@@ -479,3 +479,4 @@ export function createRepositoryLifecycleService({
 
   return { execute, project, projectRepository };
 }
+import { githubReadFailure } from "../github-read.js";

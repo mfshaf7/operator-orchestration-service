@@ -1,3 +1,4 @@
+import { githubReadFailure } from "../github-read.js";
 import {
   assertInventoryRegistry,
   assertInventory,
@@ -318,7 +319,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
         await persistWorkflowFailure({
           transaction,
           record,
-          failure: {
+          failure: githubReadFailure(error) ?? {
             code: typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")
               ? error.code
               : "workspace_inventory_dependency_unavailable",
@@ -334,6 +335,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
           request_id: requestId,
           code: record.failure.code,
         });
+        if (githubReadFailure(error)) throw error;
         if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) throw error;
         throw inventoryError("dependency_unavailable", "An inventory dependency failed; the last durable phase was retained for retry.", 503);
       }

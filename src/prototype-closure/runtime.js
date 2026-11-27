@@ -12,7 +12,7 @@ import { createPrototypeClosureSourceClient } from "./source-client.js";
 import { createPrototypeClosureStore } from "./store.js";
 import { createWgcfPrototypeClosureClient } from "./wgcf-client.js";
 import { createCanonicalSourceRepositoryReader } from "../delivery-art/source-repository-admission.js";
-import { createPublicBootstrapSourceReader } from "../repository-owner-bootstrap/source-reader.js";
+import { createPrototypeImportSourceReader } from "./import-source-reader.js";
 import { createPrototypeClosureDurableOwnerReader } from "./durable-owner-reader.js";
 import { createPlatformOperationProviderClient } from "../platform-operation/provider-client.js";
 
@@ -31,15 +31,16 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
       throw closureError("configuration_missing", `Closure requires ${name}.`, 503);
     }
   }
-  const resolvedPlatformReader = platformClient ?? createPrototypeClosurePlatformEvidenceReader({
-    evidenceFile: config.platformEvidenceFile,
-    dispositionProvider: platformOperationConfig?.enabled ? createPlatformOperationProviderClient({
+  const platformOperations = platformOperationConfig?.enabled ? createPlatformOperationProviderClient({
       baseUrl: platformOperationConfig.providerBaseUrl,
       callerId: platformOperationConfig.providerCallerId,
       callerSecret: platformOperationConfig.providerCallerSecret,
       allowHttp: platformOperationConfig.providerAllowHttp,
       fetchImpl,
-    }) : null,
+    }) : null;
+  const resolvedPlatformReader = platformClient ?? createPrototypeClosurePlatformEvidenceReader({
+    evidenceFile: config.platformEvidenceFile,
+    dispositionProvider: platformOperations,
   });
   const provider = createPrototypeClosureGitHubClient({
     owner: config.owner,
@@ -57,7 +58,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     ? createPrototypeClosureDurableOwnerReader({
       artifactService, deliveryApplicationService, studioSourceClient: sourceClient, callerOperatorBindings,
       repositoryReader: createCanonicalSourceRepositoryReader({ authorityRoot: inventoryAuthorityRoot, python: config.python }),
-      publicSourceReader: createPublicBootstrapSourceReader({ fetchImpl }),
+      importSourceReader: createPrototypeImportSourceReader(platformOperations),
     }) : null;
   const ownerReadback = maturityStateRoot && deliveryApplicationService
     ? createPrototypeClosureOwnerReadbackService({

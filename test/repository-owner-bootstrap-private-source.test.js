@@ -67,10 +67,19 @@ test("unknown paths, mismatched current record and unknown storage fail before a
   assert.equal(calls, 0);
 });
 
-test("a positive legacy proof retains the existing public-only reader", async () => {
+test("a positive retained Git record uses the same protected client and keeps public visibility required", async () => {
   let calls = 0;
-  const reader = createBootstrapSourceReader({ publicReader: { inspect: async value => { calls++; return { ...value, visibility: "public", default_branch: "main" }; } },
-    platformOperations: { inspectOwnerControls: async () => { throw new Error("Unexpected native read"); } } });
-  const source = await reader.inspect({ ...args, ownerAuthority: { authority_revision: "a".repeat(40) } });
-  assert.equal(calls, 1); assert.equal(qualifiedOwnerSource(source, null), true);
+  const binding = authority.provider_repository;
+  const legacy = { owner_repo: owner, authority_revision: "a".repeat(40), provider_repository: binding };
+  let visibility = "public";
+  const reader = createBootstrapSourceReader({ platformOperations: { inspectOwnerControls: async ({ input }) => {
+    calls++;
+    assert.deepEqual(input.authority_ref, { canonical_authority: { kind: "legacy-git", repo: "workspace-governance", revision: legacy.authority_revision }, provider_repository: binding });
+    return { ...result(input), visibility };
+  } } });
+  const source = await reader.inspect({ ...args, ownerAuthority: legacy });
+  assert.equal(qualifiedOwnerSource(source, legacy), true);
+  visibility = "private";
+  await assert.rejects(reader.inspect({ ...args, ownerAuthority: legacy }));
+  assert.equal(calls, 2);
 });

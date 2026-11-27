@@ -1,6 +1,6 @@
 // Source-owner metadata must not cross a public record-publication boundary
 // merely because its canonical custody or registration request is valid.
-export async function assertRepositoryRecordPublication({ sourceRepository, readAuthority, readPublicMetadata, error }) {
+export async function assertRepositoryRecordPublication({ sourceRepository, readAuthority, readMetadata, error }) {
   // Legacy non-provider entrant classification retains its existing route.
   if (sourceRepository == null) return;
   if (sourceRepository.provider !== "github" || !/^[1-9][0-9]*$/.test(sourceRepository.provider_repository_id ?? "") ||
@@ -13,16 +13,28 @@ export async function assertRepositoryRecordPublication({ sourceRepository, read
     throw error("publication_visibility_unproven", "The records authority visibility could not be verified; no source publication is allowed.");
   }
   let observed;
-  try { observed = await readPublicMetadata(sourceRepository.provider_repository_id); }
+  if (typeof readMetadata !== "function") {
+    throw error("publication_connection_required", "Connect the GitHub account that owns this repository before publishing its record.", 503);
+  }
+  try { observed = await readMetadata(sourceRepository); }
   catch (caught) {
+    if (caught?.code === "github_read_throttled") throw caught;
+    if (["repository_connection_not_ready", "repository_connection_account_denied",
+      "repository_provider_owner_not_admitted", "repository_provider_not_configured"].includes(caught?.code)) {
+      throw error("publication_connection_required", "Connect the GitHub account that owns this repository before publishing its record.", 503);
+    }
     if (caught?.statusCode >= 500) {
       throw error("publication_visibility_unavailable", "Repository visibility is temporarily unavailable. Retain the original request and retry its visibility check before publication.", 503);
     }
-    throw error("private_records_authority_required", "Repository metadata cannot be confirmed public. Private registration needs a private records authority; no source was published.");
+    throw error("publication_visibility_unproven", "Verify repository access through the connected GitHub account before publishing its record.");
   }
   if (!observed || typeof observed !== "object" || Array.isArray(observed) ||
-      String(observed.id) !== sourceRepository.provider_repository_id || observed.full_name !== sourceRepository.full_name ||
-      observed.private !== false || observed.visibility !== "public") {
+      observed.provider_repository_id !== sourceRepository.provider_repository_id ||
+      `${observed.owner}/${observed.name}` !== sourceRepository.full_name ||
+      !["public", "private", "internal"].includes(observed.visibility)) {
+    throw error("publication_visibility_unproven", "GitHub did not verify visibility for the exact registered repository.");
+  }
+  if (observed.visibility !== "public") {
     throw error("private_records_authority_required", "Repository metadata cannot be published to a public records authority. Keep its registration private.");
   }
 }

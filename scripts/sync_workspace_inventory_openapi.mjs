@@ -383,7 +383,7 @@ for (const action of ["continue", "cancel"]) {
       description: `${action === "cancel" ? "Cancellation" : "Continuation"} command with no mutable request fields.`,
       content: { "application/json": { schema: object({}), example: {} } },
     },
-    responses: responses(),
+    responses: { ...responses(), ...(action === "continue" ? { 429: { description: "GitHub throttled the repository visibility check. Retry the same request after the reported time." } } : {}) },
   } });
 }
 
@@ -485,7 +485,7 @@ for (const action of ["continue", "cancel"]) {
       description: `${action === "cancel" ? "Cancellation" : "Continuation"} command with no mutable request fields.`,
       content: { "application/json": { schema: object({}), example: {} } },
     },
-    responses: lifecycleResponses(),
+    responses: { ...lifecycleResponses(), ...(action === "continue" ? { 429: { description: "GitHub throttled the repository visibility check. Retry the same request after the reported time." } } : {}) },
   } });
 }
 

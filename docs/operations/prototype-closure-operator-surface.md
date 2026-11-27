@@ -46,6 +46,12 @@ files, missing mapping, wrong target/provider/operator, unmerged source,
 Intake-only or inactive owners, unsafe paths, and private/client repositories
 fail closed. No application code executes during this readback.
 
+OOS asks Platform to inspect the exact merge in the finalized Review Packet.
+Platform reads the import manifest and mapped Git object identities with a
+one-repository Source App grant, then revokes the grant. OOS rechecks current
+main before accepting proof. A throttled read retains the original closure
+request and its retry time.
+
 For graduation, WGCF scopes accepted Delivery receipt discovery to the target
 already recorded in committed Studio source. OOS independently rechecks that
 receipt against the verified readiness row's target, including when resuming a

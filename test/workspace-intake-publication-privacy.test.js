@@ -7,6 +7,7 @@ import { createWorkspaceIntakeGitHubClient } from "../src/workspace-intake/provi
 import { createWorkspaceIntakeSourceClient } from "../src/workspace-intake/source-client.js";
 import { createWorkspaceInventoryGitHubClient } from "../src/workspace-inventory/provider-client.js";
 import { createWorkspaceInventorySourceClient } from "../src/workspace-inventory/source-client.js";
+import { createGitHubRepositoryProviderClient } from "../src/repository-custody/provider-client.js";
 
 const sourceRepository = { provider: "github", provider_repository_id: "456", full_name: "example/project" };
 async function harness(t, { destination = "public", project = "public", fault = null, factory = createWorkspaceIntakeGitHubClient } = {}) {
@@ -15,7 +16,22 @@ async function harness(t, { destination = "public", project = "public", fault = 
   const tokenFile = path.join(directory, "token");
   await writeFile(tokenFile, "ghs_synthetic-authority-only", { mode: 0o600 });
   const calls = [];
+  const metadata = createGitHubRepositoryProviderClient({ readAccount: "example",
+    readInstallationToken: "ghs_synthetic-metadata-only", fetchImpl: async (url, input) => {
+      calls.push({ url, ...input });
+      assert.equal(url, "https://api.github.com/repositories/456");
+      assert.equal(input.headers.Authorization, "Bearer ghs_synthetic-metadata-only");
+      if (fault === "unavailable") return Response.json({}, { status: 404 });
+      if (fault === "temporary") return Response.json({}, { status: 503 });
+      if (fault === "throttled") return Response.json({}, { status: 403, headers: { "retry-after": "60" } });
+      if (fault === "null") return Response.json(null);
+      const record = { id: fault === "wrong-id" ? 789 : 456, name: "project", owner: { login: "example" },
+        html_url: "https://github.com/example/project", archived: false, private: project !== "public", visibility: project };
+      if (fault === "unknown") { delete record.private; delete record.visibility; }
+      return Response.json(record);
+    } });
   const client = factory({ owner: "example", repositoryId: "123", tokenFile,
+    readMetadata: ({ provider_repository_id }) => metadata.lookup({ owner: "example", name: "project", providerRepositoryId: provider_repository_id }),
     fetchImpl: async (url, input) => {
       calls.push({ url, ...input });
       assert.equal(input.method, "GET", "Privacy verification must precede every provider write");
@@ -26,14 +42,7 @@ async function harness(t, { destination = "public", project = "public", fault = 
         if (destination === "unknown") { delete authority.private; delete authority.visibility; }
         return Response.json({ total_count: 1, repositories: [authority] });
       }
-      assert.equal(url, "https://api.github.com/repositories/456");
-      assert.equal(input.headers.Authorization, undefined, "Never send the authority credential to the project visibility read");
-      if (fault === "unavailable") return Response.json({}, { status: 404 });
-      if (fault === "temporary") return Response.json({}, { status: 503 });
-      if (fault === "null") return Response.json(null);
-      const record = { id: fault === "wrong-id" ? 789 : 456, full_name: "example/project", private: project !== "public", visibility: project, disabled: false };
-      if (fault === "unknown") { delete record.private; delete record.visibility; }
-      return Response.json(record);
+      assert.fail("Unexpected authority provider request");
     } });
   return { client, calls };
 }
@@ -48,7 +57,7 @@ for (const project of ["private", "internal"]) test(`A ${project} project's meta
 
 for (const fault of ["unavailable", "wrong-id", "unknown", "null"]) test(`Unverified project metadata fails closed before publication (${fault})`, async t => {
   const h = await harness(t, { fault });
-  await assert.rejects(h.client.assertRecordPublication(sourceRepository), /public|private/i);
+  await assert.rejects(h.client.assertRecordPublication(sourceRepository), { code: "workspace_intake_publication_visibility_unproven" });
   assert.equal(h.calls.some(call => call.method !== "GET"), false);
 });
 
@@ -77,7 +86,7 @@ test("Known public project metadata passes the guard without granting another pr
   const h = await harness(t);
   await h.client.assertRecordPublication(sourceRepository);
   assert.equal(h.calls.length, 2);
-  assert.equal(h.calls[1].headers.Authorization, undefined);
+  assert.equal(h.calls[1].headers.Authorization, "Bearer ghs_synthetic-metadata-only");
 });
 
 test("Unknown records-authority visibility fails closed before any project read or publication", async t => {
@@ -92,7 +101,15 @@ test("A temporary public-metadata failure remains retryable without being called
   assert.equal(h.calls.some(call => call.method !== "GET"), false);
 });
 
-test("A verified private records destination preserves privacy without probing project metadata anonymously", async t => {
+test("A throttled project visibility read preserves the retry time and performs no write", async t => {
+  const h = await harness(t, { fault: "throttled" });
+  await assert.rejects(h.client.assertRecordPublication(sourceRepository), error =>
+    error.code === "github_read_throttled" && error.statusCode === 429 && Date.parse(error.details.retry_at) > Date.now());
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls.every(call => call.method === "GET"), true);
+});
+
+test("A verified private records destination preserves privacy and needs no project lookup", async t => {
   const h = await harness(t, { destination: "private", project: "private" });
   await h.client.assertRecordPublication(sourceRepository);
   assert.equal(h.calls.length, 1);

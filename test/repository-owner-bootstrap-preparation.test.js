@@ -55,6 +55,9 @@ async function harness(t, { changeAuthority = () => {}, readCustody = value => v
       calls.push("source"); assert.deepEqual(providerRepository, actualCustody.binding);
       sourcePaths.push(paths);
       return inspectSource({ fetched_base: "1".repeat(40), visibility: "public", default_branch: "main",
+        read_scope: "trusted-owner-controls", read_credential_issued: true, read_credential_revoked: true,
+        authority_ref: { canonical_authority: { kind: "legacy-git", repo: "workspace-governance", revision: ownerAuthority.authority_revision },
+          provider_repository: ownerAuthority.provider_repository },
         observed_files: Object.fromEntries(paths.map(name => [name, name === "README.md" ? "# Actual owner documentation\n" : null])) }, ownerAuthority);
     } },
   });
@@ -77,7 +80,8 @@ test("caller-bound read-only preparation orders canonical custody and proposed a
   const { preparation_digest, ...body } = prepared;
   assert.equal(preparation_digest, canonicalDigest(body));
   assert.equal(prepared.authorization, "preparation-only");
-  for (const field of ["credential_issued", "checkout_created", "canonical_mutation", "runtime_activation"]) assert.equal(prepared[field], false);
+  assert.equal(prepared.credential_issued, true);
+  for (const field of ["checkout_created", "canonical_mutation", "runtime_activation"]) assert.equal(prepared[field], false);
   assert.equal(prepared.plan.app_import, false);
   assert.equal(await readFile(h.stateFile, "utf8"), before, "Preparation must not change existing custody state");
 });

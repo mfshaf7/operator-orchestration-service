@@ -138,7 +138,8 @@ source = upsertOpenApiPath(source, "/v1/prototype-closures/requests/{request_id}
 });
 source = upsertOpenApiPath(source, "/v1/prototype-closures/requests/{request_id}/continue", {
   post: { ...common, operationId: "continuePrototypeClosure", summary: "Continue or reconcile an acknowledged Closure", parameters: [requestId],
-    requestBody: body("Advance the caller-bound workflow without replacement inputs.", object({}), {}), responses: responses() },
+    requestBody: body("Advance the caller-bound workflow without replacement inputs.", object({}), {}),
+    responses: { ...responses(), 429: { description: "GitHub throttled source readback. Retry the same closure request after the reported time." } } },
 });
 source = upsertOpenApiPath(source, "/v1/prototype-closures/requests/{request_id}/cancel", {
   post: { ...common, operationId: "cancelPrototypeClosure", summary: "Cancel an unmerged Closure request", parameters: [requestId],

@@ -293,11 +293,14 @@ export function createRuntime({
         hostHeader: config.catalog.hostHeader, token: config.catalog.backendToken }).project(),
     }),
   });
+  const repositoryCustodyService = createRepositoryCustodyRuntime({ audit, config: config.repositoryCustody, fetchImpl });
+  const readRepositoryMetadata = repositoryCustodyService?.readMetadata;
   const workspaceInventoryService = createWorkspaceInventoryRuntime({
     audit,
     config: config.workspaceInventory,
     legacyIntakeStateRoot: config.workspaceIntake?.stateRoot,
     fetchImpl,
+    readMetadata: readRepositoryMetadata,
   });
   const catalogService = createCatalogService({
     audit,
@@ -321,14 +324,10 @@ export function createRuntime({
     deliveryService,
     openProjectClient,
   });
-  const repositoryCustodyService = createRepositoryCustodyRuntime({
-    audit,
-    config: config.repositoryCustody,
-    fetchImpl,
-  });
   const workspaceIntakeService = createWorkspaceIntakeRuntime({
     audit,
     config: config.workspaceIntake,
+    readMetadata: readRepositoryMetadata,
     sourceOwnerReadinessReader: input => {
       if (!repositoryOwnerBootstrapService) throw new HttpError(503, "source_owner_readiness_unavailable", "The actual source-owner checkout/readiness workflow is not commissioned.");
       return repositoryOwnerBootstrapService.ownerReadiness(input);
@@ -372,6 +371,7 @@ export function createRuntime({
   });
   const repositoryOwnerBootstrapService = createRepositoryOwnerBootstrapRuntime({
     sourceConfig: config.deliveryArt.workSession, intakeConfig: config.workspaceIntake, env, fetchImpl,
+    readMetadata: readRepositoryMetadata,
     custodySourceReader: repositoryCustodyService ? (requestId, options) => repositoryCustodyService.project(requestId, options) : null,
     platformOperations: () => platformOperationService,
   });

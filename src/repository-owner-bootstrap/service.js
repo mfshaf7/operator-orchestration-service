@@ -1,3 +1,4 @@
+import { githubReadFailure } from "../github-read.js";
 import { HttpError } from "../errors.js";
 import { qualifiedOwnerSource } from "./private-source-reader.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
@@ -15,7 +16,7 @@ const closed = (value, fields) => {
 };
 const timestamp = value => assertSourceCredentialTimestamp(value, "requested_at");
 const sourceIntent = value => { if (!SOURCE_INTENT_REFERENCE.test(value ?? "")) throw fail("source_intent_invalid", "Select this request's explicitly approved bootstrap source intent."); };
-const failure = error => ({ code: typeof error?.code === "string" ? error.code : "repository_owner_bootstrap_effect_unknown",
+const failure = error => githubReadFailure(error) ?? ({ code: typeof error?.code === "string" ? error.code : "repository_owner_bootstrap_effect_unknown",
   message: "Reconcile the original retained bootstrap operation; no replacement source effect is authorized.", retryable: Number(error?.statusCode ?? 500) >= 500 });
 
 // Bounded source-only owner workflow. No model client, ART writer, admission

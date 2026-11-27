@@ -19,7 +19,7 @@ import {
 } from "./wgcf-client.js";
 import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 
-export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl, legacyIntakeStateRoot = null }) {
+export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl, readMetadata, legacyIntakeStateRoot = null }) {
   if (!config?.enabled) return null;
   if (!isWorkspaceOperationRuntimeEnabled(inventoryManifest, config.profile)) {
     throw inventoryError("activation_required", "Workspace Inventory routine operation awaits the Console, Security, and Platform activation chain.", 503);
@@ -33,6 +33,7 @@ export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl, lega
     owner: config.owner,
     repositoryId: config.repositoryId,
     tokenFile: config.tokenFile,
+    readMetadata,
     fetchImpl,
   });
   const sourceClient = createWorkspaceInventorySourceClient({
