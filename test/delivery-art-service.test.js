@@ -240,7 +240,7 @@ function architectureV6Candidate() {
   return packet;
 }
 
-function architectureV6DraftInput() {
+function architectureV6DraftInput({ status } = {}) {
   const packet = architectureV6Candidate();
   return {
     schema_version: 1,
@@ -250,7 +250,7 @@ function architectureV6DraftInput() {
     architecture: packet.architecture,
     conformance_plan: packet.conformance_plan,
     decision: {
-      status: packet.decision.status,
+      status: status ?? packet.decision.status,
       rationale: packet.decision.rationale,
     },
   };
@@ -370,13 +370,22 @@ function durableEnvelope(artifactContent, contentDigest, resolution) {
   };
 }
 
-function createRegistry({ mutateResponse = null, registerError = null } = {}) {
+function createRegistry({ mutateResponse = null, registerError = null, enforceArchitectureLineage = false } = {}) {
   const records = new Map();
   const registrations = [];
+  function latestArchitectureReference({ deliveryId, artifactId }) {
+    const latest = [...records.values()].findLast(({ artifact }) =>
+      artifact.artifact_type === "delivery_art_architecture_packet" &&
+      artifact.delivery_id === deliveryId && artifact.artifact_id === artifactId);
+    return latest?.registry.artifact_ref ?? null;
+  }
   return {
     records,
     registrations,
     client: {
+      async readLatestArchitectureReference(subject) {
+        return structuredClone(latestArchitectureReference(subject));
+      },
       async read({ contentDigest }) {
         const response = records.get(contentDigest);
         if (!response) {
@@ -400,6 +409,12 @@ function createRegistry({ mutateResponse = null, registerError = null } = {}) {
           throw registerError;
         }
         const existing = records.get(contentDigest);
+        if (!existing && enforceArchitectureLineage && artifactContent.artifact_type === "delivery_art_architecture_packet") {
+          const latest = latestArchitectureReference({ deliveryId: artifactContent.delivery_id, artifactId: artifactContent.artifact_id });
+          if (canonicalStringify(latest) !== canonicalStringify(artifactContent.custody?.supersedes ?? null)) {
+            throw new DeliveryArtServiceError("wgcf_artifact_registry_conflict", "The latest stored revision changed.", 409);
+          }
+        }
         const response = existing ?? durableEnvelope(artifactContent, contentDigest, "created");
         records.set(contentDigest, response);
         const replayable = existing
@@ -454,9 +469,12 @@ function createHarness({
   callerOperatorBindings = {},
   clock = () => new Date("2026-08-08T11:20:00+08:00"),
   mutateRegistryResponse = null,
+  enforceArchitectureLineage = false,
   projectionFailures = 0,
   readinessArtifact = null,
+  readArchitectureSessionImpact = null,
   readTechnicalPlanSource = null,
+  beforeArchitectureProjection = null,
   registerError = null,
   snapshotSequence = null,
   withReadinessClient = false,
@@ -465,6 +483,7 @@ function createHarness({
   const registry = createRegistry({
     mutateResponse: mutateRegistryResponse,
     registerError,
+    enforceArchitectureLineage,
   });
   const projections = [];
   const snapshotCalls = [];
@@ -489,6 +508,9 @@ function createHarness({
         artDigest: workItemRecordIds.length === 1
           ? `sha256:${"e".repeat(64)}`
           : `sha256:${"a".repeat(64)}`,
+        coveredRecordCount: workItemRecordIds.length,
+        dependencyRecordCount: 0,
+        relationCount: 0,
         projection: deliveryArtScopeProjection(
           deliveryRecordId,
           workItemRecordIds,
@@ -496,7 +518,12 @@ function createHarness({
       };
     },
     async projectDeliveryArtReference(input) {
-      projections.push(structuredClone(input));
+      const { beforeProjection, ...projection } = input;
+      if (beforeProjection) {
+        await beforeArchitectureProjection?.();
+        await beforeProjection();
+      }
+      projections.push(structuredClone(projection));
       if (failuresRemaining > 0) {
         failuresRemaining -= 1;
         const error = new Error("sensitive backend detail");
@@ -571,6 +598,7 @@ function createHarness({
     },
     openProjectClient,
     readinessClient,
+    readArchitectureSessionImpact,
     readTechnicalPlanSource,
     readinessReceiptResolver: withReadinessResolver
       ? async ({ reference }) => {
@@ -609,6 +637,70 @@ function createHarness({
     snapshotCalls,
   };
 }
+
+test("reviewed session impact rejects a change that arrives during custody registration", async () => {
+  let sourceRevision = "reviewed";
+  let beforeProjection = () => {};
+  let tick = 0;
+  const harness = createHarness({
+    clock: () => new Date(Date.UTC(2026, 7, 8, 2, 0, tick++)),
+    readArchitectureSessionImpact: async () => ({ sessions: [], observation: sourceRevision }),
+    beforeArchitectureProjection: () => beforeProjection(),
+    enforceArchitectureLineage: true,
+  });
+  const author = status => harness.service.draftArchitecturePacket({
+    callerId: CALLER_ID,
+    includeSessionImpact: true,
+    input: architectureV6DraftInput({ status }),
+  });
+  const draft = await author("draft");
+  const approved = await author("architecture-ready");
+  assert.equal(draft.architecture_packet.decision.status, "draft");
+  assert.equal(approved.architecture_packet.decision.status, "architecture-ready");
+  assert.equal(draft.session_impact.revision, approved.session_impact.revision);
+  const record = candidate => harness.service.persistArchitecturePacket({
+    artifact: candidate.architecture_packet,
+    callerId: CALLER_ID,
+    expectedImpactRevision: candidate.session_impact.revision,
+  });
+
+  beforeProjection = () => { sourceRevision = "a session changed during registration"; };
+  await assert.rejects(() => record(approved), { code: "delivery_art_plan_impact_changed", statusCode: 409 });
+  assert.equal(harness.projections.length, 0);
+  const abandonedDigest = harness.registry.registrations[0].contentDigest;
+  beforeProjection = () => {};
+  const updated = await author("architecture-ready");
+  assert.equal(updated.architecture_packet.custody.supersedes.digest, abandonedDigest);
+  const saved = await record(updated);
+  assert.deepEqual(saved.session_impact, updated.session_impact);
+  assert.equal(harness.projections.length, 1);
+  await assert.rejects(() => record(approved), { code: "delivery_art_plan_impact_changed", statusCode: 409 });
+  assert.equal(harness.projections.length, 1);
+});
+
+test("a reviewed plan retries the exact registration after projection failure", async () => {
+  const harness = createHarness({
+    clock: () => new Date("2026-08-08T02:00:00.000Z"),
+    enforceArchitectureLineage: true,
+    projectionFailures: 1,
+    readArchitectureSessionImpact: async () => ({ sessions: [], observation: "stable" }),
+  });
+  const approved = await harness.service.draftArchitecturePacket({
+    callerId: CALLER_ID,
+    includeSessionImpact: true,
+    input: architectureV6DraftInput(),
+  });
+  const record = () => harness.service.persistArchitecturePacket({
+    artifact: approved.architecture_packet,
+    callerId: CALLER_ID,
+    expectedImpactRevision: approved.session_impact.revision,
+  });
+  await assert.rejects(record, { code: "delivery_art_openproject_projection_failed", statusCode: 502 });
+  const result = await record();
+  assert.equal(result.owner_receipt.replayed, true);
+  assert.equal(result.artifact.integrity.content_digest, approved.architecture_packet.integrity.content_digest);
+  assert.equal(harness.registry.records.size, 1);
+});
 
 test("architecture authoring binds Console caller, operator authority, and fresh ART truth", async () => {
   const consoleCaller = "governance-operations-console";
@@ -1065,6 +1157,7 @@ test("architecture v6 cutover requires exact supersession and an empty active-se
   };
   const candidate = architectureV6Candidate();
   const blockedHarness = createHarness({
+    readArchitectureSessionImpact: async () => ({ sessions: [], observation: "historical session retained" }),
     architectureCutoverGuard: async () => ({
       allowed: false,
       bound_sessions: [{ session_id: "work-session:delivery-698:active" }],
@@ -1097,6 +1190,25 @@ test("architecture v6 cutover requires exact supersession and an empty active-se
       error.code === "delivery_art_architecture_cutover_sessions_active" &&
       error.details.bound_sessions.length === 1,
   );
+  assert.equal(blockedHarness.registry.registrations.length, 0);
+
+  const storedV6 = durableEnvelope(
+    deliveryArtContentProjection(candidate),
+    candidate.integrity.content_digest,
+    "created",
+  );
+  blockedHarness.registry.records.set(candidate.integrity.content_digest, storedV6);
+  const reviewed = await blockedHarness.service.draftArchitecturePacket({
+    callerId: CALLER_ID,
+    includeSessionImpact: true,
+    input: architectureV6DraftInput(),
+  });
+  assert.deepEqual(reviewed.architecture_packet.custody.supersedes, sourceArtifactReference(storedV6.artifact));
+  await assert.rejects(() => blockedHarness.service.persistArchitecturePacket({
+    artifact: reviewed.architecture_packet,
+    expectedImpactRevision: reviewed.session_impact.revision,
+    callerId: CALLER_ID,
+  }), { code: "delivery_art_architecture_cutover_sessions_active", statusCode: 409 });
   assert.equal(blockedHarness.registry.registrations.length, 0);
 
   const admittedHarness = createHarness();

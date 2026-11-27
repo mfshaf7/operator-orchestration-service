@@ -4010,6 +4010,22 @@ function deliveryBlockerRecordActive(blockerValues) {
         );
       }
       const currentDescription = currentPayload?.description?.raw ?? "";
+      if (input.expectedCurrentReference !== undefined) {
+        const current = currentDeliveryArtReferenceFromDescription(currentDescription, projection.artifactType)?.reference;
+        if (current?.uri === projection.artifactUri && current?.digest === projection.artifactDigest) {
+          return { ...projection, projected: false, replayed: true };
+        }
+        if (current?.uri !== input.expectedCurrentReference?.uri ||
+            current?.digest !== input.expectedCurrentReference?.digest ||
+            operatorWorkNoteAlreadyPresent(currentDescription, note, "delivery-art")) {
+          throw new OpenProjectError(
+            "update_conflict",
+            "A different Technical Plan is now current on the work package.",
+            409,
+            "delivery_art_architecture_predecessor_changed",
+          );
+        }
+      }
       if (operatorWorkNoteAlreadyPresent(currentDescription, note, "delivery-art")) {
         return {
           ...projection,
@@ -4036,6 +4052,7 @@ function deliveryBlockerRecordActive(blockerValues) {
         note,
         "delivery-art",
       );
+      await input.beforeProjection?.();
       try {
         await patchWorkPackagePayload(
           projection.recordId,

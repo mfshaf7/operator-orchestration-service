@@ -108,7 +108,7 @@ function result(current) {
 
 function createHarness(
   store,
-  { available = true, lifecycleContext = null, sourceRealization = null, sourceCredentials = null } = {},
+  { available = true, lifecycleContext = null, sourceRealization = null, sourceCredentials = null, onContinue = null } = {},
 ) {
   const controller = {
     async prepareSourceCredential() { return { source_start_digest: `sha256:${"a".repeat(64)}` }; },
@@ -129,9 +129,15 @@ function createHarness(
       return result(current);
     },
     async status() {
-      return result(store.readByAlias("work-item-1024") ?? session());
+      const current = store.readByAlias("work-item-1024");
+      const receipt = store.readCleanupReceiptByAlias("work-item-1024");
+      return !current && receipt ? {
+        ...result(session()), session_id: null, session_revision: null, state: "closed",
+        cleanup_receipt: receipt, next_action: { code: "initiative-closeout-required", reason: "Review the package.", authority: "workspace-delivery-art" },
+      } : result(current ?? session());
     },
-    async continue() {
+    async continue(_workItemId, onPublished) {
+      await onContinue?.(onPublished);
       const current = {
         ...store.readByAlias("work-item-1024"),
         updated_at: "2026-08-27T01:01:00.000Z",
@@ -247,6 +253,70 @@ test("terminal work close invokes exact source revocation and exposes pending ow
   assert.equal(stops.length, 1); assert.equal(stops[0].intentId, "source-intent:terminal");
   assert.equal(closed.source_authorization.state, "revocation-pending");
   assert.equal(closed.next_action.code, "source-revocation-pending");
+});
+
+test("retired session reads keep the exact access closure until Platform confirms it", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-closed-access-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = createStore(root), current = session();
+  store.writeSession(current);
+  const intentId = "source-intent:retired";
+  store.writeArtifact(current, "artifacts/source-intent.json", {
+    schema_version: 1, artifact_type: "delivery-art-source-intent-binding",
+    session_id: current.session_id, source_intent_ref: intentId,
+  });
+  store.writeCleanupReceipt(current, { session_id: current.session_id, outcome: "complete", closed_by: current.operator.id });
+  store.removeSession(current);
+  let state = "revocation-requested";
+  const service = createHarness(store, { sourceCredentials: {
+    async ensureSourceCredential() { assert.fail("A read must not issue source access"); },
+    async withSourceLease() { assert.fail("A read must not use a source lease"); },
+    async stopSourceCredential() { assert.fail("A read must not dispatch revocation"); },
+    async readSourcePreparation(scope) {
+      assert.deepEqual(scope, { callerId: current.caller_id, intentId });
+      return { intent_id: intentId, session_id: current.session_id,
+        authorization: { state }, operation_refs: { revoke: "platform-operation:" + "d".repeat(24) } };
+    },
+  } });
+  const read = () => service.read({ callerId: current.caller_id, workItemId: "1024" });
+  const closing = await read();
+  assert.equal(closing.session_id, null);
+  assert.equal(closing.source_authorization.session_id, current.session_id);
+  assert.equal(closing.next_action.code, "source-revocation-pending");
+  state = "revoked";
+  assert.equal((await read()).source_authorization.state, "revoked");
+  assert.equal((await read()).next_action.code, "initiative-closeout-required");
+});
+
+test("a pending publication exposes the exact owner-confirmed PR without executing the command again", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-publication-progress-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = createStore(root), current = session();
+  store.writeSession(current);
+  const publication = { url: "https://github.com/example/repo/pull/44", head_commit: "a".repeat(40) };
+  let reached, finish, runs = 0;
+  const paused = new Promise(resolve => { reached = resolve; });
+  const remaining = new Promise(resolve => { finish = resolve; });
+  const service = createHarness(store, { async onContinue(publish) {
+    runs++;
+    publish(publication);
+    reached();
+    await remaining;
+  } });
+  const command = { command_id: "work-session-command:publication-progress", expected_session_revision: current.updated_at };
+  const input = { action: "continue", callerId: current.caller_id, workItemId: "1024", command };
+  const read = () => service.readCommand({ callerId: current.caller_id, workItemId: "1024", commandId: command.command_id });
+  const running = service.execute(input);
+  try {
+    await Promise.race([paused, running]);
+    assert.deepEqual(read(), { command_id: command.command_id, state: "pending", publication });
+  } finally {
+    finish();
+  }
+  await running;
+  assert.equal(read().state, "completed");
+  assert.equal((await service.execute(input)).replayed, true);
+  assert.equal(runs, 1);
 });
 
 test("completed realization acknowledgements remain readable after source authorization stops", async () => {
@@ -475,6 +545,13 @@ test("work-session commands retain one durable replay result and bounded source 
     workItemId: "work-item-1024",
   });
 
+  const lookup = { callerId: "operator:workspace-owner", workItemId: "1024", commandId: command.command_id };
+  const receipt = createHarness(store, { available: false }).readCommand(lookup);
+  assert.equal(receipt.state, "completed");
+  assert.equal(receipt.result.command_receipt.digest, first.command_receipt.digest);
+  assert.equal(service.readCommand({ ...lookup, callerId: "other-caller" }).state, "unconfirmed");
+  assert.equal(service.readCommand({ ...lookup, operatorId: "other-operator" }).state, "unconfirmed");
+  assert.equal(service.readCommand({ ...lookup, workItemId: "1025" }).state, "unconfirmed");
   assert.equal(first.replayed, false);
   assert.equal(replay.replayed, true);
   assert.deepEqual(replay.source, first.source);

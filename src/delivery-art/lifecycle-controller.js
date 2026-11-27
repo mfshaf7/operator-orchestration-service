@@ -16,6 +16,7 @@ import {
   deliveryArtReviewEvidenceProjectionDigest,
 } from "./review-evidence.js";
 import { projectDeliveryArtOwnerEvidence } from "./review-evidence-acquisition.js";
+import { reviewedOperatingVerification } from "./reviewed-operating-verifier.js";
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   deriveDeliveryArtLifecycleState,
@@ -810,6 +811,24 @@ export function createDeliveryArtLifecycleController({
           plan.landing_unit.id,
         ).filter((entry) => entry.target_readiness === "operating-ready")
       : [];
+    const reviewedVerification = reviewState === "merge-ready" && pullRequestState === "merged"
+      ? reviewedOperatingVerification({
+          ownerRepo: plan.landing_unit.owner_repo, pullRequest, operatingCases,
+          packetDigest: artifactReference(reviewPacketArtifact.artifact).digest,
+        })
+      : null;
+    let operatingEvidence = conformanceCaseEvidenceState(evidenceDocument, operatingCases);
+    if (reviewedVerification) {
+      const acquisition = evidenceDocument?.acquisition;
+      const matches = acquisition?.reviewed_verification_digest === reviewedVerification.digest &&
+        acquisition.profile_revision === reviewedVerification.verifier.revision &&
+        acquisition.source_revision === reviewedVerification.source.head_commit &&
+        acquisition.tested_merge_commit === reviewedVerification.source.merge_commit &&
+        /^sha256:[a-f0-9]{64}$/.test(acquisition.rehearsal_receipt_digest ?? "");
+      operatingEvidence = matches
+        ? conformanceCaseEvidenceState({ runtime_and_live: evidenceDocument.evidence?.runtime_and_live ?? [] }, operatingCases)
+        : "required";
+    }
     const facts = {
       architecture: reviewState === "finalized"
         ? "ready"
@@ -843,10 +862,7 @@ export function createDeliveryArtLifecycleController({
       exceptions: exceptionState(reviewInput, now),
       ...([5, 6].includes(architectureArtifact.artifact?.schema_version)
         ? {
-            operating_evidence: conformanceCaseEvidenceState(
-              evidenceDocument,
-              operatingCases,
-            ),
+            operating_evidence: operatingEvidence,
           }
         : {}),
       pull_request: pullRequestState,
@@ -878,6 +894,8 @@ export function createDeliveryArtLifecycleController({
       paths,
       plan: clone(plan),
       projection,
+      ...(reviewedVerification && projection.next_action === DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE
+        ? { operating_verification: reviewedVerification } : {}),
       pull_request: pullRequest,
       source,
     };
@@ -895,7 +913,7 @@ export function createDeliveryArtLifecycleController({
     return response.body ?? response;
   }
 
-  async function executeAction(context) {
+  async function executeAction(context, reviewedVerificationDigest) {
     const { plan, projection } = context;
     const callerId = plan.operator.id;
     switch (projection.next_action) {
@@ -1077,6 +1095,13 @@ export function createDeliveryArtLifecycleController({
         break;
       }
       case DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE: {
+        const verification = context.operating_verification;
+        if ((verification?.digest ?? null) !== reviewedVerificationDigest) {
+          throw new DeliveryArtLifecycleError(
+            "delivery_art_operating_verifier_binding_changed",
+            "Review the original merge and the current verifier before running these cases.",
+          );
+        }
         const operatingCases = applicableDeliveryArtConformanceCases(
           context.artifacts.architecture,
           plan.covered_work_item_ids,
@@ -1092,13 +1117,31 @@ export function createDeliveryArtLifecycleController({
           profile_revision: context.source.head_commit,
           required_evidence_kinds: [],
           source: context.source,
+          ...(verification ? { reviewed_verification: verification } : {}),
         });
+        if (verification && (receipt.reviewed_verification_digest !== verification.digest ||
+            receipt.profile_revision !== verification.verifier.revision ||
+            !/^sha256:[a-f0-9]{64}$/.test(receipt.rehearsal_receipt_digest ?? "") ||
+            receipt.results?.length !== verification.cases.length ||
+            !verification.cases.every(({ id }) => receipt.results.some(result =>
+              result.kind === "runtime_and_live" && result.conformance_case_ids?.length === 1 &&
+              result.conformance_case_ids[0] === id)))) {
+          throw new DeliveryArtLifecycleError(
+            "delivery_art_operating_verifier_receipt_invalid",
+            "Verification has no result for the exact reviewed pairing and its approved cases.",
+          );
+        }
         const acquired = projectDeliveryArtOwnerEvidence(receipt, {
           evidenceIdScope: "operating-ready",
           ownerRepo: plan.landing_unit.owner_repo,
           sourceRevision: context.source.head_commit,
         });
         const currentDocument = context.artifacts.evidence ?? {};
+        if (verification) Object.assign(acquired.acquisition, {
+          reviewed_verification_digest: verification.digest,
+          tested_merge_commit: verification.source.merge_commit,
+          rehearsal_receipt_digest: receipt.rehearsal_receipt_digest,
+        });
         const body = await brokerRequest({
           body: {
             input: {
@@ -1199,7 +1242,7 @@ export function createDeliveryArtLifecycleController({
     return projection.next_action;
   }
 
-  async function reconcile(plan, { maxTransitions = 8, afterMergeOnly = false } = {}) {
+  async function reconcile(plan, { maxTransitions = 8, afterMergeOnly = false, reviewedVerificationDigest = null } = {}) {
     const executed = [];
     for (let index = 0; index < maxTransitions; index += 1) {
       const before = await inspect(plan);
@@ -1209,7 +1252,7 @@ export function createDeliveryArtLifecycleController({
       if (afterMergeOnly && !isDeliveryArtPostMergeAction(before.facts, before.projection.next_action)) {
         return { ...before, executed_actions: executed };
       }
-      const executedAction = await executeAction(before);
+      const executedAction = await executeAction(before, reviewedVerificationDigest);
       executed.push(executedAction);
       const after = await inspect(plan);
       if (

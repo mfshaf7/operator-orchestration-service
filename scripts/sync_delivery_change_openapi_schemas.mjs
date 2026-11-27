@@ -162,6 +162,38 @@ const paths = {
       "x-oos-workflow-family": "delivery-change-control",
     },
   },
+  "/v1/delivery-initiatives/{delivery_id}/change-control/commands/{command_id}": {
+    get: {
+      tags: ["Delivery Change Control"],
+      summary: "Read the recorded outcome of one exact command",
+      description: "Read-only lookup using the existing owner journal. A matching caller and operator may see the durable result. Unconfirmed means there is no matching record, and does not establish that replay is safe.",
+      operationId: "getDeliveryChangeCommand",
+      security,
+      parameters: [deliveryId, { name: "command_id", in: "path", required: true, schema: { type: "string", pattern: "^delivery-change-command:[A-Za-z0-9._:-]+$", maxLength: 200 } },
+        { name: "X-OOS-Operator-Id", in: "header", required: true, schema: { type: "string" } }],
+      responses: {
+        200: {
+          description: "No matching record, recorded acceptance, or terminal command outcome.",
+          content: { "application/json": { schema: {
+            type: "object", required: ["command_id", "state"],
+            properties: {
+              command_id: { type: "string", pattern: "^delivery-change-command:[A-Za-z0-9._:-]+$", maxLength: 200 },
+              state: { enum: ["unconfirmed", "pending", "completed"] },
+              result: { $ref: "#/components/schemas/DeliveryChangeResultV1" },
+            },
+          }, example: { command_id: "delivery-change-command:example", state: "pending" } } },
+        },
+        400: errorResponse("The target or command id is invalid."),
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("Caller or operator attribution is not admitted."),
+        503: errorResponse("The owner journal is unavailable."),
+      },
+      "x-oos-owner": "operator-orchestration-service",
+      "x-oos-primary-caller": "governance-operations-console",
+      "x-oos-surface": "operator-facing",
+      "x-oos-workflow-family": "delivery-change-control",
+    },
+  },
   "/v1/delivery-initiatives/{delivery_id}/change-control/commands": {
     post: {
       tags: ["Delivery Change Control"],

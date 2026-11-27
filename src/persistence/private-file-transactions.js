@@ -10,7 +10,7 @@ export function syncPrivateDirectory(directory) {
   try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
 }
 
-function atomicWrite(filePath, value) {
+export function writePrivateJson(filePath, value) {
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
     const descriptor = openSync(temporary, "wx", 0o600);
@@ -90,5 +90,5 @@ export function createPrivateFileTransactions({ root, failure }) {
     }
   }
 
-  return { read, withLock, write: atomicWrite };
+  return { read, withLock, write: writePrivateJson };
 }

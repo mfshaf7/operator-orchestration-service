@@ -9,6 +9,13 @@ import {
   deliveryArtWorkContractProjection,
 } from "../src/delivery-art/work-session-controller.js";
 import { createDeliveryArtWorkSessionService } from "../src/delivery-art/work-session-service.js";
+import { reviewedOperatingVerification } from "../src/delivery-art/reviewed-operating-verifier.js";
+import { createDeliveryArtSourceRealizationService, DELIVERY_SOURCE_REALIZATION_RECORD } from "../src/delivery-art/source-realization.js";
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { createArchitectureSessionImpactReader } from "../src/delivery-art/architecture-session-impact.js";
+import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+import { Readable } from "node:stream";
 import {
   architectureExecutionPrerequisitesForLandingUnit,
   architectureHumanGatesForLandingUnit,
@@ -285,6 +292,7 @@ function createHarness(
     summary: "Source implementation remains a human-owned gate.",
   };
   let facts = { source: "pushed" };
+  let operatingVerification = null;
   const lifecycleController = {
     async inspect(plan) {
       assert.equal(
@@ -297,6 +305,7 @@ function createHarness(
         paths: plan.artifacts,
         plan,
         projection,
+        ...(operatingVerification ? { operating_verification: operatingVerification } : {}),
         pull_request: structuredClone(lifecyclePullRequest),
         source: {
           base_commit: "a".repeat(40),
@@ -704,6 +713,9 @@ function createHarness(
     },
     setFacts(value) {
       facts = structuredClone(value);
+    },
+    setOperatingVerification(value) {
+      operatingVerification = structuredClone(value);
     },
     setSourceArchitecture(value) {
       sourceArchitectureArtifact = structuredClone(value);
@@ -1521,6 +1533,56 @@ test("architecture cutover inventory blocks an exact historical session binding"
   }]);
 });
 
+test("revised plan reports actual session continuity and detects changes during its read", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-plan-impact-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const original = architecturePacket("a");
+  const harness = createHarness(root, { architectureArtifact: original });
+  const started = await harness.controller.start("963", { decision: architectureBoundDecision(["work-item-963"]) });
+  assert.equal(started.state, "implementation-ready");
+  const session = harness.store.readByAlias("work-item-963");
+  const context = { callerId: session.caller_id, operatorId: session.operator.id };
+  let source = { pristine: true, worktree_present: false, pull_request: { state: "missing" } };
+  let canonicalStatus = "in-progress";
+  let onInspect = () => {};
+  const impact = createArchitectureSessionImpactReader({
+    store: harness.store,
+    readPlanningFacts: async () => [{ id: 963, status: canonicalStatus }],
+    inspectSource: async () => {
+      onInspect();
+      return source;
+    },
+  });
+  const compatible = await impact(architecturePacket("c"), context);
+  assert.deepEqual(compatible.sessions, [{
+    disposition: "refresh", reason: "scope-unchanged", owner_repo: session.owner_repo,
+    work_item_ids: ["work-item-963"], open_work_item_id: "work-item-963",
+  }]);
+  const changed = architecturePacket("b");
+  assert.equal((await impact(changed, context)).sessions[0].disposition, "rebuild");
+  source = { pristine: false, pull_request: { state: "open", url: "https://private.example/pr/42" } };
+  const used = await impact(changed, context);
+  assert.equal(used.sessions[0].reason, "source-or-evidence-exists");
+  assert.doesNotMatch(JSON.stringify(used), /private\.example/);
+  assert.equal((await impact(architecturePacket("c", ["work-item-963", "work-item-964"]), context)).sessions[0].reason, "scope-regrouped");
+  assert.equal((await impact(changed, { ...context, operatorId: "another-operator" })).sessions[0].open_work_item_id, null);
+
+  onInspect = () => harness.store.writeArtifact(session, DELIVERY_SOURCE_REALIZATION_RECORD, { attempts: [{ state: "applying" }] });
+  await assert.rejects(() => impact(changed, context), { code: "delivery_art_plan_impact_changed" });
+  assert.equal((await impact(changed, context)).sessions[0].reason, "operation-pending");
+  canonicalStatus = "done";
+  assert.deepEqual((await impact(changed, context)).sessions, []);
+
+  const direct = createHarness(path.join(root, "direct"));
+  await direct.controller.start("963", { decision: acceptedDecision() });
+  const directImpact = createArchitectureSessionImpactReader({
+    store: direct.store,
+    readPlanningFacts: async () => [{ id: 963, status: "in-progress" }],
+    inspectSource: () => assert.fail("A work session with no plan requirement must retain its decision."),
+  });
+  assert.equal((await directImpact(changed, context)).sessions[0].disposition, "continues");
+});
+
 test("work start, restart, relocation, and continue preserve one reconstructable session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-controller-"));
   const first = createHarness(root);
@@ -1803,7 +1865,128 @@ test("superseded pristine sessions fail closed and reconstruct with a receipt", 
   await stat(harness.store.architectureSupersessionReceiptPath(
     reconstructed.architecture_supersession_receipt.receipt_id,
   ));
+  const rebuilt = await harness.controller.status("963");
+  const access = await harness.controller.prepareSourceCredential("963", {
+    callerId: decision.caller_id, operatorId: decision.operator.id,
+  });
+  assert.equal(access.session_id, rebuilt.session_id);
+  assert.equal(access.source_start_digest, rebuilt.source_access_scope.source_start_digest);
+  assert.equal(access.subject.work_item_ref, rebuilt.source_access_scope.work_item_ref);
+  assert.equal(access.proof.decision.architecture.artifact_location.recorded_artifact_digest,
+    replacement.integrity.content_digest);
 });
+
+for (const phase of ["prepared", "activated"]) {
+  test(`rebuild resumes the original command from ${phase} and retains an older owner draft`, async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "oos-work-rebuild-"));
+    try {
+      const original = architecturePacket("a");
+      const updated = architecturePacket("b");
+      const first = createHarness(root, { architectureArtifact: original });
+      const decision = acceptedDecision();
+      decision.architecture = { required: true, artifact_location: {
+        repo: "operator-orchestration-service", relative_path: ".art/architecture.json",
+      } };
+      decision.human_gate_work_item_ids.security_acceptance = [];
+      await first.controller.start("963", { decision });
+      const previous = first.store.readByAlias("work-item-963");
+      const objective = "Preserve the user-authored export changes.";
+      const changeSet = {
+        schema_version: 1, change_set_id: "operator-change-set:sample", session_id: previous.session_id,
+        base_commit: previous.landing_unit.base_commit, objective_digest: canonicalDigest(objective),
+        commit_message: "Add the export view", operations: [{ action: "create", path: "export.js", expected_digest: null, content: "// Exact private text\r\n" }],
+      };
+      const record = { session_id: previous.session_id, revision: previous.updated_at, attempts: [
+        { state: "draft-ready", objective, change_set: changeSet, change_set_digest: canonicalDigest(changeSet) },
+      ] };
+      // Upgrade an existing save from the old on-disk layout.
+      await writeFile(first.store.artifactPath(previous, DELIVERY_SOURCE_REALIZATION_RECORD), JSON.stringify(record));
+      const intent = "source-intent:rebuild-test";
+      if (phase === "activated") first.store.writeArtifact(previous, "artifacts/source-intent.json", {
+        schema_version: 1, artifact_type: "delivery-art-source-intent-binding", session_id: previous.session_id,
+        source_intent_ref: intent,
+      });
+      first.setCurrentArchitecture(updated);
+      const activate = first.store.activateReplacement;
+      first.store.activateReplacement = (...args) => {
+        if (phase === "activated") activate(...args);
+        throw new Error("Interrupted during generation switch");
+      };
+      const identity = { workItemId: "963", callerId: previous.caller_id, operatorId: previous.operator.id };
+      const command = { command_id: "work-session-command:rebuild-proof", expected_session_revision: previous.updated_at };
+      const revocations = [];
+      const unused = () => { throw new Error("Draft inspection must not touch source or a model"); };
+      const sourceCredentials = phase === "activated" ? {
+        ensureSourceCredential: unused, withSourceLease: unused,
+        async stopSourceCredential(scope) {
+          revocations.push(scope);
+          return { state: revocations.length === 1 ? "pending" : "succeeded", operation_id: "platform-operation:rebuild-test" };
+        },
+      } : null;
+      const beforeRestart = createDeliveryArtWorkSessionService({ controller: first.controller, store: first.store, sourceCredentials });
+      await assert.rejects(beforeRestart.execute({ ...identity, action: "reconstruct", command }), /Interrupted/);
+      assert.equal(beforeRestart.readCommand({ ...identity, commandId: command.command_id }).rebuild_revision, previous.updated_at);
+      const transition = first.store.readReplacement(previous.session_id);
+      assert.equal(transition.state, phase);
+      await assert.rejects(readFile(first.store.artifactPath(transition.replacement, "session.json")), { code: "ENOENT" });
+      assert.deepEqual(JSON.parse(await readFile(first.store.artifactPath(previous, DELIVERY_SOURCE_REALIZATION_RECORD), "utf8")), record);
+      assert.equal(first.store.readByAlias("work-item-963").session_id,
+        phase === "activated" ? transition.replacement.session_id : previous.session_id);
+
+      const restarted = createHarness(root, { architectureArtifact: updated });
+      const service = createDeliveryArtWorkSessionService({ controller: restarted.controller, store: restarted.store, sourceCredentials });
+      assert.deepEqual((await service.read(identity)).pending_rebuild, command);
+      if (sourceCredentials) {
+        await assert.rejects(service.execute({ ...identity, action: "reconstruct", command }), { code: "delivery_art_work_session_rebuild_revocation_pending" });
+        assert.deepEqual((await service.read(identity)).pending_rebuild, command);
+      }
+      const result = await service.execute({ ...identity, action: "reconstruct", command });
+      assert.equal(result.session_id, transition.replacement.session_id);
+      assert.equal(JSON.parse(await readFile(restarted.store.artifactPath(transition.replacement, "session.json"), "utf8")).session_id, result.session_id);
+      assert.equal(result.source_authorization, undefined);
+      if (sourceCredentials) {
+        assert.equal(result.source_access_scope.predecessor_intent_ref, intent);
+        assert.deepEqual((await service.read(identity)).source_access_scope, result.source_access_scope);
+        assert.equal(revocations.length, 2);
+        assert.deepEqual(revocations[0], revocations[1]);
+        assert.equal(revocations[0].sessionId, previous.session_id);
+        assert.equal(revocations[0].intentId, intent);
+      }
+      assert.equal((await service.execute({ ...identity, action: "reconstruct", command })).replayed, true);
+      assert.equal(restarted.store.readBySessionId(previous.session_id), null);
+      assert.equal(restarted.store.listSessions().length, 1);
+      assert.equal((await service.read(identity)).pending_rebuild, undefined);
+      const drafts = createDeliveryArtSourceRealizationService({
+        store: restarted.store, workSessionController: restarted.controller,
+        sourceAdapter: { applySourceRealization: unused, captureRealizationContext: unused },
+        gatewayClient: { invoke: unused }, lifecycleContext: { project: unused },
+      });
+      await assert.rejects(drafts.draft(identity), { code: "delivery_art_source_realization_draft_missing" });
+      await assert.rejects(drafts.draft({ ...identity, retained: true, operatorId: "different" }), { code: "delivery_art_source_realization_identity_mismatch" });
+      const retained = await drafts.draft({ ...identity, retained: true });
+      assert.deepEqual(retained.change_set, changeSet);
+      assert.equal(retained.retained_for_session, result.session_id);
+      assert.equal(retained.same_repository, true);
+      assert.equal(retained.accepted, false);
+      const config = loadConfig({ CALLER_ALLOWED_IDS: identity.callerId,
+        CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [identity.callerId]: "test-secret" }),
+        OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({ [identity.callerId]: identity.operatorId }),
+      });
+      const app = createApp({ config, deliveryArtWorkSessionService: createDeliveryArtWorkSessionService({
+        controller: restarted.controller, store: restarted.store, sourceRealization: drafts,
+      }) });
+      const request = Readable.from([]);
+      request.method = "GET";
+      request.url = "/v1/delivery-work-items/963/work-session/realization/draft?retained=1";
+      request.headers = { "x-oos-caller-id": identity.callerId, "x-oos-caller-secret": "test-secret", "x-oos-operator-id": identity.operatorId };
+      let response;
+      await app(request, { writeHead(status) { assert.equal(status, 200); }, end(value) { response = JSON.parse(value); } });
+      assert.deepEqual(response, retained);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+}
 
 test("invalid supersession receipts do not replace the persisted session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-invalid-receipt-"));
@@ -1912,6 +2095,9 @@ test("current architecture reconstructs a pristine invalid owner base", async ()
   };
   decision.human_gate_work_item_ids.security_acceptance = [];
   await harness.controller.start("963", { decision });
+  const predecessor = harness.store.readByAlias("work-item-963");
+  const savedDraft = { attempts: [{ state: "draft-ready", change_set: { content: "Exact private text\r\n" } }] };
+  harness.store.writeArtifact(predecessor, DELIVERY_SOURCE_REALIZATION_RECORD, savedDraft);
   harness.setPristineSource({
     base_commit_available: false,
     changed_files: [],
@@ -1934,6 +2120,9 @@ test("current architecture reconstructs a pristine invalid owner base", async ()
   const replacementSession = harness.store.readByAlias("work-item-963");
 
   assert.equal(reconstructed.state, "implementation-ready");
+  assert.deepEqual(harness.store.readPredecessor(replacementSession), predecessor);
+  assert.deepEqual(harness.store.readArtifact(predecessor, DELIVERY_SOURCE_REALIZATION_RECORD), savedDraft);
+  assert.equal(harness.store.readArtifact(replacementSession, DELIVERY_SOURCE_REALIZATION_RECORD), null);
   assert.equal(reconstructed.source_binding_repair.owner_repo, "workspace-governance");
   assert.equal(
     reconstructed.source_binding_repair.previous_base_commit,
@@ -2049,6 +2238,12 @@ test("unrelated architecture changes do not invalidate an unchanged active Landi
     "architecture-compatible-refresh-required",
   );
   assert.equal(compatible.architecture_supersession, undefined);
+  const refreshedAccess = await harness.controller.prepareSourceCredential("963", {
+    callerId: "governance-operations-console", operatorId: "operator:workspace-owner",
+  });
+  assert.equal(refreshedAccess.source_start_digest, compatible.source_access_scope.source_start_digest);
+  assert.equal(refreshedAccess.proof.decision.architecture.artifact_location.recorded_artifact_digest,
+    unrelatedChange.integrity.content_digest);
 
   const interruptedSession = harness.store.readByAlias("work-item-963");
   harness.store.writeArtifact(
@@ -2535,6 +2730,57 @@ test("the exact merged session records operating evidence with expired source ac
   assert.equal(acquisitions, 1);
   assert.equal(sourceRequests, 1);
   assert.equal(harness.ownedWorktreeCreates(), 0);
+});
+
+test("the reviewed verifier is bound to the exact original merge and deduplicated by the existing Work Session command", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-reviewed-operating-binding-"));
+  t.after(() => rm(root, { recursive: true }));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  await harness.controller.start("963", { decision: architectureBoundDecision(["work-item-963"]) });
+  const original = harness.store.readByAlias("work-item-963");
+  const request = { action: "continue", callerId: original.caller_id, operatorId: original.operator.id, workItemId: "963",
+    command: { command_id: "work-session-command:reviewed-operating-binding", expected_session_revision: original.updated_at } };
+  const pullRequest = { base_ref: "main", state: "merged",
+    head_commit: "0a713fe77eb034dc570886db31b4418e1aa672f5", merge_commit: "de3df94439f1741954087ec5f5718b098d10cf12",
+    url: "https://github.com/mfshaf7/operator-orchestration-service/pull/433" };
+  const packet = durableMergeReadyPacket(original, pullRequest);
+  harness.store.writeArtifact(original, original.artifacts.review_packet_file, packet);
+  harness.relocate("/tmp/retained-review-checkout");
+  harness.setPullRequest(pullRequest);
+  const operatingCases = ["cases-b17cb044-3324-4788-8202-9e2dfc18947a", "cases-bc81236b-2c49-4aff-9a1f-d211ee142c79"]
+    .map(id => ({id, fidelity:"sandbox-runtime"}));
+  const facts = { pull_request:"merged", review_packet:"merge-ready", operating_evidence:"required" };
+  const reviewed = reviewedOperatingVerification({ ownerRepo: original.owner_repo, pullRequest, operatingCases,
+    packetDigest: packet.integrity.content_digest });
+  assert.ok(reviewed);
+  assert.equal(reviewedOperatingVerification({ ownerRepo: original.owner_repo, operatingCases, packetDigest: packet.integrity.content_digest,
+    pullRequest:{ ...pullRequest, merge_commit: "e".repeat(40) } }), null);
+  harness.setOperatingVerification(reviewed);
+  harness.setFacts(facts);
+  harness.setProjection({ complete:false, gate:null, next_action:"acquire-operating-evidence",
+    state:"operating-evidence-acquisition-required", summary:"Verify operating evidence." });
+  let runs = 0;
+  harness.setReconcile(async (_plan, options) => {
+    assert.deepEqual(options, { afterMergeOnly:true, reviewedVerificationDigest:reviewed.digest });
+    runs++;
+    harness.setFacts({ ...facts, operating_evidence: "ready" });
+    harness.setProjection({ complete:false, gate:null, next_action:"draft-finalization", state:"finalization-draft-required",
+      summary:"Review the recorded results." });
+    return { projection:{ state:"finalization-draft-required" }, executed_actions:["acquire-operating-evidence"] };
+  });
+  const denied = async () => assert.fail("Verification must not issue, lease or stop source credentials.");
+  const service = createDeliveryArtWorkSessionService({ controller:harness.controller, store:harness.store,
+    sourceCredentials:{ ensureSourceCredential:denied, withSourceLease:denied, stopSourceCredential:denied } });
+  assert.deepEqual((await service.read(request)).operating_verification, reviewed);
+  await assert.rejects(service.execute(request), { code:"delivery_art_operating_verifier_binding_changed" });
+  await assert.rejects(service.execute({ ...request, command: { ...request.command, reviewed_verification_digest: "sha256:" + "f".repeat(64) } }),
+    { code:"delivery_art_operating_verifier_binding_changed" });
+  assert.equal(harness.store.readCommandRecord(request.command.command_id), null);
+  const approved = { ...request, command:{ ...request.command, reviewed_verification_digest: reviewed.digest } };
+  assert.equal((await service.execute(approved)).next_action.code, "draft-finalization");
+  assert.equal((await service.execute(approved)).replayed, true);
+  assert.deepEqual(harness.store.readArtifact(original, original.artifacts.review_packet_file), packet);
+  assert.equal(runs, 1);
 });
 
 test("recovery preserves merge-ready evidence when post-merge operating evidence is invalid", async () => {
@@ -3892,6 +4138,10 @@ test("activated close retains ambiguous resources and replays one terminal recei
   const replay = await harness.controller.close("963");
   assert.deepEqual(replay.cleanup_receipt, closed.cleanup_receipt);
   assert.equal(replay.next_action.code, "initiative-work-remains");
+  const reopened = await harness.controller.status("963");
+  assert.equal(reopened.session_id, null);
+  assert.deepEqual(reopened.cleanup_receipt, closed.cleanup_receipt);
+  assert.equal(reopened.next_action.code, replay.next_action.code);
 });
 
 test("partial cleanup failure remains retryable from cleanup-blocked", async () => {

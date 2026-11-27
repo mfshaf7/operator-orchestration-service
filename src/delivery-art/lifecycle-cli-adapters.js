@@ -8,6 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import { canonicalDigest } from "./canonical-json.js";
@@ -19,6 +20,7 @@ import {
   selectTrustedDeliveryArtEvidenceProfile,
   validateDeliveryArtEvidenceProfileCoverage,
 } from "./review-evidence-acquisition.js";
+import { assertReviewedOperatingVerification } from "./reviewed-operating-verifier.js";
 
 function commandResult(execFileSyncImpl, command, args, options = {}) {
   try {
@@ -114,7 +116,7 @@ function evidenceResult(request, input, output = "") {
   return result;
 }
 
-function evidenceReceipt({ clock, providerId, request, results, startedAt }) {
+function evidenceReceipt({ clock, providerId, request, results, startedAt, reviewedVerification = null }) {
   const receipt = {
     schema_version: 1,
     artifact_type: "delivery_art_owner_evidence_receipt",
@@ -125,6 +127,7 @@ function evidenceReceipt({ clock, providerId, request, results, startedAt }) {
     profile_id: request.profile_id,
     profile_path: request.profile_path,
     profile_revision: request.profile_revision,
+    ...(reviewedVerification ?? {}),
     provider: {
       id: providerId,
       kind: "oos-source-executor",
@@ -350,6 +353,68 @@ export function createDeliveryArtLifecycleSourceAdapter({
   execFileSyncImpl = execFileSync,
   providerId = "local-engineering-source-executor",
 } = {}) {
+  async function verifyReviewedOperatingResults({ reviewedVerification, landingUnit, source, conformanceCases }) {
+    const pairing = assertReviewedOperatingVerification(reviewedVerification, landingUnit.owner_repo, source, conformanceCases);
+    const { owner_repo: ownerRepo, source: original, verifier, cases } = pairing;
+    function deny(message) {
+      throw new DeliveryArtEvidenceAcquisitionError("delivery_art_operating_verifier_unavailable", message);
+    }
+    const headTree = requiredOutput(execFileSyncImpl, "git", ["rev-parse", "--verify", `${original.head_commit}^{tree}`], landingUnit.repo_root);
+    const mergeTree = requiredOutput(execFileSyncImpl, "git", ["rev-parse", "--verify", `${original.merge_commit}^{tree}`], landingUnit.repo_root);
+    if (headTree !== original.tree || mergeTree !== headTree) deny("The preserved PR head and original merged tree do not match.");
+
+    const profileText = requiredOutput(execFileSyncImpl, "git", ["show", `${verifier.revision}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`], landingUnit.repo_root);
+    const script = new URL("../../scripts/verify_project_runtime_rehearsal.mjs", import.meta.url);
+    const verifierDependency = new URL("./canonical-json.js", import.meta.url);
+    const sha256 = value => createHash("sha256").update(value).digest("hex");
+    if (sha256(`${profileText}\n`) !== verifier.profile_sha256 ||
+        sha256(readFileSync(script)) !== verifier.script_sha256 ||
+        sha256(readFileSync(verifierDependency)) !== verifier.canonical_json_sha256) {
+      deny("The installed verifier and exact reviewed profile must match the approved source before collecting evidence.");
+    }
+    const { verifyProjectRuntimeCase } = await import(script.href);
+    const request = deliveryArtEvidenceAcquisitionRequest({
+      conformanceCases, ownerRepo, profile: JSON.parse(profileText), profileRevision: verifier.revision,
+      source, trustedProfileRevisions: [verifier.revision],
+    });
+    const root = path.join(homedir(), ".local/state/operator-orchestration-service/project-runtime/rehearsal-receipts");
+    const startedAt = clock().toISOString();
+    let rehearsalReceiptDigest = null;
+    const results = cases.map(({ id, key }) => {
+      const commands = request.commands.filter(entry =>
+        entry.kind === "runtime_and_live" && entry.executable === "node" &&
+        entry.args.length === 2 && entry.args[0] === "scripts/verify_project_runtime_rehearsal.mjs" && entry.args[1] === key &&
+        entry.conformance_case_ids.length === 1 && entry.conformance_case_ids[0] === id);
+      if (commands.length !== 1) deny("Each approved case must be bound to its exact reviewed check.");
+      const command = commands[0];
+      let verified;
+      try {
+        verified = verifyProjectRuntimeCase({ root, brokerHead: original.merge_commit, testCase: key });
+      } catch (error) {
+        deny(error.code === "ENOENT" ? "The approved rehearsal is missing for the exact original merge."
+          : "The rehearsal receipt does not prove the exact original merge and approved cases.");
+      }
+      if (verified.conformance_case_id !== id || verified.broker_head !== original.merge_commit ||
+          (rehearsalReceiptDigest && rehearsalReceiptDigest !== verified.receipt_digest)) {
+        deny("The two approved cases must identify the same exact original merge and rehearsal receipt.");
+      }
+      rehearsalReceiptDigest = verified.receipt_digest;
+      return evidenceResult(request, {
+        command: `Reviewed verifier ${verifier.revision} checked ${key} in original merge ${original.merge_commit}`,
+        command_id: command.id,
+        conformance_case_ids: [id],
+        fidelity: command.fidelity,
+        kind: command.kind,
+        name: command.name,
+        result: "pass",
+      }, JSON.stringify(verified));
+    });
+    return evidenceReceipt({ clock, providerId, request, results, startedAt, reviewedVerification: {
+      reviewed_verification_digest: reviewedVerification.digest,
+      rehearsal_receipt_digest: rehearsalReceiptDigest,
+    } });
+  }
+
   async function inspect(landingUnit) {
     const cwd = landingUnit.repo_root;
     const branch = requiredOutput(
@@ -428,6 +493,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
       required_evidence_kinds: requiredEvidenceKinds,
       source_landing: sourceLanding = false,
       source,
+      reviewed_verification: reviewedVerification = null,
     }) {
       const before = await inspect(landingUnit);
       if (
@@ -439,6 +505,15 @@ export function createDeliveryArtLifecycleSourceAdapter({
           new Error("Owner evidence acquisition requires the exact clean pushed source revision."),
           { code: "delivery_art_owner_evidence_source_stale" },
         );
+      }
+      if (reviewedVerification) {
+        const receipt = await verifyReviewedOperatingResults({ reviewedVerification, landingUnit, source, conformanceCases });
+        const after = await inspect(landingUnit);
+        if (after.state !== "pushed" || after.head_commit !== before.head_commit || after.base_commit !== before.base_commit) {
+          throw new DeliveryArtEvidenceAcquisitionError("delivery_art_owner_evidence_source_mutated",
+            "The admitted source revision changed while its rehearsal results were verified.");
+        }
+        return receipt;
       }
       const profileRevision = requestedProfileRevision ?? source.base_commit;
       if (![source.base_commit, source.head_commit].includes(profileRevision)) {
@@ -619,6 +694,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
         });
       }
       const results = [];
+      let previousTest = null;
       for (const command of request.commands) {
         const commandEnvironment = ownerEvidenceEnvironment(command.kind);
         if (command.kind === "runtime_and_live") {
@@ -630,7 +706,12 @@ export function createDeliveryArtLifecycleSourceAdapter({
             OOS_DELIVERY_ART_MUTATION_ENABLED: "false",
           });
         }
-        const outcome = commandResult(
+        // Identical adjacent repository tests share a process outcome. Each
+        // profile entry still records its own evidence and approved case IDs.
+        const testKey = command.kind === "tests"
+          ? canonicalDigest({ executable: command.executable, args: command.args, timeout: command.timeout_seconds, fidelity: command.fidelity })
+          : null;
+        const outcome = testKey && previousTest?.key === testKey ? previousTest.outcome : commandResult(
           execFileSyncImpl,
           command.executable,
           command.args,
@@ -643,6 +724,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
             timeout: command.timeout_seconds * 1000,
           },
         );
+        previousTest = testKey ? { key: testKey, outcome } : null;
         const result = evidenceResult(request, {
           command: deliveryArtOwnerEvidenceCommandText(command),
           command_id: command.id,

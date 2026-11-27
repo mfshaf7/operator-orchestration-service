@@ -5444,7 +5444,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. OOS recomputes fingerprints and digest.",
+          "description": "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. Console recording also sends the reviewed impact revision. OOS rechecks the current plan and work sessions before projection.",
           "content": {
             "application/json": {
               "schema": {
@@ -7753,7 +7753,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandRequestV1"
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionContinueRequestV1"
               },
               "example": {
                 "command": {
@@ -22963,7 +22963,7 @@
         },
         "responses": {
           "200": {
-            "description": "Canonical local Architecture Packet candidate and bounded fresh-snapshot summary.",
+            "description": "Canonical local Architecture Packet candidate, fresh-snapshot summary, and requested work-session impact.",
             "content": {
               "application/json": {
                 "schema": {
@@ -23028,7 +23028,7 @@
             }
           },
           "409": {
-            "description": "The proposed design contradicts current scoped ART truth.",
+            "description": "The proposed design contradicts current scoped ART truth or session state changed during review.",
             "content": {
               "application/json": {
                 "schema": {
@@ -23049,6 +23049,16 @@
           },
           "502": {
             "description": "Current ART or projected architecture authority is inconsistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The requested work-session impact could not be checked.",
             "content": {
               "application/json": {
                 "schema": {
@@ -24990,6 +25000,15 @@
               "maximum": 200,
               "default": 100
             }
+          },
+          {
+            "name": "work_item_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^work-item-[1-9][0-9]*$"
+            }
           }
         ],
         "responses": {
@@ -26089,7 +26108,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OperatorSourceDraftCommand"
+                "$ref": "#/components/schemas/PrototypeOperatorSourceDraftCommand"
               },
               "example": {
                 "schema_version": 1,
@@ -32535,6 +32554,17 @@
                 "maxLength": 240
               }
             }
+          },
+          {
+            "name": "line",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            },
+            "description": "With one path, read up to 40 lines and bind the exact file digest for a manual section edit."
           }
         ],
         "responses": {
@@ -32998,7 +33028,7 @@
         "x-oos-workflow-family": "delivery-art-source-realization",
         "operationId": "deliveryArtSourceReadOperatorDraft",
         "summary": "Inspect the exact private retained source draft",
-        "description": "Caller-bound inert text for review; this read never accepts, applies or invokes a model.",
+        "description": "Caller-bound inert text for review. The retained selector reads a predecessor of this exact rebuilt session. Neither read accepts, applies or invokes a model.",
         "parameters": [
           {
             "name": "work_item_id",
@@ -33018,6 +33048,17 @@
               "minLength": 1
             },
             "description": "Accountable operator admitted for this authenticated caller."
+          },
+          {
+            "name": "retained",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
           }
         ],
         "responses": {
@@ -38367,6 +38408,302 @@
             "description": "Membership authority unavailable; recover the same accepted decision."
           }
         }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/commands/{command_id}": {
+      "get": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Read the recorded outcome of one exact command",
+        "description": "Read-only lookup using the existing owner journal. A matching caller and operator may see the durable result. Unconfirmed means there is no matching record, and does not establish that replay is safe.",
+        "operationId": "getDeliveryArtWorkSessionCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "X-OOS-Operator-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No matching record, recorded acceptance, or terminal command outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "command_id",
+                    "state"
+                  ],
+                  "properties": {
+                    "command_id": {
+                      "type": "string",
+                      "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                      "maxLength": 200
+                    },
+                    "state": {
+                      "enum": [
+                        "unconfirmed",
+                        "pending",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "rebuild_revision": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Original expected revision for an accepted, resumable rebuild command."
+                    },
+                    "publication": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "url",
+                        "head_commit"
+                      ],
+                      "description": "The provider-confirmed open pull request for this command while verification continues.",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "head_commit": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{40}$"
+                        }
+                      }
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "status_code"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "status_code": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "command_id": "work-session-command:example",
+                  "state": "pending"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The target or command id is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator attribution is not admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The owner journal is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/change-control/commands/{command_id}": {
+      "get": {
+        "tags": [
+          "Delivery Change Control"
+        ],
+        "summary": "Read the recorded outcome of one exact command",
+        "description": "Read-only lookup using the existing owner journal. A matching caller and operator may see the durable result. Unconfirmed means there is no matching record, and does not establish that replay is safe.",
+        "operationId": "getDeliveryChangeCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-change-command:[A-Za-z0-9._:-]+$",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "X-OOS-Operator-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No matching record, recorded acceptance, or terminal command outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "command_id",
+                    "state"
+                  ],
+                  "properties": {
+                    "command_id": {
+                      "type": "string",
+                      "pattern": "^delivery-change-command:[A-Za-z0-9._:-]+$",
+                      "maxLength": 200
+                    },
+                    "state": {
+                      "enum": [
+                        "unconfirmed",
+                        "pending",
+                        "completed"
+                      ]
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/DeliveryChangeResultV1"
+                    }
+                  }
+                },
+                "example": {
+                  "command_id": "delivery-change-command:example",
+                  "state": "pending"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The target or command id is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator attribution is not admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The owner journal is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-change-control"
       }
     }
   },
@@ -56057,6 +56394,28 @@
               }
             }
           },
+          "source_access_scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "work_item_ref",
+              "source_start_digest"
+            ],
+            "properties": {
+              "work_item_ref": {
+                "type": "string",
+                "pattern": "^work-item-[1-9][0-9]*$"
+              },
+              "source_start_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "predecessor_intent_ref": {
+                "type": "string",
+                "pattern": "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$"
+              }
+            }
+          },
           "delivery_id": {
             "oneOf": [
               {
@@ -56103,6 +56462,25 @@
                 "type": "null"
               }
             ]
+          },
+          "pending_rebuild": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "expected_session_revision"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                "maxLength": 200
+              },
+              "expected_session_revision": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           },
           "state": {
             "type": "string",
@@ -56156,6 +56534,91 @@
           "pull_request": {
             "type": "object",
             "additionalProperties": true
+          },
+          "operating_verification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "digest",
+              "source",
+              "verifier",
+              "review_packet_digest",
+              "cases"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "review_packet_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pull_request_url",
+                  "head_commit",
+                  "merge_commit"
+                ],
+                "properties": {
+                  "pull_request_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "head_commit": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  "merge_commit": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  }
+                }
+              },
+              "verifier": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pull_request_url",
+                  "revision"
+                ],
+                "properties": {
+                  "pull_request_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  }
+                }
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 24,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
           },
           "source": {
             "$ref": "#/components/schemas/DeliveryArtSourceObservationV1"
@@ -84178,6 +84641,9 @@
         "properties": {
           "input": {
             "$ref": "#/components/schemas/DeliveryArtArchitecturePacketDraftInputV1"
+          },
+          "include_session_impact": {
+            "type": "boolean"
           }
         }
       },
@@ -84192,6 +84658,9 @@
         "properties": {
           "architecture_packet": {
             "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          },
+          "session_impact": {
+            "$ref": "#/components/schemas/DeliveryArtArchitectureSessionImpact"
           },
           "source_snapshot": {
             "type": "object",
@@ -84235,6 +84704,10 @@
         "properties": {
           "artifact": {
             "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          },
+          "expected_impact_revision": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       },
@@ -84258,6 +84731,9 @@
           "owner_receipt": {
             "type": "object",
             "additionalProperties": true
+          },
+          "session_impact": {
+            "$ref": "#/components/schemas/DeliveryArtArchitectureSessionImpact"
           },
           "workflow_id": {
             "const": "delivery-art-architecture-packet-persist"
@@ -84458,6 +84934,9 @@
           "workflow_id": {
             "const": "delivery-art-source-realization"
           },
+          "retained_draft_available": {
+            "type": "boolean"
+          },
           "source_authorization": {
             "type": "object",
             "additionalProperties": false,
@@ -84490,6 +84969,28 @@
                   "string",
                   "null"
                 ]
+              }
+            }
+          },
+          "source_access_scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "work_item_ref",
+              "source_start_digest"
+            ],
+            "properties": {
+              "work_item_ref": {
+                "type": "string",
+                "pattern": "^work-item-[1-9][0-9]*$"
+              },
+              "source_start_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "predecessor_intent_ref": {
+                "type": "string",
+                "pattern": "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$"
               }
             }
           },
@@ -93127,6 +93628,7 @@
                   "enum": [
                     "create",
                     "replace",
+                    "patch",
                     "delete"
                   ]
                 },
@@ -93147,6 +93649,25 @@
                     }
                   ]
                 },
+                "patch": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "offset_utf16",
+                    "before"
+                  ],
+                  "properties": {
+                    "offset_utf16": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 262144
+                    },
+                    "before": {
+                      "type": "string",
+                      "maxLength": 16384
+                    }
+                  }
+                },
                 "expected_digest": {
                   "oneOf": [
                     {
@@ -93159,6 +93680,36 @@
                 }
               },
               "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "patch"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "patch"
+                    ],
+                    "properties": {
+                      "content": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "patch"
+                      ]
+                    }
+                  }
+                },
                 {
                   "if": {
                     "properties": {
@@ -93433,6 +93984,45 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 65536
+                },
+                "region": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "start_line": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "end_line": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "total_lines": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "offset_utf16": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "baseline_digest": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "baseline_bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 262144
+                    }
+                  },
+                  "required": [
+                    "start_line",
+                    "end_line",
+                    "total_lines",
+                    "offset_utf16",
+                    "baseline_digest",
+                    "baseline_bytes"
+                  ]
                 }
               },
               "required": [
@@ -93494,7 +94084,7 @@
             "maxLength": 12000
           },
           "change_set": {
-            "$ref": "#/components/schemas/PrototypeSourceChangeSet"
+            "$ref": "#/components/schemas/DeliveryArtEditedSourceChangeSet"
           },
           "accepted": {
             "type": "boolean"
@@ -93508,6 +94098,13 @@
                 "type": "null"
               }
             ]
+          },
+          "retained_for_session": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "same_repository": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -100452,6 +101049,512 @@
             "maxItems": 10
           }
         }
+      },
+      "DeliveryArtArchitectureSessionImpact": {
+        "type": "object",
+        "required": [
+          "revision",
+          "sessions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "disposition",
+                "reason",
+                "owner_repo",
+                "work_item_ids",
+                "open_work_item_id"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "disposition": {
+                  "enum": [
+                    "refresh",
+                    "rebuild",
+                    "review",
+                    "continues"
+                  ]
+                },
+                "reason": {
+                  "enum": [
+                    "plan-not-required",
+                    "session-operator",
+                    "operation-pending",
+                    "binding-unavailable",
+                    "scope-unchanged",
+                    "scope-regrouped",
+                    "scope-changed-clean",
+                    "source-or-evidence-exists"
+                  ]
+                },
+                "owner_repo": {
+                  "type": "string"
+                },
+                "work_item_ids": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^work-item-[1-9][0-9]*$"
+                  }
+                },
+                "open_work_item_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^work-item-[1-9][0-9]*$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtWorkSessionContinueRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "expected_session_revision"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                "maxLength": 200
+              },
+              "expected_session_revision": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source_intent_ref": {
+                "type": "string",
+                "pattern": "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$"
+              },
+              "reviewed_verification_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "not": {
+              "required": [
+                "source_intent_ref",
+                "reviewed_verification_digest"
+              ]
+            }
+          }
+        }
+      },
+      "PrototypeOperatorSourceDraftCommand": {
+        "title": "Bounded operator source draft save command",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "execution_id",
+          "expected_revision",
+          "expected_change_set_digest",
+          "requested_at",
+          "objective",
+          "input_origin",
+          "retry_of",
+          "commit_message",
+          "operations"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/stableId"
+          },
+          "execution_id": {
+            "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/stableId"
+          },
+          "expected_revision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expected_change_set_digest": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 16384
+          },
+          "input_origin": {
+            "enum": [
+              "manual",
+              "import"
+            ]
+          },
+          "retry_of": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/stableId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commit_message": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 120
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "path",
+                "content",
+                "expected_digest"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "replace",
+                    "delete"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+                },
+                "content": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 65536
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "expected_digest": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "create"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "expected_digest": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "replace"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "delete"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "null"
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "DeliveryArtEditedSourceChangeSet": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "change_set_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "objective_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "commit_message": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 120
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "path",
+                "content",
+                "expected_digest"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "replace",
+                    "patch",
+                    "delete"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+                },
+                "content": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 65536
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "patch": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "offset_utf16",
+                    "before"
+                  ],
+                  "properties": {
+                    "offset_utf16": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 262144
+                    },
+                    "before": {
+                      "type": "string",
+                      "maxLength": 16384
+                    }
+                  }
+                },
+                "expected_digest": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "patch"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "patch"
+                    ],
+                    "properties": {
+                      "content": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "patch"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "create"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "expected_digest": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "replace"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "delete"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "content": {
+                        "type": "null"
+                      },
+                      "expected_digest": {
+                        "$ref": "#/components/schemas/OperatorSourceDraftCommand/$defs/digest"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "change_set_id",
+          "session_id",
+          "base_commit",
+          "objective_digest",
+          "commit_message",
+          "operations"
+        ]
       }
     }
   }

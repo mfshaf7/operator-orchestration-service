@@ -249,7 +249,10 @@ const paths = {
   "/v1/platform-operations/source-preparations": {
     get: { ...meta, tags: ["Platform Operations"], summary: "List caller-owned source credential preparations", operationId: "listSourceCredentialPreparations",
       description: "Reads bounded canonical source preparations and retained secret-free authorization metadata. It never issues or renews credentials.",
-      parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } }],
+      parameters: [
+        { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } },
+        { name: "work_item_ref", in: "query", required: false, schema: { type: "string", pattern: "^work-item-[1-9][0-9]*$" } },
+      ],
       responses: success("Caller-owned source preparations.", ref("SourceCredentialPreparationList"), { workflow_id: "source-credential-preparation-list", preparations: [sourcePreparationExample] }) },
     post: { ...meta, tags: ["Platform Operations"], summary: "Prepare canonical source scope before explicit issue approval", operationId: "prepareSourceCredential",
       description: "Derives immutable source coordinates from an actual Delivery work-start decision or admitted Prototype source request. Preparation is read-only with respect to source repositories and provider credentials; it is not approval or issuance.",

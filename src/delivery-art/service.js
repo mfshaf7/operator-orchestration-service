@@ -15,12 +15,13 @@ import {
   validateDeliveryArtSemanticProjection,
   workStartScopeFingerprint,
 } from "./contracts.js";
-import { canonicalStringify } from "./canonical-json.js";
+import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import {
   createDeliveryArtArchitecturePacketDraft,
   createDeliveryArtReviewPacketFinalizationDraft,
   createDeliveryArtReviewPacketV2Draft,
   createDeliveryArtWorkStartDraft,
+  defaultArchitecturePacketId,
   DeliveryArtAuthoringError,
   projectDeliveryArtReviewPacketOperatingReadiness,
 } from "./lifecycle-authoring.js";
@@ -66,6 +67,14 @@ export class DeliveryArtServiceError extends Error {
     this.statusCode = statusCode;
     this.details = details;
   }
+}
+
+export function architectureImpactChanged() {
+  return new DeliveryArtServiceError(
+    "delivery_art_plan_impact_changed",
+    "The current plan or work session changed. Validate the draft and review the current impact before recording.",
+    409,
+  );
 }
 
 function clone(value) {
@@ -515,6 +524,7 @@ export function createDeliveryArtArtifactService({
   openProjectClient,
   readinessClient = null,
   readinessReceiptResolver = null,
+  readArchitectureSessionImpact = null,
   readTechnicalPlanSource = null,
   registryClient,
 } = {}) {
@@ -652,8 +662,7 @@ export function createDeliveryArtArtifactService({
     }
   }
 
-  async function assertArchitectureCutoverAllowed(candidate) {
-    const projected = await currentArchitectureForCutover(candidate.delivery_id);
+  async function assertArchitectureCutoverAllowed(candidate, projected, reviewedActivePlan) {
     if (!projected) {
       return;
     }
@@ -682,8 +691,9 @@ export function createDeliveryArtArtifactService({
     }
     const historicalReference = sourceArtifactReference(current);
     if (
-      candidate.custody?.supersedes?.uri !== historicalReference.uri ||
-      candidate.custody?.supersedes?.digest !== historicalReference.digest
+      !reviewedActivePlan &&
+      (candidate.custody?.supersedes?.uri !== historicalReference.uri ||
+       candidate.custody?.supersedes?.digest !== historicalReference.digest)
     ) {
       throw new DeliveryArtServiceError(
         "delivery_art_architecture_supersession_required",
@@ -719,6 +729,32 @@ export function createDeliveryArtArtifactService({
         },
       );
     }
+  }
+
+  async function architectureSessionImpact(candidate, context, activeReference) {
+    if (typeof readArchitectureSessionImpact !== "function") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_plan_impact_unavailable",
+        "Work-session impact checking is unavailable. Retry plan validation when the work session service is available.",
+        503,
+      );
+    }
+    const architecture = { ...candidate, decision: { ...candidate.decision, status: "architecture-ready" } };
+    const { sessions, observation } = await readArchitectureSessionImpact(architecture, context);
+    return {
+      revision: canonicalDigest({
+        candidate: architectureDecisionFingerprint(architecture),
+        artifact_id: candidate.artifact_id,
+        snapshot: candidate.source_snapshot.art_digest,
+        repo_revisions: candidate.source_snapshot.repo_revisions,
+        active_plan: activeReference,
+        custody_predecessor: candidate.custody.supersedes,
+        context,
+        sessions,
+        observation,
+      }),
+      sessions,
+    };
   }
 
   function emitAudit(event) {
@@ -1056,6 +1092,7 @@ export function createDeliveryArtArtifactService({
     callerId,
     dependencies = null,
     operatorId = callerId,
+    projectionGuard,
   }) {
     const candidate = clone(artifact);
     candidate.integrity.content_digest = artifactContentDigest(candidate);
@@ -1098,8 +1135,11 @@ export function createDeliveryArtArtifactService({
         artifactType: registered.artifact.artifact_type,
         custodyReceipt: response.registry.custody_receipt_ref,
         recordId: deliveryRecordId(registered.artifact.delivery_id),
+        ...(projectionGuard ?? {}),
       });
     } catch (error) {
+      if (error instanceof DeliveryArtServiceError) throw error;
+      if (error?.details === "delivery_art_architecture_predecessor_changed") throw architectureImpactChanged();
       throw new DeliveryArtServiceError(
         "delivery_art_openproject_projection_failed",
         "Durable Delivery ART custody succeeded, but its OpenProject reference projection failed.",
@@ -1134,7 +1174,7 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function authorArchitecturePacketCandidate({ callerId, input, operatorId = callerId }) {
+  async function authorArchitecturePacketCandidate({ callerId, input, operatorId = callerId, includeSessionImpact }) {
     assertArchitectureCallerOperatorBinding(callerId, operatorId);
     assertArchitectureDraftInput(input);
     const deliveryId = deliveryRecordId(input.delivery_id);
@@ -1172,11 +1212,28 @@ export function createDeliveryArtArtifactService({
       }
     }
 
+    const activeReference = currentArtifact ? sourceArtifactReference(currentArtifact) : null;
+    const artifactId = currentArtifact?.artifact_id ?? defaultArchitecturePacketId(input.delivery_id);
+    let custodyPredecessor = activeReference;
+    if (includeSessionImpact) {
+      custodyPredecessor = await registryClient.readLatestArchitectureReference({
+        deliveryId: input.delivery_id,
+        artifactId,
+      });
+      if (activeReference && !custodyPredecessor) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_architecture_custody_mismatch",
+          "WGCF could not verify the stored revision history for the active Technical Plan.",
+          502,
+        );
+      }
+    }
+
     let architecturePacket;
     try {
       architecturePacket = createDeliveryArtArchitecturePacketDraft({
         architecture: input.architecture,
-        artifactId: currentArtifact?.artifact_id ?? null,
+        artifactId,
         artDigest: snapshot.artDigest,
         conformancePlan: input.conformance_plan,
         coveredWorkItemIds: input.covered_work_item_ids,
@@ -1188,7 +1245,7 @@ export function createDeliveryArtArtifactService({
           id: operatorId,
         },
         repoRevisions: input.repo_revisions,
-        supersedes: currentArtifact ? sourceArtifactReference(currentArtifact) : null,
+        supersedes: custodyPredecessor,
       });
     } catch (error) {
       throw authoringFailure(error);
@@ -1206,6 +1263,7 @@ export function createDeliveryArtArtifactService({
       );
     }
     return {
+      activeReference,
       architecture_packet: architecturePacket,
       source_snapshot: {
         art_digest: snapshot.artDigest,
@@ -1285,7 +1343,13 @@ export function createDeliveryArtArtifactService({
       ? input.correlationId.trim()
       : randomUUID();
     try {
-      const result = await authorArchitecturePacketCandidate(input);
+      const { activeReference, ...result } = await authorArchitecturePacketCandidate(input);
+      if (input.includeSessionImpact) {
+        result.session_impact = await architectureSessionImpact(result.architecture_packet, {
+          callerId: input.callerId,
+          operatorId: input.operatorId ?? input.callerId,
+        }, activeReference);
+      }
       emitAudit({
         artifact_id: artifactIdentifier(result.architecture_packet),
         caller: { id: input.callerId ?? null },
@@ -1323,7 +1387,7 @@ export function createDeliveryArtArtifactService({
     }
   }
 
-  async function persistArchitecturePacket({ artifact, callerId, operatorId = callerId }) {
+  async function persistArchitecturePacket({ artifact, callerId, operatorId = callerId, expectedImpactRevision }) {
     assertArtifactType(artifact, ARCHITECTURE_PACKET_TYPE);
     assertCurrentArchitectureSchema(artifact, "Architecture persistence");
     assertLocalCandidate(
@@ -1360,12 +1424,42 @@ export function createDeliveryArtArtifactService({
     }
     const candidate = clone(artifact);
     candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
-    await assertArchitectureCutoverAllowed(candidate);
-    return persistDurableArtifact({
+    const reviewedImpact = expectedImpactRevision !== undefined;
+    if (reviewedImpact && (typeof expectedImpactRevision !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/.test(expectedImpactRevision) ||
+        candidate.decision.status !== "architecture-ready")) {
+      throw new DeliveryArtServiceError("delivery_art_plan_impact_invalid", "Recording requires a valid reviewed work-session impact revision.");
+    }
+    const projected = await currentArchitectureForCutover(candidate.delivery_id);
+    const activeReference = projected?.reference ?? null;
+    const replay = activeReference?.digest === artifactContentDigest(candidate);
+    if (reviewedImpact && candidate.artifact_id !==
+        (projected?.artifact_id ?? defaultArchitecturePacketId(candidate.delivery_id))) {
+      throw architectureImpactChanged();
+    }
+
+    let impact;
+    async function checkImpact() {
+      impact = await architectureSessionImpact(candidate, { callerId, operatorId }, activeReference);
+      if (impact.revision !== expectedImpactRevision) throw architectureImpactChanged();
+    }
+    if (reviewedImpact && !replay) await checkImpact();
+    await assertArchitectureCutoverAllowed(candidate, projected, reviewedImpact);
+    const result = await persistDurableArtifact({
       artifact: candidate,
       callerId,
       operatorId,
+      projectionGuard: {
+        expectedCurrentReference: activeReference,
+        beforeProjection: reviewedImpact && !replay ? checkImpact : undefined,
+      },
+    }).catch(error => {
+      if (reviewedImpact && error?.statusCode === 409 && error.code === "wgcf_artifact_registry_conflict") {
+        throw architectureImpactChanged();
+      }
+      throw error;
     });
+    return impact && !result.owner_receipt.projection_replayed ? { ...result, session_impact: impact } : result;
   }
 
   async function evaluateWorkStart({ artifact, callerId }) {

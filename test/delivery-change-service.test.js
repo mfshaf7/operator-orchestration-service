@@ -212,6 +212,12 @@ test("Delivery change applies once and replays its durable event", async () => {
     command: command(),
     deliveryId: "delivery-886",
   });
+  const lookup = { deliveryId: "delivery-886", operatorId: "operator:workspace-owner", commandId: first.command_id };
+  const observed = await target.service.readCommand(lookup);
+  assert.equal(observed.state, "completed");
+  assert.deepEqual(observed.result.receipt, first.receipt);
+  assert.equal((await target.service.readCommand({ ...lookup, operatorId: "operator:other" })).state, "unconfirmed");
+  assert.equal((await target.service.readCommand({ ...lookup, deliveryId: "delivery-887" })).state, "unconfirmed");
   assert.equal(first.status, "applied");
   assert.equal(first.after.source_revision, revisions[1]);
   assert.equal(replay.replayed, true);

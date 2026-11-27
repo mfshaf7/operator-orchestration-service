@@ -54,6 +54,7 @@ function normalizeCommand(action, value) {
     "recovery",
     "expected_session_revision",
     "source_intent_ref",
+    "reviewed_verification_digest",
   ]);
   const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
   if (unexpected.length > 0) {
@@ -94,6 +95,13 @@ function normalizeCommand(action, value) {
   }
   if (action === "start" && value.decision !== undefined) {
     assertPlainObject(value.decision, "command.decision");
+  }
+  if (value.reviewed_verification_digest !== undefined &&
+      (action !== "continue" || value.source_intent_ref !== undefined ||
+        typeof value.reviewed_verification_digest !== "string" ||
+        !/^sha256:[a-f0-9]{64}$/.test(value.reviewed_verification_digest))) {
+    throw new DeliveryArtWorkSessionServiceError("delivery_art_work_session_command_invalid",
+      "Reviewed verification requires an exact binding on a verification-only continue request.");
   }
   if (action !== "recover" && Object.hasOwn(value, "recovery")) {
     throw new DeliveryArtWorkSessionServiceError(
@@ -170,6 +178,7 @@ function normalizeCommand(action, value) {
     command_id: value.command_id,
     expected_session_revision: expectedRevision,
     ...(value.source_intent_ref !== undefined ? { source_intent_ref: value.source_intent_ref } : {}),
+    ...(value.reviewed_verification_digest !== undefined ? { reviewed_verification_digest: value.reviewed_verification_digest } : {}),
     ...(value.decision !== undefined
       ? { decision: structuredClone(value.decision) }
       : {}),
@@ -364,11 +373,26 @@ export function createDeliveryArtWorkSessionService({
     return binding?.source_intent_ref ?? explicit;
   }
 
+  function previousSourceReference(session) {
+    const predecessor = store.readPredecessor?.(session);
+    if (!predecessor) return null;
+    const ref = store.readRebuildCommand?.(predecessor)?.replacement_source_intent_ref ?? sourceReference(predecessor);
+    if (ref && !SOURCE_INTENT_PATTERN.test(ref)) {
+      throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_binding_invalid", "The retained rebuild source authorization is invalid.", { statusCode: 503 });
+    }
+    return ref;
+  }
+
   function withSourceReference(result, session) {
     const reference = session ? sourceReference(session) : null;
     const binding = reference ? store.readArtifact(session, SOURCE_AUTHORIZATION_FILE) : null;
-    return reference ? { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id,
-      revision: binding.updated_at ?? session.updated_at } } : result;
+    const previousReference = result.source_access_scope && session ? previousSourceReference(session) : null;
+    return {
+      ...result,
+      ...(reference ? { source_authorization: { intent_ref: reference, session_id: session.session_id,
+        revision: binding.updated_at ?? session.updated_at } } : {}),
+      ...(previousReference ? { source_access_scope: { ...result.source_access_scope, predecessor_intent_ref: previousReference } } : {}),
+    };
   }
 
   function retainSourceReference(session, reference) {
@@ -380,17 +404,41 @@ export function createDeliveryArtWorkSessionService({
       updated_at: new Date(Math.max(clock().getTime(), floor + 1)).toISOString() });
   }
 
+  async function withClosedSourceAccess(result, callerId, operatorId) {
+    const closedSessionId = result.state === "closed" ? result.cleanup_receipt?.session_id : null;
+    if (!closedSessionId || result.cleanup_receipt.closed_by !== operatorId ||
+        typeof sourceCredentials?.readSourcePreparation !== "function") return result;
+    const reference = sourceReference({ session_id: closedSessionId });
+    if (!reference) return result;
+
+    const observed = await sourceCredentials.readSourcePreparation({ callerId, intentId: reference }).catch(() => null);
+    const preparation = observed?.intent_id === reference && observed.session_id === closedSessionId ? observed : null;
+    const operationRef = preparation?.operation_refs.revoke ?? null;
+    const closed = preparation?.authorization.state === "revoked";
+    const state = closed ? "revoked" : operationRef ? "revocation-pending" : "revocation-required";
+    return {
+      ...result,
+      source_authorization: { intent_ref: reference, session_id: closedSessionId, state, operation_ref: operationRef },
+      ...(!closed ? { next_action: {
+        code: operationRef ? "source-revocation-pending" : "source-revocation-required",
+        authority: "platform-engineering",
+        reason: "Check the recorded repository access closure for this completed session.",
+      } } : {}),
+    };
+  }
+
   async function authorizedSourceEffect({ callerId, operatorId, workItemId, session, command = {}, requestedStartDigest = null, operation }) {
     if (!sourceCredentials) return operation();
+    const sourceWorkItemId = session ? controller.sourceAccessWorkItemId?.(session) ?? session.work_item_id ?? session.covered_work_item_ids?.[0] ?? workItemId : workItemId;
     const previous = session ? sourceReference(session) : null;
     const reference = sourceReference(session, command.source_intent_ref ?? null, true);
     if (!reference) {
       throw new DeliveryArtWorkSessionServiceError("delivery_art_source_intent_required", "Prepare and explicitly authorize source access through Platform operations before this source command.", {
-        statusCode: 409, details: { subject: { kind: "delivery", work_item_ref: session?.work_item_id ?? workItemId }, preparation_path: "/v1/platform-operations/source-preparations" },
+        statusCode: 409, details: { subject: { kind: "delivery", work_item_ref: sourceWorkItemId }, preparation_path: "/v1/platform-operations/source-preparations" },
       });
     }
     const scope = { callerId, operatorId, intentId: reference, sessionId: session?.session_id ?? null,
-      workItemId: session?.work_item_id ?? session?.covered_work_item_ids?.[0] ?? workItemId, requestedStartDigest,
+      workItemId: sourceWorkItemId, requestedStartDigest,
       previousIntentId: previous && previous !== reference ? previous : null };
     // Pending owner credentials must not poison the source command journal.
     await sourceCredentials.ensureSourceCredential(scope);
@@ -505,16 +553,16 @@ export function createDeliveryArtWorkSessionService({
     return controller.preflight(workItemId, options);
   }
 
-  async function continueWork(workItemId) {
-    return controller.continue(workItemId);
+  async function continueWork(workItemId, onPublished) {
+    return controller.continue(workItemId, onPublished);
   }
 
   async function merge(workItemId) {
     return controller.merge(workItemId);
   }
 
-  async function reconstruct(workItemId) {
-    return controller.reconstruct(workItemId);
+  async function reconstruct(workItemId, options) {
+    return controller.reconstruct(workItemId, options);
   }
 
   async function close(workItemId) {
@@ -527,7 +575,7 @@ export function createDeliveryArtWorkSessionService({
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const session = store.readByAlias(workItemId);
     assertIdentityBinding({ callerId, command: {}, operatorId, session });
-    return runWithExecutorContext({
+    const result = await runWithExecutorContext({
       caller_id: callerId,
       command_id: null,
       operator_id: operatorId,
@@ -537,6 +585,46 @@ export function createDeliveryArtWorkSessionService({
       projectDeliveryArtWorkSessionResult(await status(workItemId)),
       store.readByAlias(workItemId),
     ), store.readByAlias(workItemId)));
+    const pending = store.readPendingRebuild?.(store.readByAlias(workItemId));
+    if (pending?.caller_id !== callerId || pending?.operator_id !== operatorId || pending?.work_item_id !== workItemId) return withClosedSourceAccess(result, callerId, operatorId);
+    return { ...result, pending_rebuild: {
+      command_id: pending.command_id, expected_session_revision: pending.replacement_expected_revision,
+    } };
+  }
+
+  function readCommand({ callerId, commandId, operatorId, workItemId: workItemIdInput }) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    if (typeof commandId !== "string" || commandId.length > 200 || !COMMAND_ID_PATTERN.test(commandId)) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_work_session_command_invalid", "A valid work-session command id is required.",
+      );
+    }
+    const record = store.readCommandRecord(commandId);
+    if (record?.caller_id !== callerId || record?.operator_id !== (operatorId ?? callerId) ||
+        record?.work_item_id !== workItemId || record?.command_id !== commandId) {
+      return { command_id: commandId, state: "unconfirmed" };
+    }
+    if (record.state === "completed") {
+      return {
+        command_id: commandId,
+        state: "completed",
+        result: { ...structuredClone(record.result), command_receipt: structuredClone(record.receipt), replayed: false },
+      };
+    }
+    if (record.state === "failed") {
+      return {
+        command_id: commandId,
+        state: "failed",
+        error: { code: record.error.code, message: record.error.message, status_code: record.error.status_code },
+      };
+    }
+    return {
+      command_id: commandId,
+      state: "pending",
+      ...(record.publication ? { publication: record.publication } : {}),
+      ...(record.action === "reconstruct" && record.replacement_session_id && record.replacement_expected_revision
+        ? { rebuild_revision: record.replacement_expected_revision } : {}),
+    };
   }
 
   async function inspect({ callerId, decision = null, operatorId, workItemId: workItemIdInput }) {
@@ -579,10 +667,13 @@ export function createDeliveryArtWorkSessionService({
     if (typeof controller[method] !== "function") {
       throw new DeliveryArtWorkSessionServiceError("delivery_art_source_credential_authority_unavailable", "Canonical source-intent preparation is unavailable.", { statusCode: 503 });
     }
-    return runWithExecutorContext({
+    const plan = await runWithExecutorContext({
       caller_id: callerId, operator_id: operatorId, command_id: null,
       session_id: session?.session_id ?? null, work_item_id: workItemId,
     }, () => controller[method](workItemId, { callerId, operatorId, decision: approvedDecision, record }));
+    if (record || !session) return plan;
+    const predecessor = sourceReference(session) ?? previousSourceReference(session);
+    return predecessor ? { ...plan, predecessor_intent_ref: predecessor } : plan;
   }
 
   async function projectContext({
@@ -686,11 +777,12 @@ export function createDeliveryArtWorkSessionService({
     }));
   }
 
-  async function readRealizationSource({ callerId, operatorId, workItemId: input, kind, requestedPaths = [] }) {
+  async function readRealizationSource({ callerId, operatorId, workItemId: input, kind, requestedPaths = [], retained = false, startLine }) {
     await assertExecutorAvailable();
     if (!sourceRealization || !["files", "draft"].includes(kind) || !Array.isArray(requestedPaths) ||
         requestedPaths.length > 48 || new Set(requestedPaths).size !== requestedPaths.length ||
-        requestedPaths.some(value => typeof value !== "string" || value.length > 240)) {
+        requestedPaths.some(value => typeof value !== "string" || value.length > 240) ||
+        startLine !== undefined && (kind !== "files" || requestedPaths.length !== 1 || !Number.isSafeInteger(startLine) || startLine < 1 || startLine > 262144)) {
       throw new DeliveryArtWorkSessionServiceError("delivery_art_source_realization_request_invalid", "Use the current source draft or bounded source-file selectors.");
     }
     operatorId ??= callerId;
@@ -698,7 +790,7 @@ export function createDeliveryArtWorkSessionService({
     assertIdentityBinding({ callerId, command: {}, operatorId, session });
     return runWithExecutorContext({ caller_id: callerId, command_id: null, operator_id: operatorId,
       session_id: session?.session_id ?? null, work_item_id: workItemId },
-    () => sourceRealization[kind]({ callerId, operatorId, workItemId, requestedPaths }));
+    () => sourceRealization[kind]({ callerId, operatorId, workItemId, requestedPaths, retained, startLine }));
   }
 
   async function execute({
@@ -729,6 +821,7 @@ export function createDeliveryArtWorkSessionService({
     try {
       return await store.withLock(`command:${command.command_id}`, async () => {
         const existing = store.readCommandRecord(command.command_id);
+        const resumeReplacement = action === "reconstruct" && existing?.state === "pending" && existing.replacement_session_id;
         if (existing) {
           if (existing.request_digest !== requestDigest) {
             throw new DeliveryArtWorkSessionServiceError(
@@ -747,7 +840,7 @@ export function createDeliveryArtWorkSessionService({
           if (existing.state === "failed") {
             throw restoreError(existing);
           }
-          throw new DeliveryArtWorkSessionServiceError(
+          if (!resumeReplacement) throw new DeliveryArtWorkSessionServiceError(
             "delivery_art_work_session_command_outcome_unknown",
             "The prior command attempt has no terminal receipt and requires operator reconciliation.",
             { statusCode: 409 },
@@ -756,6 +849,10 @@ export function createDeliveryArtWorkSessionService({
 
         return store.withLock(`mutation:${workItemId}`, async () => {
           const session = store.readByAlias(workItemId);
+          const replacement = resumeReplacement ? store.readReplacement(resumeReplacement) : null;
+          const switched = replacement?.state === "activated" &&
+            replacement.replacement.session_id === session?.session_id &&
+            replacement.previous.updated_at === command.expected_session_revision;
           const recoveryReceipt = action === "recover"
             ? store.readRecoveryReceiptBySessionId(command.recovery.session_id)
             : null;
@@ -765,9 +862,18 @@ export function createDeliveryArtWorkSessionService({
             ? { caller_id: recoveryReceipt.caller_id, operator: { id: recoveryReceipt.operator_id } }
             : session;
           assertIdentityBinding({ callerId, command, operatorId, session: identitySession });
-          assertRevision({ action, command, recoveryReceipt, session });
-          const terminalSourceReference = sourceCredentials && session && ["close", "recover", "reconstruct"].includes(action)
-            ? sourceReference(session, command.source_intent_ref ?? null) : null;
+          assertRevision({ action, command, recoveryReceipt, session: switched ? replacement.previous : session });
+          if (resumeReplacement && !switched && session?.session_id !== resumeReplacement) {
+            throw new DeliveryArtWorkSessionServiceError("delivery_art_work_session_revision_stale", "The original rebuild no longer matches the current work session.", { statusCode: 409 });
+          }
+          const predecessor = switched ? replacement.previous : session;
+          const inProgress = store.readPendingRebuild?.(session);
+          if (inProgress && inProgress.command_id !== command.command_id) {
+            throw new DeliveryArtWorkSessionServiceError("delivery_art_work_session_rebuild_pending", "Resume the saved rebuild from its original work item before issuing another work-session command.", { statusCode: 409 });
+          }
+          const terminalSourceReference = resumeReplacement ? existing.replacement_source_intent_ref ?? null
+            : sourceCredentials && session && ["close", "recover", "reconstruct"].includes(action)
+              ? sourceReference(session, command.source_intent_ref ?? null) : null;
           const executorContext = {
             caller_id: callerId,
             command_id: command.command_id,
@@ -776,7 +882,7 @@ export function createDeliveryArtWorkSessionService({
             work_item_id: workItemId,
           };
           const executeCommand = async (sourceIntentRef = null, operation = null) => {
-            const startedAt = clock().toISOString();
+            const startedAt = resumeReplacement ? existing.started_at : clock().toISOString();
             const pending = {
               schema_version: 1,
               artifact_type: "delivery_art_work_session_command_record",
@@ -789,10 +895,32 @@ export function createDeliveryArtWorkSessionService({
               state: "pending",
               work_item_id: workItemId,
               started_at: startedAt,
+              ...(action === "reconstruct" ? {
+                replacement_session_id: predecessor.session_id,
+                replacement_expected_revision: command.expected_session_revision,
+                replacement_source_intent_ref: terminalSourceReference,
+              } : {}),
             };
-            store.writeCommandRecord(command.command_id, pending);
+            if (action === "reconstruct") {
+              await store.withLock(`rebuild-acceptance:${predecessor.session_id}`, () => {
+                const original = store.readPendingRebuild(predecessor);
+                if (original && original.command_id !== command.command_id) {
+                  throw new DeliveryArtWorkSessionServiceError("delivery_art_work_session_rebuild_pending", "Resume the original accepted rebuild.", { statusCode: 409 });
+                }
+                store.writeRebuildCommandRef(predecessor, command.command_id);
+                store.writeCommandRecord(command.command_id, pending);
+              });
+            } else {
+              store.writeCommandRecord(command.command_id, pending);
+            }
 
             try {
+              const recordPublication = ({ url, head_commit }) => {
+                if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url ?? "") &&
+                    /^[0-9a-f]{40}$/.test(head_commit ?? "")) {
+                  store.writeCommandRecord(command.command_id, { ...pending, publication: { url, head_commit } });
+                }
+              };
               const raw = await runWithExecutorContext(executorContext, operation ?? (async () => action === "start"
                 ? start(workItemId, {
                     ...(command.decision ? { decision: command.decision } : {}),
@@ -800,9 +928,9 @@ export function createDeliveryArtWorkSessionService({
                     operatorId,
                   })
                 : action === "continue"
-                  ? continueWork(workItemId)
+                  ? continueWork(workItemId, recordPublication)
                   : action === "reconstruct"
-                    ? reconstruct(workItemId)
+                    ? reconstruct(workItemId, { previousSessionId: resumeReplacement || null })
                   : action === "recover"
                     ? controller.recover(workItemId, { operatorId, recovery: command.recovery })
                   : action === "merge"
@@ -813,24 +941,31 @@ export function createDeliveryArtWorkSessionService({
                 store.readByAlias(workItemId),
               );
               const actualSession = store.readByAlias(workItemId);
-              if ((sourceIntentRef || operation) && actualSession && (!session || actualSession.session_id === session.session_id)) {
-                if (sourceIntentRef) retainSourceReference(actualSession, sourceIntentRef);
+              if (actualSession && ((sourceIntentRef || operation) && (!session || actualSession.session_id === session.session_id) || result.source_access_scope)) {
+                if (sourceIntentRef && (!session || actualSession.session_id === session.session_id)) retainSourceReference(actualSession, sourceIntentRef);
                 result = withSourceReference(result, actualSession);
               }
-              const retired = session && ["recover", "reconstruct"].includes(action) &&
-                store.readByAlias(workItemId)?.session_id !== session.session_id;
-              if (sourceCredentials && session && (retired || (action === "close" && ["closed", "cleanup-required", "cleanup-blocked"].includes(result.state)))) {
+              const retired = predecessor && ["recover", "reconstruct"].includes(action) &&
+                actualSession?.session_id !== predecessor.session_id;
+              if (sourceCredentials && predecessor && (retired || (action === "close" && ["closed", "cleanup-required", "cleanup-blocked"].includes(result.state)))) {
                 const reference = terminalSourceReference;
                 if (reference) {
+                  if (action === "reconstruct") {
+                    const stopped = await sourceCredentials.stopSourceCredential({ callerId, operatorId, intentId: reference, sessionId: predecessor.session_id });
+                    if (stopped.state !== "succeeded") {
+                      throw new DeliveryArtWorkSessionServiceError("delivery_art_work_session_rebuild_revocation_pending", "The previous workspace access is closing. Resume the saved rebuild to confirm the original result.", { statusCode: 503 });
+                    }
+                  } else {
                   try {
-                    const stopped = await sourceCredentials.stopSourceCredential({ callerId, operatorId, intentId: reference, sessionId: session.session_id });
-                    result = { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id,
+                    const stopped = await sourceCredentials.stopSourceCredential({ callerId, operatorId, intentId: reference, sessionId: predecessor.session_id });
+                    result = { ...result, source_authorization: { intent_ref: reference, session_id: predecessor.session_id,
                       state: stopped.state === "succeeded" ? "revoked" : "revocation-pending", operation_ref: stopped.operation_id } };
                     if (stopped.state !== "succeeded") result.next_action = { code: "source-revocation-pending", authority: "platform-engineering", reason: "Follow the retained Platform operation to confirm exact credential revocation." };
                   } catch (error) {
-                    result = { ...result, source_authorization: { intent_ref: reference, session_id: session.session_id, state: "revocation-required", operation_ref: null },
+                    result = { ...result, source_authorization: { intent_ref: reference, session_id: predecessor.session_id, state: "revocation-required", operation_ref: null },
                       next_action: { code: "source-revocation-required", authority: "platform-engineering", reason: "Source authorization closure is not confirmed; use the same source-intent Platform revocation action." } };
                     if (!error?.code) throw error;
+                  }
                   }
                 }
               }
@@ -860,6 +995,10 @@ export function createDeliveryArtWorkSessionService({
               return { ...result, command_receipt: receipt, replayed: false };
             } catch (error) {
               const bounded = boundedExecutionError(error);
+              if (action === "reconstruct") {
+                const transition = store.readReplacement(predecessor.session_id);
+                if (transition?.state === "activated" || transition?.state === "prepared" && bounded.statusCode >= 500) throw bounded;
+              }
               store.writeCommandRecord(command.command_id, {
                 ...pending,
                 completed_at: clock().toISOString(),
@@ -869,11 +1008,15 @@ export function createDeliveryArtWorkSessionService({
               throw bounded;
             }
           };
-          if (sourceCredentials && action === "continue" && session && typeof controller.continueAfterMerge === "function") {
+          if ((sourceCredentials || command.reviewed_verification_digest) && action === "continue" && session && typeof controller.continueAfterMerge === "function") {
             const recorded = await runWithExecutorContext(executorContext, () => controller.continueAfterMerge(
-              workItemId, session, (operation) => executeCommand(null, operation),
+              workItemId, session, (operation) => executeCommand(null, operation), command.reviewed_verification_digest,
             ));
             if (recorded !== null) return recorded;
+          }
+          if (command.reviewed_verification_digest) {
+            throw new DeliveryArtWorkSessionServiceError("delivery_art_operating_verifier_binding_changed",
+              "This session is no longer ready for the reviewed verification.", { statusCode: 409 });
           }
           if (sourceCredentials && (action === "continue" || (action === "start" && !session && command.decision))) {
             let requestedStartDigest = null;
@@ -906,6 +1049,7 @@ export function createDeliveryArtWorkSessionService({
     preflight,
     projectContext,
     read,
+    readCommand,
     readRealization,
     readRealizationSource,
     reconstruct,

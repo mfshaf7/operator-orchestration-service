@@ -11825,6 +11825,61 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
   );
 });
 
+test("architecture projection cannot replace a new predecessor after a write conflict", async () => {
+  function candidate(character, predecessor) {
+    const digest = character.repeat(64);
+    return {
+      artifact: { digest: `sha256:${digest}`, uri: `wgcf://artifacts/delivery-art/sha256/${digest}` },
+      artifactId: "architecture-packet:delivery-38-v1",
+      artifactStatus: "architecture-ready",
+      artifactType: "delivery_art_architecture_packet",
+      custodyReceipt: {
+        digest: `sha256:${"f".repeat(64)}`,
+        uri: `wgcf://receipts/artifact-custody/receipt-${"f".repeat(64)}.json`,
+      },
+      expectedCurrentReference: predecessor,
+      recordId: 38,
+    };
+  }
+  const first = candidate("a", null);
+  const competing = candidate("c", first.artifact);
+  let description = "";
+  let lockVersion = 1;
+  let competingWrite = false;
+  let patches = 0;
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (_url, options) => {
+      if (options.method === "GET") return Response.json({ lockVersion, description: { raw: description } });
+      if (options.method === "POST") return Response.json({ _embedded: { schema: { description: { writable: true } } } });
+      assert.equal(options.method, "PATCH");
+      patches++;
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.lockVersion, lockVersion++);
+      if (competingWrite) {
+        competingWrite = false;
+        description = payload.description.raw.replaceAll("b".repeat(64), "c".repeat(64));
+        return Response.json({ errorIdentifier: "urn:openproject-org:api:v3:errors:UpdateConflict" }, { status: 409 });
+      }
+      description = payload.description.raw;
+      return Response.json({ lockVersion, description: { raw: description } });
+    },
+  });
+
+  await client.projectDeliveryArtReference(first);
+  competingWrite = true;
+  await assert.rejects(() => client.projectDeliveryArtReference(candidate("b", first.artifact)), {
+    errorClass: "update_conflict", details: "delivery_art_architecture_predecessor_changed",
+  });
+  assert.equal(patches, 2);
+  const replay = await client.projectDeliveryArtReference(competing);
+  assert.equal(replay.replayed, true);
+  await assert.rejects(() => client.projectDeliveryArtReference(first), {
+    details: "delivery_art_architecture_predecessor_changed",
+  });
+  assert.equal(patches, 2);
+});
+
 test("updateDeliveryInitiative writes the top-level Epic target PI and initiative fields", async () => {
   const calls = [];
   const artifactNote = [

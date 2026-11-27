@@ -108,6 +108,15 @@ export function createSourceCredentialAuthority({ clock = () => new Date(), prov
       if (resolved.subject?.kind !== input.subject.kind || (bootstrap && resolved.purpose !== "trusted-owner-bootstrap")) {
         fail("platform_source_preparation_invalid", "Canonical source resolver did not retain its selected subject and separate purpose.");
       }
+      if (resolved.predecessor_intent_ref) {
+        const previous = retained(resolved.predecessor_intent_ref, callerId, operatorId);
+        if (publicPreparation(previous, clock()).authorization.state !== "revoked") {
+          fail("platform_source_predecessor_not_closed", "Close the exact previous Delivery access before preparing its replacement.");
+        }
+        if (previous.source_intent.landing_unit_id === resolved.landing_unit_id && input.supersedes_intent_digest === null) {
+          fail("platform_source_predecessor_required", "Identify the revoked Platform intent when replacing access to the same Landing Unit.");
+        }
+      }
       const sourceIntent = normalizeSourceCredentialInput({ session_id: resolved.session_id, source_intent: {
         schema_version: 1, purpose: bootstrap ? "trusted-owner-bootstrap" : "ordinary-source", intent_id: intentId, caller_id: providerCallerId,
         operator_id: operatorId, subject: resolved.subject, source_start_digest: resolved.source_start_digest,
@@ -311,8 +320,10 @@ export function createSourceCredentialAuthority({ clock = () => new Date(), prov
       });
     },
     read({ callerId, operatorId, intentId }) { return publicPreparation(retained(intentId, callerId, operatorId), clock()); },
-    list({ callerId, operatorId, limit = 100 }) {
-      return store.listSourcePreparations({ limit }).filter(record => record.caller_id === callerId && record.source_intent.operator_id === operatorId)
+    list({ callerId, operatorId, limit = 100, workItemRef = null }) {
+      const matches = record => record.caller_id === callerId && record.source_intent.operator_id === operatorId &&
+        (!workItemRef || (record.source_intent.subject.kind === "delivery" && record.source_intent.subject.work_item_ref === workItemRef));
+      return store.listSourcePreparations({ limit, matches })
         .map(record => publicPreparation(retained(record.source_intent.intent_id, callerId, operatorId), clock()));
     },
   };

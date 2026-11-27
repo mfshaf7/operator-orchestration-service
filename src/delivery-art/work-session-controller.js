@@ -28,6 +28,7 @@ import {
   outcomeDeliveryArtConformanceCases,
 } from "./review-evidence.js";
 
+const SOURCE_REALIZATION_RECORD = "source-realization.json";
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 
 export class DeliveryArtWorkSessionError extends Error {
@@ -131,6 +132,7 @@ function resultEnvelope({
   recoveryReceipt = null,
   resourceManifest = null,
   session = null,
+  sourceAccessScope = null,
   state,
   workContract = null,
   workItemId,
@@ -155,6 +157,7 @@ function resultEnvelope({
     state,
     next_action: nextAction,
     ...(agentSource ? { agent_source: agentSource } : {}),
+    ...(sourceAccessScope ? { source_access_scope: sourceAccessScope } : {}),
     ...(architectureSupersession
       ? { architecture_supersession: architectureSupersession }
       : {}),
@@ -179,6 +182,8 @@ function resultEnvelope({
     ...(context?.facts ? { facts: context.facts } : {}),
     ...(projection ? { projection } : {}),
     ...(context?.pull_request ? { pull_request: context.pull_request } : {}),
+    ...(context?.operating_verification && nextAction?.code === "acquire-operating-evidence"
+      ? { operating_verification: context.operating_verification } : {}),
     ...(context?.source ? { source: sourceObservation(context.source) } : {}),
   };
 }
@@ -373,6 +378,35 @@ export function architectureLandingUnitDecisionFingerprint({
     },
     decision_status: architecture.decision?.status ?? null,
   });
+}
+
+export function compatibleWorkSessionArchitecture(session, bound, current) {
+  if (architectureDecisionFingerprint(bound) === architectureDecisionFingerprint(current)) return true;
+  const scope = { coveredWorkItemIds: session.covered_work_item_ids };
+  const fingerprint = architecture => architectureLandingUnitDecisionFingerprint({ ...scope, architecture, landingUnitId: session.landing_unit_id });
+  return architectureLandingUnitId({ ...scope, architecture: bound }) === session.landing_unit_id &&
+    architectureLandingUnitId({ ...scope, architecture: current }) === session.landing_unit_id &&
+    fingerprint(bound) === fingerprint(current);
+}
+
+export async function workSessionPristineProof({ store, session, architecture, inspectSource }) {
+  const evidence = store.readArtifact(session, session.artifacts.evidence_file);
+  const source = await inspectSource(session);
+  return {
+    current_landing_unit_id: architectureLandingUnitId({ architecture, coveredWorkItemIds: session.covered_work_item_ids }),
+    evidence_pristine: canonicalStringify(evidence) === canonicalStringify(evidenceTemplate(session)),
+    readiness_receipt_absent: store.readArtifact(session, session.artifacts.readiness_receipt_file) === null,
+    review_packet_absent: store.readArtifact(session, session.artifacts.review_packet_file) === null,
+    source,
+  };
+}
+
+export const workSessionCanReconstruct = proof => proof.evidence_pristine &&
+  Boolean(proof.current_landing_unit_id) && proof.readiness_receipt_absent &&
+  proof.review_packet_absent && proof.source.pristine === true;
+
+export function workSessionSourceOperationPending(record) {
+  return ["accepted", "applying", "apply-unknown"].includes(record?.attempts?.at(-1)?.state);
 }
 
 function configuredPathAction({ authority, code, inputs = {}, reason }) {
@@ -671,8 +705,15 @@ export function createDeliveryArtWorkSessionController({
   ], "artifactAdapter");
   assertAdapter(lifecycleController, ["inspect", "reconcile"], "lifecycleController");
   assertAdapter(store, [
+    "activateReplacement",
+    "assertPreparedReplacement",
+    "materializeReplacement",
     "archiveRecoveredSession",
     "artifactPath",
+    "nextReplacementId",
+    "prepareReplacement",
+    "readReplacement",
+    "retainLegacySource",
     "listRecoveredSessions",
     "readArtifact",
     "readByAlias",
@@ -881,38 +922,7 @@ export function createDeliveryArtWorkSessionController({
             mode: "compatible-refresh",
           };
     }
-    if (
-      architectureDecisionFingerprint(bound) ===
-      architectureDecisionFingerprint(current)
-    ) {
-      return {
-        artifact: current,
-        bound_architecture: boundReference,
-        current_architecture: currentReference,
-        mode: "compatible-refresh",
-      };
-    }
-    const boundLandingUnitId = architectureLandingUnitId({
-      architecture: bound,
-      coveredWorkItemIds: session.covered_work_item_ids,
-    });
-    const currentLandingUnitId = architectureLandingUnitId({
-      architecture: current,
-      coveredWorkItemIds: session.covered_work_item_ids,
-    });
-    if (
-      boundLandingUnitId === session.landing_unit_id &&
-      currentLandingUnitId === session.landing_unit_id &&
-      architectureLandingUnitDecisionFingerprint({
-        architecture: bound,
-        coveredWorkItemIds: session.covered_work_item_ids,
-        landingUnitId: session.landing_unit_id,
-      }) === architectureLandingUnitDecisionFingerprint({
-        architecture: current,
-        coveredWorkItemIds: session.covered_work_item_ids,
-        landingUnitId: session.landing_unit_id,
-      })
-    ) {
+    if (compatibleWorkSessionArchitecture(session, bound, current)) {
       return {
         artifact: current,
         bound_architecture: boundReference,
@@ -929,12 +939,7 @@ export function createDeliveryArtWorkSessionController({
       current_artifact: current,
       mode: "superseded",
       pristine_proof: proof,
-      reconstructable:
-        proof.evidence_pristine &&
-        Boolean(proof.current_landing_unit_id) &&
-        proof.readiness_receipt_absent &&
-        proof.review_packet_absent &&
-        proof.source.pristine === true,
+      reconstructable: workSessionCanReconstruct(proof),
     };
   }
 
@@ -980,27 +985,15 @@ export function createDeliveryArtWorkSessionController({
   }
 
   async function pristineSessionProof(session, architecture) {
-    const evidence = store.readArtifact(session, session.artifacts.evidence_file);
-    const source = await sourceAdapter.inspectPristineSession(session);
-    return {
-      current_landing_unit_id: architectureLandingUnitId({
-        architecture,
-        coveredWorkItemIds: session.covered_work_item_ids,
-      }),
-      evidence_pristine:
-        canonicalStringify(evidence) === canonicalStringify(evidenceTemplate(session)),
-      readiness_receipt_absent:
-        store.readArtifact(session, session.artifacts.readiness_receipt_file) === null,
-      review_packet_absent:
-        store.readArtifact(session, session.artifacts.review_packet_file) === null,
-      source,
-    };
+    return workSessionPristineProof({ store, session, architecture,
+      inspectSource: value => sourceAdapter.inspectPristineSession(value) });
   }
 
   async function replacePristineSession({
     architecture,
-    beforePersist = null,
     current,
+    kind,
+    proof,
     landingUnitId,
     session,
     workItemId,
@@ -1024,6 +1017,7 @@ export function createDeliveryArtWorkSessionController({
         base_ref: session.landing_unit.base_ref,
         branch: session.landing_unit.branch,
         rollback_boundary: session.landing_unit.rollback_boundary,
+        supersedes_recoveries: session.landing_unit.supersedes_recoveries,
       },
       architecture: { required: true, artifact_location: null },
       human_gate_work_item_ids: { security_acceptance: [] },
@@ -1031,11 +1025,23 @@ export function createDeliveryArtWorkSessionController({
     const replacement = createDeliveryArtWorkSession({
       architectureFile: "artifacts/architecture.json",
       baseCommit: base.commit,
-      clock,
+      clock: () => new Date(Math.max(clock().getTime(), Date.parse(session.updated_at) + 1)),
       continuation: current,
       decision,
     });
-    const workStart = await authorWorkStart(replacement, architecture);
+    replacement.session_id = store.nextReplacementId(session, replacement.session_id);
+    const artifacts = [
+      [replacement.architecture.artifact_file, architecture],
+      [replacement.artifacts.evidence_file, evidenceTemplate(replacement)],
+    ];
+    const prior = store.readReplacement(session.session_id);
+    const staged = prior?.state === "prepared" && prior.kind === kind &&
+      canonicalDigest(prior.previous) === canonicalDigest(session) &&
+      canonicalDigest(prior.replacement.landing_unit) === canonicalDigest(replacement.landing_unit) &&
+      prior.replacement.session_id === replacement.session_id &&
+      prior.replacement.owner_repo === replacement.owner_repo &&
+      prior.artifactDigests[0]?.[1] === canonicalDigest(architecture);
+    if (!staged) artifacts.push([replacement.artifacts.work_start_file, await authorWorkStart(replacement, architecture)]);
     const confirmedCurrent = await artifactAdapter.currentArchitecture(
       session.delivery_id,
     );
@@ -1048,33 +1054,93 @@ export function createDeliveryArtWorkSessionController({
         "The accepted architecture changed during reconstruction; retry against the new current packet.",
       );
     }
-    const resourceManifest = store.readResourceManifest(session);
-    const retired = await sourceAdapter.retirePristineSession({
-      resources: resourceManifest?.resources ?? [],
-      session,
+    return store.withLock(`source-realization:${session.session_id}`, async () => {
+      const source = store.readArtifact(session, SOURCE_REALIZATION_RECORD);
+      if (workSessionSourceOperationPending(source)) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_source_operation_pending",
+          "Resolve the original source operation before rebuilding this session.",
+        );
+      }
+      store.retainLegacySource(session);
+      const transition = staged ? prior : store.prepareReplacement(session, replacement, artifacts, kind);
+      store.assertPreparedReplacement(transition);
+      const resourceManifest = store.readResourceManifest(session);
+      const retired = await sourceAdapter.retirePristineSession({
+        resources: resourceManifest?.resources ?? [],
+        session,
+      });
+      if (!sameArtifactReference(artifactReference(architecture), artifactReference(await artifactAdapter.currentArchitecture(session.delivery_id)))) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_architecture_changed",
+          "The plan changed while the replacement was being prepared. Review the current plan before rebuilding. Your saved draft is retained.",
+        );
+      }
+      const outcome = { proof, resources: retired.outcomes, recorded_at: clock().toISOString() };
+      if (kind === "architecture") {
+        outcome.receipt = architectureReplacementReceipt({
+          transition,
+          outcome,
+          previousArchitecture: artifactReference(store.readArtifact(session, session.architecture.artifact_file)),
+          currentArchitecture: artifactReference(architecture),
+        });
+        store.writeArchitectureSupersessionReceipt(outcome.receipt);
+      }
+      return store.activateReplacement(transition, outcome);
     });
-    if (beforePersist) {
-      await beforePersist({ replacement, replacementOwnerRepo, retired });
-    }
+  }
 
-    store.removeSession(session);
-    store.writeArtifact(
-      replacement,
-      replacement.architecture.artifact_file,
-      architecture,
-    );
-    store.writeArtifact(
-      replacement,
-      replacement.artifacts.evidence_file,
-      evidenceTemplate(replacement),
-    );
-    store.writeArtifact(
-      replacement,
-      replacement.artifacts.work_start_file,
-      workStart,
-    );
-    store.writeSession(replacement);
-    return { replacement, replacementOwnerRepo, retired };
+  function architectureReplacementReceipt({ transition, outcome, previousArchitecture, currentArchitecture }) {
+    const { previous, replacement } = transition;
+    const body = {
+      schema_version: 1,
+      artifact_type: "delivery_art_work_session_architecture_supersession_receipt",
+      receipt_id: `architecture-supersession:${previous.session_id}:${currentArchitecture.digest}`,
+      delivery_id: replacement.delivery_id,
+      landing_unit_id: replacement.landing_unit_id,
+      covered_work_item_ids: replacement.covered_work_item_ids,
+      operator: replacement.operator,
+      superseded_session: {
+        architecture: previousArchitecture,
+        session_id: previous.session_id,
+        session_revision: previous.updated_at,
+      },
+      replacement_session: {
+        architecture: currentArchitecture,
+        session_id: replacement.session_id,
+        session_revision: replacement.updated_at,
+      },
+      pristine_proof: outcome.proof,
+      resource_outcomes: outcome.resources,
+      recorded_at: outcome.recorded_at,
+      integrity: { content_digest: null },
+    };
+    return { ...body, integrity: { content_digest: canonicalDigest(body) } };
+  }
+
+  async function replacementResult(transition, workItemId, current = null) {
+    const { previous, replacement, kind, outcome } = transition;
+    const result = await statusForSession(replacement, workItemId, current);
+    if (kind === "architecture") return { ...result, architecture_supersession_receipt: outcome.receipt };
+    return {
+      ...result,
+      source_binding_repair: {
+        owner_repo: replacement.owner_repo,
+        previous_base_commit: previous.landing_unit.base_commit,
+        replacement_base_commit: replacement.landing_unit.base_commit,
+        previous_session_revision: previous.updated_at,
+        replacement_session_revision: replacement.updated_at,
+        pristine_proof: outcome.proof,
+        resource_outcomes: outcome.resources,
+        recorded_at: outcome.recorded_at,
+      },
+    };
+  }
+
+  async function finalizeReplacement(transition, workItemId, current = null) {
+    const result = await replacementResult(transition, workItemId, current);
+    store.materializeReplacement(transition);
+    return result;
   }
 
   function supersessionProjection(supersession) {
@@ -1864,6 +1930,7 @@ export function createDeliveryArtWorkSessionController({
           authority: "operator-orchestration-service",
         },
         session,
+        sourceAccessScope: currentSourceAccessScope(session, architecture),
         state: "architecture-refresh-required",
         workContract,
         workItemId,
@@ -1980,6 +2047,7 @@ export function createDeliveryArtWorkSessionController({
           authority: session.owner_repo,
         },
         session,
+        sourceAccessScope: currentSourceAccessScope(session, architecture),
         state: "implementation-ready",
         workContract,
         workItemId,
@@ -2016,18 +2084,21 @@ export function createDeliveryArtWorkSessionController({
       context,
       targetReadiness: workContract.conformance.target_readiness,
     });
+    const nextAction = deliveryArtWorkNextAction({
+      artifactPaths: paths(session),
+      context,
+      pendingArchitectureGate: pendingGate,
+      pendingArchitecturePrerequisite: pendingPrerequisite,
+      securityStatuses,
+      workItemId,
+    });
     return resultEnvelope({
       agentSource,
       context,
-      nextAction: deliveryArtWorkNextAction({
-        artifactPaths: paths(session),
-        context,
-        pendingArchitectureGate: pendingGate,
-        pendingArchitecturePrerequisite: pendingPrerequisite,
-        securityStatuses,
-        workItemId,
-      }),
+      nextAction,
       session,
+      sourceAccessScope: ["agent-source-credential-required", "source-work-required", "agent-source-publish-required"].includes(nextAction.code)
+        ? currentSourceAccessScope(session, architecture) : null,
       state: pendingGate || pendingPrerequisite
         ? "blocked"
         : deliveryArtWorkSessionState(inspected.projection),
@@ -2156,8 +2227,8 @@ export function createDeliveryArtWorkSessionController({
         let generation = 0;
         while (true) {
           const priorSession = store.readRecoveredSessionBySessionId(session.session_id);
-          if (!priorSession) break;
-          if (priorSession.landing_unit.branch === session.landing_unit.branch) {
+          if (!priorSession && !store.readReplacement(session.session_id) && !store.readPredecessor?.(session)) break;
+          if (priorSession?.landing_unit.branch === session.landing_unit.branch) {
             throw new DeliveryArtWorkSessionError(
               "delivery_art_work_session_recovery_branch_reuse",
               "A replacement session must use a new branch; the archived branch is retained for audit.",
@@ -2222,6 +2293,48 @@ export function createDeliveryArtWorkSessionController({
     return canonicalDigest({ decision, owner_repo: ownerRepo, base_commit: baseCommit, architecture_scope_digest: architectureScope });
   }
 
+  function sourceAccessWorkItemId(session) {
+    const covered = canonicalDigest([...session.covered_work_item_ids].sort());
+    for (const workItemId of session.covered_work_item_ids) {
+      const decision = store.readAcceptedDecision?.(workItemId);
+      if (decision?.work_item_id === workItemId &&
+          decision.caller_id === session.caller_id && decision.operator.id === session.operator.id &&
+          canonicalDigest([...decision.covered_work_item_ids].sort()) === covered) return workItemId;
+    }
+    return session.covered_work_item_ids[0];
+  }
+
+  function currentSourceDecision(session, architecture) {
+    const { base_commit: _baseCommit, ...landingUnit } = session.landing_unit;
+    return {
+      schema_version: 1,
+      artifact_type: "delivery_art_work_session_decision",
+      work_item_id: sourceAccessWorkItemId(session),
+      covered_work_item_ids: session.covered_work_item_ids,
+      caller_id: session.caller_id,
+      operator: session.operator,
+      landing_unit: { id: session.landing_unit_id, ...landingUnit },
+      architecture: {
+        required: session.architecture.required,
+        artifact_location: architecture ? { recorded_artifact_digest: artifactReference(architecture).digest } : null,
+      },
+      human_gate_work_item_ids: session.human_gate_work_item_ids,
+    };
+  }
+
+  function currentSourceAccessScope(session, architecture) {
+    const decision = currentSourceDecision(session, architecture);
+    return {
+      work_item_ref: decision.work_item_id,
+      source_start_digest: credentialStartDigest({
+        decision,
+        ownerRepo: session.owner_repo,
+        baseCommit: session.landing_unit.base_commit,
+        architectureScope: credentialArchitectureScope(architecture, decision),
+      }),
+    };
+  }
+
   async function sourceCredentialPlan(session, { decision, architectureScope, snapshotDigest, proof }) {
     if (typeof sourceAdapter.inspectSourceCredentialBinding !== "function") {
       throw new DeliveryArtWorkSessionError("delivery_art_source_identity_metadata_unavailable", "The admitted source identity metadata adapter is unavailable.");
@@ -2243,8 +2356,7 @@ export function createDeliveryArtWorkSessionController({
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const existing = store.readByAlias(workItemId);
     if (existing) {
-      const approved = decision ?? store.readDecision(store.decisionPath(workItemId));
-      return verifySourceCredential(workItemId, { callerId, operatorId, decision: approved });
+      return verifySourceCredential(workItemId, { callerId, operatorId, decision, prepareCurrent: true });
     }
     const evaluation = await evaluateConfiguredPath(workItemId, { callerId, decision, operatorId });
     const blockers = evaluation.configuredPath.blockers.filter(entry => entry.code !== "agent-source-credential-required");
@@ -2265,7 +2377,7 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  async function verifySourceCredential(workItemIdInput, { callerId, operatorId, decision, record = null } = {}) {
+  async function verifySourceCredential(workItemIdInput, { callerId, operatorId, decision, record = null, prepareCurrent = false } = {}) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const session = store.readByAlias(workItemId);
     if (!session) return prepareSourceCredential(workItemId, { callerId, operatorId, decision });
@@ -2273,6 +2385,7 @@ export function createDeliveryArtWorkSessionController({
     assertOpenTarget(targetItem(current), workItemId, { allowDependencyBlocked: true });
     const binding = await architectureBinding(session);
     if (binding.mode === "superseded") throw new DeliveryArtWorkSessionError("delivery_art_source_credential_start_superseded", "The source session architecture has been superseded.");
+    if (prepareCurrent) decision = currentSourceDecision(session, binding.artifact);
     const validation = validateDeliveryArtWorkSessionDecision(decision);
     const same = validation.valid && session.caller_id === callerId && session.operator.id === operatorId &&
       decision.caller_id === callerId && decision.operator.id === operatorId &&
@@ -2297,6 +2410,13 @@ export function createDeliveryArtWorkSessionController({
     const current = await continuation(workItemId);
     const target = targetItem(current);
     const closed = CLOSED_ART_STATES.has(String(target.status).toLowerCase());
+    if (closed) {
+      const receipt = retirementController.readReceiptByAlias(workItemId);
+      if (receipt) {
+        const followUp = await completionFollowUp(receipt.delivery_id);
+        return resultEnvelope({ cleanupReceipt: receipt, context: current, nextAction: followUp.next_action, state: "closed", workItemId });
+      }
+    }
     return resultEnvelope({
       context: current,
       nextAction: closed
@@ -2317,7 +2437,7 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  async function continueWork(workItemIdInput, postMerge = null) {
+  async function continueWork(workItemIdInput, postMerge = null, onPublished = null) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
       let session = store.readByAlias(workItemId);
@@ -2359,8 +2479,19 @@ export function createDeliveryArtWorkSessionController({
           );
         }
         const current = await statusForSession(session, workItemId);
+        if (!postMerge && current.operating_verification) {
+          throw new DeliveryArtWorkSessionError("delivery_art_operating_verifier_binding_changed",
+            "Review the original merge and the current verifier before running these cases.");
+        }
         if (postMerge) {
           if (!isDeliveryArtPostMergeAction(current.facts, current.next_action.code)) return null;
+          if ((current.operating_verification?.digest ?? null) !== postMerge.reviewedVerificationDigest) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_operating_verifier_binding_changed",
+              "Review the original merge and the current verifier before running these cases.",
+              { next_action: current.next_action.code },
+            );
+          }
           return postMerge.execute(async () => {
             const repoRoot = await sourceAdapter.resolveWorktree(session);
             if (!repoRoot) return statusForSession(session, workItemId);
@@ -2370,7 +2501,7 @@ export function createDeliveryArtWorkSessionController({
                 repoRoot,
                 session,
               }),
-              { afterMergeOnly: true },
+              { afterMergeOnly: true, ...(postMerge.reviewedVerificationDigest ? { reviewedVerificationDigest: postMerge.reviewedVerificationDigest } : {}) },
             );
             if (!reconciled.executed_actions.length) return statusForSession(session, workItemId);
             const updated = {
@@ -2415,7 +2546,11 @@ export function createDeliveryArtWorkSessionController({
           agentSource?.state === "ready" &&
           typeof sourceAdapter.publishAgentSource === "function"
         ) {
-          await sourceAdapter.publishAgentSource(session);
+          const published = await sourceAdapter.publishAgentSource(session);
+          if (published?.state === "published" && published.pull_request?.state === "open" &&
+              published.pushed_head === published.pull_request.head_commit) {
+            onPublished?.(published.pull_request);
+          }
           reconciled = await lifecycleController.reconcile(plan);
         }
         const updated = {
@@ -2429,7 +2564,7 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  async function reconstruct(workItemIdInput) {
+  async function reconstruct(workItemIdInput, { previousSessionId = null } = {}) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
       const session = store.readByAlias(workItemId);
@@ -2440,6 +2575,12 @@ export function createDeliveryArtWorkSessionController({
         );
       }
       return store.withLock(session.session_id, async () => {
+        const interrupted = previousSessionId && store.readReplacement(previousSessionId);
+        if (interrupted?.state === "activated" &&
+            interrupted.replacement.session_id === session.session_id &&
+            interrupted.previous.aliases.includes(workItemId)) {
+          return finalizeReplacement(interrupted, workItemId);
+        }
         const supersession = await architectureSupersession(session);
         if (!supersession) {
           const current = await continuation(workItemId);
@@ -2469,30 +2610,16 @@ export function createDeliveryArtWorkSessionController({
             );
           }
 
-          const {
-            replacement,
-            replacementOwnerRepo,
-            retired,
-          } = await replacePristineSession({
+          const transition = await replacePristineSession({
             architecture,
             current,
+            kind: "source-base",
+            proof,
             landingUnitId: session.landing_unit_id,
             session,
             workItemId,
           });
-          return {
-            ...await statusForSession(replacement, workItemId, current),
-            source_binding_repair: {
-              owner_repo: replacementOwnerRepo,
-              previous_base_commit: session.landing_unit.base_commit,
-              replacement_base_commit: replacement.landing_unit.base_commit,
-              previous_session_revision: session.updated_at,
-              replacement_session_revision: replacement.updated_at,
-              pristine_proof: proof,
-              resource_outcomes: retired.outcomes,
-              recorded_at: clock().toISOString(),
-            },
-          };
+          return finalizeReplacement(transition, workItemId, current);
         }
         if (!supersession.reconstructable) {
           throw new DeliveryArtWorkSessionError(
@@ -2518,50 +2645,16 @@ export function createDeliveryArtWorkSessionController({
             "The current architecture does not define this work-session scope as one Landing Unit.",
           );
         }
-        let receipt = null;
-        const { replacement } = await replacePristineSession({
+        const transition = await replacePristineSession({
           architecture: supersession.current_artifact,
-          beforePersist: ({ replacement: candidate, retired }) => {
-            const receiptBody = {
-              schema_version: 1,
-              artifact_type:
-                "delivery_art_work_session_architecture_supersession_receipt",
-              receipt_id:
-                `architecture-supersession:${session.session_id}:${supersession.current_architecture.digest}`,
-              delivery_id: session.delivery_id,
-              landing_unit_id: landingUnitId,
-              covered_work_item_ids: session.covered_work_item_ids,
-              operator: session.operator,
-              superseded_session: {
-                architecture: supersession.bound_architecture,
-                session_id: session.session_id,
-                session_revision: session.updated_at,
-              },
-              replacement_session: {
-                architecture: supersession.current_architecture,
-                session_id: candidate.session_id,
-                session_revision: candidate.updated_at,
-              },
-              pristine_proof: supersession.pristine_proof,
-              resource_outcomes: retired.outcomes,
-              recorded_at: clock().toISOString(),
-              integrity: { content_digest: null },
-            };
-            receipt = {
-              ...receiptBody,
-              integrity: { content_digest: canonicalDigest(receiptBody) },
-            };
-            store.writeArchitectureSupersessionReceipt(receipt);
-          },
           current,
+          kind: "architecture",
+          proof: supersession.pristine_proof,
           landingUnitId,
           session,
           workItemId,
         });
-        return {
-          ...await statusForSession(replacement, workItemId, current),
-          architecture_supersession_receipt: receipt,
-        };
+        return finalizeReplacement(transition, workItemId, current);
       });
     });
   }
@@ -2969,12 +3062,14 @@ export function createDeliveryArtWorkSessionController({
   }
 
   return {
+    sourceAccessWorkItemId,
     close,
-    continue: continueWork,
-    continueAfterMerge: (workItemId, session, execute) => continueWork(workItemId, {
+    continue: (workItemId, onPublished) => continueWork(workItemId, null, onPublished),
+    continueAfterMerge: (workItemId, session, execute, reviewedVerificationDigest = null) => continueWork(workItemId, {
       sessionId: session.session_id,
       revision: session.updated_at,
       execute,
+      reviewedVerificationDigest,
     }),
     merge,
     preflight,

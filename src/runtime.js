@@ -12,6 +12,7 @@ import { createDeliveryService } from "./delivery-service.js";
 import { createDeliveryChangeService } from "./delivery-change/service.js";
 import { createDeliveryCloseoutService } from "./delivery-closeout/service.js";
 import { createDeliveryArtSourceExecutorClient } from "./delivery-art/source-executor.js";
+import { createArchitectureSessionImpactReader } from "./delivery-art/architecture-session-impact.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
 import {
   createDeliveryArtArchitectureCutoverGuard,
@@ -192,6 +193,19 @@ export function createRuntime({
     })
     : null;
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
+    readArchitectureSessionImpact: createArchitectureSessionImpactReader({
+      store: deliveryArtWorkSessionStore,
+      readPlanningFacts: input => openProjectClient.readDeliveryPlanningFacts(input),
+      inspectSource: (session, { callerId, operatorId }) => {
+        if (!planSourceExecutor) throw new Error("Work-session source inspection is unavailable.");
+        return planSourceExecutor.executor.run({
+          caller_id: callerId,
+          operator_id: operatorId,
+          session_id: session.session_id,
+          work_item_id: session.covered_work_item_ids[0],
+        }, () => planSourceExecutor.workSource.inspectPristineSession(session));
+      },
+    }),
     readTechnicalPlanSource: planSourceExecutor && ((input, context) => planSourceExecutor.executor.run(
       context, () => planSourceExecutor.workSource.readTechnicalPlanSource(input),
     )),
@@ -239,7 +253,7 @@ export function createRuntime({
     deliveryService,
     env,
     store: deliveryArtWorkSessionStore,
-    sourceCredentials: Object.fromEntries(["ensureSourceCredential", "withSourceLease", "stopSourceCredential"].map(method => [method, args => {
+    sourceCredentials: Object.fromEntries(["ensureSourceCredential", "withSourceLease", "stopSourceCredential", "readSourcePreparation"].map(method => [method, args => {
       if (!platformOperationService) throw new HttpError(503, "platform_source_authority_unavailable", "The admitted Platform source authorization workflow is unavailable.");
       return platformOperationService[method](args);
     }])),

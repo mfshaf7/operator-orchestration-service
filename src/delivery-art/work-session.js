@@ -604,6 +604,16 @@ export function deliveryArtWorkNextAction({
     };
   }
   if (projection.gate === "source-merge") {
+    if (context.pull_request?.base_update_required === true) {
+      return {
+        code: "pull-request-base-update-required",
+        command: context.pull_request.url
+          ? `gh pr view ${shellQuote(context.pull_request.url)} --web`
+          : command("status"),
+        reason: "GitHub requires the pull request to include the current base branch. An updated head requires fresh checks and review before merge.",
+        authority: "source-reviewer",
+      };
+    }
     if (context.pull_request?.review?.approved !== true) {
       return {
         code: "pull-request-review-required",

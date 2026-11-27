@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import { syncPrivateDirectory } from "../persistence/private-file-transactions.js";
+import { applySourcePatch, MAX_PATCH_FILE_BYTES } from "../source-authoring/source-text-patch.js";
 import { projectSourceSnapshotSchema } from "./contracts.js";
 
 const git = promisify(execFile);
@@ -115,6 +116,25 @@ async function applySavedOverlay(repository, files, source, saved, roots) {
       fail(409, "outside_scope", "The saved draft contains a file outside the admitted project roots.");
     }
     const previous = files.get(name);
+    if (operation.action !== "patch" && Object.hasOwn(operation, "patch")) {
+      fail(409, "draft_changed", "A whole-file operation cannot carry a saved section.");
+    }
+    if (operation.action === "patch") {
+      if (!previous || previous.size > MAX_PATCH_FILE_BYTES) fail(409, "baseline_changed", "The saved section requires its bounded baseline file.");
+      const chunks = [];
+      let size = 0;
+      await streamObject(repository, previous, bytes => {
+        size += bytes.length;
+        if (size > MAX_PATCH_FILE_BYTES) fail(409, "baseline_changed", "The saved section baseline is too large.");
+        chunks.push(bytes);
+      });
+      let content;
+      try { content = applySourcePatch(Buffer.concat(chunks, size), operation); }
+      catch { fail(409, "draft_changed", "The saved section no longer matches its exact baseline."); }
+      const bytes = Buffer.from(content);
+      files.set(name, { mode: previous.mode, bytes, size: bytes.length });
+      continue;
+    }
     if (operation.action === "create") {
       if (previous || operation.expected_digest !== null) fail(409, "baseline_changed", "A saved create requires an absent baseline file.");
     } else if (["replace", "delete"].includes(operation.action) && previous && digest.test(operation.expected_digest ?? "")) {

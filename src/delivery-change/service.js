@@ -397,6 +397,41 @@ export function createDeliveryChangeService({
     return projection;
   }
 
+  function recordedResult(recordId, event) {
+    const recordRef = `openproject://work_packages/${recordId}`;
+    return assertDeliveryChangeResult({
+      schema_version: 1,
+      command_id: event.command_id,
+      status: event.status,
+      replayed: true,
+      before: { record_ref: recordRef, source_revision: event.source_revision_before },
+      after: { record_ref: recordRef, source_revision: event.source_revision_after },
+      event,
+      receipt: event.receipt,
+      next_action: event.next_action,
+    });
+  }
+
+  async function readCommand({ commandId, deliveryId, operatorId }) {
+    const recordId = parseDeliveryId(deliveryId);
+    if (!recordId || typeof commandId !== "string" || commandId.length > 200 ||
+        !/^delivery-change-command:[A-Za-z0-9._:-]+$/.test(commandId)) {
+      throw new DeliveryChangeServiceError(
+        "delivery_change_command_reference_invalid", "A valid Delivery package and command id are required.",
+      );
+    }
+    try {
+      const events = (await readEvents(recordId)).filter((event) =>
+        event.delivery_id === deliveryId && event.command_id === commandId && event.operator_id === operatorId
+      );
+      const terminal = events.find((event) => event.status !== "accepted");
+      if (terminal) return { command_id: commandId, state: "completed", result: recordedResult(recordId, terminal) };
+      return { command_id: commandId, state: events.length ? "pending" : "unconfirmed" };
+    } catch (error) {
+      throw mapFailure(error);
+    }
+  }
+
   async function applyCommandInternal({ callerId, command: input, deliveryId }) {
     const command = assertDeliveryChangeCommand(input);
     if (command.delivery_id !== deliveryId) {
@@ -421,17 +456,7 @@ export function createDeliveryChangeService({
     }
     const existing = commandEvents.find((event) => event.status !== "accepted");
     if (existing) {
-      return assertDeliveryChangeResult({
-        schema_version: 1,
-        command_id: command.command_id,
-        status: existing.status,
-        replayed: true,
-        before: { record_ref: `openproject://work_packages/${recordId}`, source_revision: existing.source_revision_before },
-        after: { record_ref: `openproject://work_packages/${recordId}`, source_revision: existing.source_revision_after },
-        event: existing,
-        receipt: existing.receipt,
-        next_action: existing.next_action,
-      });
+      return recordedResult(recordId, existing);
     }
     if (commandEvents.length > 0) {
       throw new DeliveryChangeServiceError(
@@ -674,5 +699,5 @@ export function createDeliveryChangeService({
     }
   }
 
-  return { applyCommand, getProjection };
+  return { applyCommand, getProjection, readCommand };
 }
