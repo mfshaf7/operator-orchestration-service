@@ -16,7 +16,7 @@ const args = { callerId, operatorId, requestId: "bootstrap-request:workflow-owne
 function harness(t, { existingControls = false, configureVerification = false } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "oos-bootstrap-workflow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const authority = { schema_version: 1, owner_repo: owner, classification: "proposed", inventory_posture: null,
+  const authority = { schema_version: 1, authority_revision: "a".repeat(40), owner_repo: owner, classification: "proposed", inventory_posture: null,
     intake_entry_ref: { id: `repo:${owner}`, version: 1, digest: `sha256:${"a".repeat(64)}` },
     provider_repository: { provider: "github", provider_repository_id: "123456789", full_name: `mfshaf7-workspace/${owner}` },
     owner_purpose: "Synthetic source-only workflow owner; no control-plane or runtime authority.",
@@ -94,6 +94,7 @@ function harness(t, { existingControls = false, configureVerification = false } 
     async retirePristineResources() { calls.pristine++; return { complete: true, canonical_checkout_retained: true }; },
   } };
   const preparationService = {
+    async sourceAuthority() { return structuredClone(authority); },
     async prepare() { calls.preparation++; if (!eligible) throw new Error("Native proposed authority is no longer eligible"); return structuredClone(preparation); },
     async verify() { calls.verify++; if (!eligible) throw new Error("Native proposed authority is no longer eligible"); return structuredClone(authority); },
   };
@@ -114,10 +115,13 @@ function harness(t, { existingControls = false, configureVerification = false } 
   const store = createRepositoryOwnerBootstrapStore({ root });
   let profileChanged = false;
   const options = { callerOperatorBindings: { [callerId]: operatorId }, preparationService, sourceExecutor, platformOperations,
-    sourceReader: { async inspect() {
+    sourceReader: { requiresOwnerAuthority: true, async inspect({ ownerAuthority }) {
       calls.providerReads++;
       const actualProfile = { ...profile, ...(profileChanged ? { profile_id: "changed-actual-owner-profile-v2" } : {}) };
-      return { fetched_base: pr.merge_commit ?? "1".repeat(40), visibility: "public", default_branch: "main", observed_files: {
+      return { fetched_base: pr.merge_commit ?? "1".repeat(40), visibility: "public", default_branch: "main",
+        read_scope: "trusted-owner-controls", read_credential_issued: true, read_credential_revoked: true,
+        authority_ref: { canonical_authority: { kind: "legacy-git", repo: "workspace-governance", revision: ownerAuthority.authority_revision },
+          provider_repository: ownerAuthority.provider_repository }, observed_files: {
         ...completedFiles, "README.md": "# Actual owner purpose\n",
         "contracts/delivery-art-work-session/evidence-profile.json": JSON.stringify(actualProfile) } };
     } },

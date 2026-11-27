@@ -1,3 +1,4 @@
+import { githubReadHeaders, githubReadResponse } from "../github-read.js";
 import { readFile } from "node:fs/promises";
 import { inventoryError } from "./contracts.js";
 import { assertRepositoryRecordPublication } from "../source-publication-privacy.js";
@@ -17,6 +18,7 @@ export function createWorkspaceInventoryGitHubClient({
   owner,
   repositoryId,
   tokenFile,
+  readMetadata,
   apiBaseUrl = "https://api.github.com",
   sandbox = false,
   fetchImpl = globalThis.fetch,
@@ -30,29 +32,22 @@ export function createWorkspaceInventoryGitHubClient({
   }
   const prefix = `/repos/${owner}/workspace-governance`;
 
-  async function request(route, { method = "GET", body, absent = false, anonymous = false } = {}) {
-    if (anonymous && (method !== "GET" || !/^\/repositories\/[1-9][0-9]*$/.test(route))) throw inventoryError("provider_scope_invalid", "Anonymous reads are confined to exact repository visibility metadata.");
+  async function request(route, { method = "GET", body, absent = false } = {}) {
     let token;
-    if (!anonymous) {
-      try { token = (await readFile(tokenFile, "utf8")).trim(); }
-      catch { throw inventoryError("credential_unavailable", "The Platform-issued inventory credential is unavailable.", 503); }
-      if (!token.startsWith("ghs_")) throw inventoryError("credential_invalid", "Inventory promotion requires a Platform-issued installation token.", 503);
-    }
+    try { token = (await readFile(tokenFile, "utf8")).trim(); }
+    catch { throw inventoryError("credential_unavailable", "The Platform-issued inventory credential is unavailable.", 503); }
+    if (!token.startsWith("ghs_")) throw inventoryError("credential_invalid", "Inventory promotion requires a Platform-issued installation token.", 503);
+    const headers = githubReadHeaders(token);
     let response;
     try {
-      response = await fetchImpl(`${apiBaseUrl}${route}`, {
-        method,
-        redirect: "error",
-        signal: AbortSignal.timeout(15000),
-        headers: {
-          Accept: "application/vnd.github+json",
-          ...(!anonymous ? { Authorization: `Bearer ${token}` } : {}),
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(body ? { "Content-Type": "application/json" } : {}),
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-    } catch {
+      const url = `${apiBaseUrl}${route}`;
+      response = method === "GET"
+        ? await githubReadResponse(fetchImpl, url, { headers, timeoutMs: 15_000 })
+        : await fetchImpl(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
+            headers: { ...headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+            ...(body ? { body: JSON.stringify(body) } : {}) });
+    } catch (caught) {
+      if (caught?.code === "github_read_throttled") throw caught;
       throw inventoryError("provider_unavailable", "The inventory source provider is unavailable.", 503);
     }
     if (response.status === 404 && absent) return null;
@@ -93,7 +88,7 @@ export function createWorkspaceInventoryGitHubClient({
 
   const assertRecordPublication = sourceRepository => assertRepositoryRecordPublication({
     sourceRepository, readAuthority: assertIdentity,
-    readPublicMetadata: id => request(`/repositories/${id}`, { anonymous: true }), error: inventoryError,
+    readMetadata, error: inventoryError,
   });
 
   async function mainRevision() {

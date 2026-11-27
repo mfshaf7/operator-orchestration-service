@@ -161,7 +161,7 @@ test("provider client reports a missing canonical repository without mutation", 
   assert.equal(await client.find(request), null);
   assert.equal(calls.length, 1);
   assert.match(calls[0].url, /\/repos\/example-organization\/example-repository$/);
-  assert.equal(calls[0].options.method, undefined);
+  assert.equal(calls[0].options.method, "GET");
 });
 
 test("baseline completion uses only the provisioning identity and exact mutable settings", async () => {

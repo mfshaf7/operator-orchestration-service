@@ -1,3 +1,4 @@
+import { githubReadFailure } from "../github-read.js";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
 import { HttpError } from "../errors.js";
 import {
@@ -288,7 +289,7 @@ function providerFailureRecord({
   const failure = failureDetails({
     code: error?.code ?? "repository_provider_unavailable",
     message: error?.message ?? "Repository provider operation failed.",
-    retryable: error?.statusCode >= 500,
+    retryable: error?.statusCode >= 500 || Boolean(githubReadFailure(error)),
   });
   const receipt = custodyReceipt({
     clock,
@@ -324,6 +325,11 @@ export function createRepositoryCustodyService({
     }
     if (typeof providerClient?.lookup !== "function") throw new HttpError(503, "repository_provider_not_configured", "Repository lookup is not available.");
     return providerClient.lookup({owner, name});
+  }
+
+  async function readMetadata({ full_name, provider_repository_id }) {
+    const [owner, name] = full_name.split("/");
+    return providerClient.lookup({ owner, name, providerRepositoryId: provider_repository_id });
   }
 
   async function project(requestId) {
@@ -498,6 +504,7 @@ export function createRepositoryCustodyService({
   return {
     execute,
     lookup,
+    readMetadata,
     connections() { return providerClient.connections?.() ?? {schema_version: 1, default_connection_id: null, connections: []}; },
     project,
     async list({ cursor = null, limit = 25, ...selection } = {}) {
@@ -553,7 +560,7 @@ async function linkExisting({
       error,
       operation: {
         ...operation,
-        state: error?.statusCode >= 500 ? "recovery-required" : "command-issued",
+        state: error?.statusCode >= 500 || githubReadFailure(error) ? "recovery-required" : "command-issued",
       },
       request,
     });
@@ -745,7 +752,7 @@ async function provision({
       error,
       operation: {
         ...operation,
-        state: error?.statusCode >= 500 ? "recovery-required" : "command-issued",
+        state: error?.statusCode >= 500 || githubReadFailure(error) ? "recovery-required" : "command-issued",
       },
       request,
     });
@@ -780,7 +787,7 @@ async function provision({
       error,
       operation: {
         ...operation,
-        state: error?.statusCode >= 500 ? "recovery-required" : "provider-acknowledged",
+        state: error?.statusCode >= 500 || githubReadFailure(error) ? "recovery-required" : "provider-acknowledged",
       },
       providerReadback: readback ?? null,
       request,

@@ -11,7 +11,7 @@ import { createInstanceIntakeJournal, hasInstanceJournalState } from "../instanc
 import { createInstanceIntakeService } from "../instance-records/intake-service.js";
 import { createInstanceIntakeFacade } from "../instance-records/intake-facade.js";
 
-export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl, custodySourceReader, sourceOwnerReadinessReader }) {
+export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl, custodySourceReader, readMetadata, sourceOwnerReadinessReader }) {
   if (!config?.enabled) return null;
   if (!isWorkspaceOperationRuntimeEnabled(intakeManifest, config.profile)) {
     throw intakeError("activation_required", "Workspace Intake routine operation awaits the Console, Security, and Platform activation chain.", 503);
@@ -26,7 +26,7 @@ export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl, custody
     sourceOwnerReadinessReader,
     store,
     sourceClient: createWorkspaceIntakeSourceClient({ authorityRoot: config.authorityRoot, python: config.python,
-      provider: createWorkspaceIntakeGitHubClient({ owner: config.owner, repositoryId: config.repositoryId, tokenFile: config.tokenFile, fetchImpl }),
+      provider: createWorkspaceIntakeGitHubClient({ owner: config.owner, repositoryId: config.repositoryId, tokenFile: config.tokenFile, readMetadata, fetchImpl }),
     }),
     readinessClient: createWgcfWorkspaceIntakeClient({ baseUrl: config.wgcfBaseUrl, callerId: config.wgcfCallerId, callerSecret: config.wgcfCallerSecret,
       implementationRef: config.wgcfImplementationRef, serviceIdentityRef: config.wgcfServiceIdentityRef, fetchImpl,

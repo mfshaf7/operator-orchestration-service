@@ -1,3 +1,4 @@
+import { githubReadHeaders, githubReadResponse } from "../github-read.js";
 import { readFile } from "node:fs/promises";
 import { closureError } from "./contracts.js";
 
@@ -43,21 +44,17 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
     try { token = (await readFile(tokenFile, "utf8")).trim(); }
     catch { throw closureError("credential_unavailable", "The Platform-issued Prototype Closure credential is unavailable.", 503); }
     if (!token.startsWith("ghs_")) throw closureError("credential_invalid", "Prototype Closure requires a Platform-issued installation token.", 503);
+    const headers = githubReadHeaders(token);
     let response;
     try {
-      response = await fetchImpl(`${apiBaseUrl}${route}`, {
-        method,
-        redirect: "error",
-        signal: AbortSignal.timeout(20000),
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(body ? { "Content-Type": "application/json" } : {}),
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-    } catch {
+      const url = `${apiBaseUrl}${route}`;
+      response = method === "GET"
+        ? await githubReadResponse(fetchImpl, url, { headers, timeoutMs: 20_000 })
+        : await fetchImpl(url, { method, redirect: "error", signal: AbortSignal.timeout(20_000),
+            headers: { ...headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+            ...(body ? { body: JSON.stringify(body) } : {}) });
+    } catch (caught) {
+      if (caught?.code === "github_read_throttled") throw caught;
       throw closureError("provider_unavailable", "The Prototype Closure source provider is unavailable.", 503);
     }
     if (response.status === 404 && absent) return null;

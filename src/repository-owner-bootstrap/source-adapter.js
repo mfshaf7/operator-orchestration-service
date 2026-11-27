@@ -10,8 +10,9 @@ import { bootstrapCredentialProjection } from "./credentials.js";
 import { assertBootstrapSourceSession, bootstrapSourceChangeSet, bootstrapWorktreeRelativePath } from "./session.js";
 import { assertProposedSourceOwnerAuthority, inspectExistingSourceOwnerControls, planSourceOwnerBootstrap, sourceOwnerBootstrapPaths, trustedSourceOwnerValidationFiles, planSourceOwnerVerification } from "./scaffold.js";
 import { createCanonicalProposedSourceOwnerReader } from "./authority-reader.js";
-import { createPublicBootstrapSourceReader } from "./source-reader.js";
-import { createConfiguredHostInstanceSourceReader } from "../instance-records/host-source-reader.js";
+import { createBootstrapSourceReader } from "./private-source-reader.js";
+import { createPlatformOperationProviderClient } from "../platform-operation/provider-client.js";
+import { createConfiguredHostInstanceSourceReader, hostSourceConnection } from "../instance-records/host-source-reader.js";
 import { instanceSourceLocation, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
 import { createHostSourceGitReader } from "../instance-records/host-source-git.js";
 
@@ -23,7 +24,7 @@ const PROFILE = "contracts/delivery-art-work-session/evidence-profile.json";
 // Only finite trusted controls are executed, in an isolated control snapshot.
 // Existing project files and app commands are never executed by bootstrap.
 export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, stateRoot, env = process.env, execute = execFileSync,
-  authorityReader = null, publicSourceReader = createPublicBootstrapSourceReader(), privateGitReader = null,
+  authorityReader = null, protectedSourceReader = null, privateGitReader = null,
   identityFactory = options => createConfiguredAgentSourceIdentityAdapter({ env, ...options }) }) {
   if (!path.isAbsolute(workspaceRoot ?? "") || !path.isAbsolute(stateRoot ?? "") || realpathSync(workspaceRoot) !== workspaceRoot) {
     throw new TypeError("Bootstrap requires commissioned real absolute workspace and private executor state paths.");
@@ -33,6 +34,9 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
     authorityRoot: env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT?.trim() || path.join(workspaceRoot, "workspace-governance"),
     instanceReader: createConfiguredHostInstanceSourceReader({ env, execute }) });
   const privateGit = privateGitReader ?? createHostSourceGitReader({ workspaceRoot, env, execute });
+  const sourceReader = protectedSourceReader ?? createBootstrapSourceReader({ platformOperations: () => ({
+    inspectOwnerControls: ({ input }) => createPlatformOperationProviderClient(hostSourceConnection(env)).inspectOwnerControls(input),
+  }) });
   const git = (root, ...args) => String(execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
     env: environment, encoding: "utf8", timeout: 60_000, maxBuffer: 2_097_152, stdio: ["ignore", "pipe", "pipe"],
   }));
@@ -148,7 +152,8 @@ export function createRepositoryOwnerBootstrapSourceAdapter({ workspaceRoot, sta
         files.write(slot, { binding: ownerBinding, phase: "ready", destination_was_absent: true });
         return;
       }
-      const observed = await publicSourceReader.inspect({ providerRepository: providerRepository, paths });
+      const observed = await sourceReader.inspect({ providerRepository, paths, ownerAuthority: binding.assertAuthority(),
+        operation: binding.session?.subject.operation ?? "bootstrap" });
       if (observed.fetched_base !== fetchedBase || observed.visibility !== "public" || observed.default_branch !== "main") {
         fail("provider_source_changed", "The exact current public provider base changed before checkout; no source publication is authorized.");
       }

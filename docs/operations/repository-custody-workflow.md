@@ -41,6 +41,12 @@ credentials and complete the live evidence owned by ART `#1291` and `#1298`.
 
 ## Account Metadata Reader
 
+Intake and Inventory use the same connected-account metadata reader when a
+record would be published to a public destination. The check verifies exact
+repository identity and visibility. Missing connection or unverified visibility
+blocks publication. GitHub throttling preserves the original request and reports
+when it can be retried.
+
 The optional account metadata connection supports one GitHub personal account
 or organization with an explicit Metadata-read-only installation grant,
 including future repositories. Platform owns selection, short-lived token

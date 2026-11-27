@@ -15,11 +15,11 @@ const requireProof = (condition, message) => {
 // Read existing authority, never mint an owner-authored acceptance receipt.
 // Application files are compared as bounded Git objects; nothing is executed.
 export function createPrototypeClosureDurableOwnerReader({
-  artifactService, repositoryReader, publicSourceReader, studioSourceClient, deliveryApplicationService,
+  artifactService, repositoryReader, importSourceReader, studioSourceClient, deliveryApplicationService,
   callerOperatorBindings = {},
 }) {
   for (const [value, method] of [[artifactService, "resolveArtifact"],
-    [publicSourceReader, "inspectPrototypeImport"], [studioSourceClient, "readImportSource"],
+    [importSourceReader, "inspectPrototypeImport"], [studioSourceClient, "readImportSource"],
     [deliveryApplicationService, "readAcceptedReceipt"]]) {
     if (typeof value?.[method] !== "function") throw closureError("owner_readback_unavailable", "Durable owner readback requires its normal authority dependencies.", 503);
   }
@@ -64,7 +64,7 @@ export function createPrototypeClosureDurableOwnerReader({
         /^[1-9][0-9]*$/.test(landed.pr_url.slice(prPrefix.length)) &&
         landed.changed_files.includes(metadataPath) && delivery,
       "The finalized packet must cover this owner's reviewed source-import metadata and canonical merge.");
-      const imported = await publicSourceReader.inspectPrototypeImport({ providerRepository: provider,
+      const imported = await importSourceReader.inspectPrototypeImport({ ownerRepo: owner, providerRepository: provider,
         mergeCommit: landed.merge_commit, prototypeId,
         validateManifest: manifest => assertClosureArtifact(manifest, "source-import-manifest") });
       const manifest = assertClosureArtifact(imported.manifest, "source-import-manifest");

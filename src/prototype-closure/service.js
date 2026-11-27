@@ -1,3 +1,4 @@
+import { githubReadFailure } from "../github-read.js";
 import {
   assertClosureArtifact,
   assertResolvedAuthority,
@@ -428,7 +429,7 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
         await persistWorkflowFailure({
           transaction,
           record,
-          failure: {
+          failure: githubReadFailure(error) ?? {
             code: typeof error?.code === "string" && error.code.startsWith("prototype_closure_")
               ? error.code : "prototype_closure_dependency_unavailable",
             retryable: ["pending-readback", "pending-runtime-disposition"].includes(record.status) || !error?.statusCode || error.statusCode >= 500,
@@ -441,6 +442,7 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
           clock,
         });
         audit?.emit({ actor: callerId, event_type: "prototype.closure.advance.failed", outcome: record.status, request_id: requestId, code: record.failure.code });
+        if (githubReadFailure(error)) throw error;
         if (typeof error?.code === "string" && error.code.startsWith("prototype_closure_")) throw error;
         throw closureError("dependency_unavailable", record.failure.message, 503);
       }

@@ -1,6 +1,7 @@
 import { assertGovernedProductProjection } from "./governed-product-contracts.js";
 import { isIP } from "node:net";
 import { HttpError } from "../errors.js";
+import { githubReadThrottled } from "../github-read.js";
 import { assertDevIntegrationProfileProjection } from "./dev-integration-contracts.js";
 import {
   assertPlatformOperationCatalog,
@@ -57,6 +58,14 @@ export function createPlatformOperationProviderClient({
     }
     const payload = await boundedJson(response);
     if (!response.ok) {
+      if (response.status === 429 && payload?.code === "github_read_throttled") {
+        const retryAt = Date.parse(payload.retry_at);
+        if (Number.isFinite(retryAt)) throw githubReadThrottled(retryAt);
+      }
+      if (response.status === 403 && payload?.code === "github_source_connection_required") {
+        throw new HttpError(403, "github_source_connection_required",
+          "Check that the GitHub Source App has access to this repository, then retry the same request.");
+      }
       const providerFailure = response.status === 401 || response.status === 403
         ? {
             code: "platform_operation_provider_forbidden",
@@ -107,6 +116,9 @@ export function createPlatformOperationProviderClient({
     async inspectOwnerControls(input) {
       // A bounded private read, not a command or an operation journal payload.
       return request("/v1/console-operations/source-controls/inspect", { body: input, method: "POST", timeoutMs: 90000 });
+    },
+    async inspectPrototypeImport(input) {
+      return request("/v1/console-operations/prototype-import/inspect", { body: input, method: "POST", timeoutMs: 90_000 });
     },
     async getGovernedProducts(query = {}) {
       return assertGovernedProductProjection(await request(`/v1/console-operations/governed-products?${new URLSearchParams(query)}`));

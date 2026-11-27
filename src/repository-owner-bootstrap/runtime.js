@@ -8,7 +8,6 @@ import { createWorkspaceIntakeGitHubClient } from "../workspace-intake/provider-
 import { intakeManifest } from "../workspace-intake/contracts.js";
 import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 import { HttpError } from "../errors.js";
-import { createPublicBootstrapSourceReader } from "./source-reader.js";
 import { createBootstrapSourceReader } from "./private-source-reader.js";
 import { createRepositoryOwnerBootstrapPreparation } from "./preparation.js";
 import { createRepositoryOwnerBootstrapStore } from "./store.js";
@@ -32,19 +31,18 @@ export function createRepositoryOwnerBootstrapFacade({ service, preparations, op
 
 // Reuse the existing source-work/Intake composition and exact Security/Platform
 // tree gate. A second bootstrap enable flag or model profile is not authority.
-export function createRepositoryOwnerBootstrapRuntime({ sourceConfig, intakeConfig, custodySourceReader, platformOperations, fetchImpl, env = process.env }) {
+export function createRepositoryOwnerBootstrapRuntime({ sourceConfig, intakeConfig, custodySourceReader, readMetadata, platformOperations, fetchImpl, env = process.env }) {
   if (!sourceConfig?.sourceRealization?.enabled || !sourceConfig.executorId || !sourceConfig.executorSecret || !sourceConfig.executorSocketPath ||
       !Object.keys(sourceConfig.callerOperatorBindings ?? {}).length || !intakeConfig?.enabled || typeof custodySourceReader !== "function" ||
       !isWorkspaceOperationRuntimeEnabled(intakeManifest, intakeConfig.profile)) return null;
   if (intakeConfig.profile !== "dev-integration") throw new HttpError(503, "repository_owner_bootstrap_profile_not_admitted", "Bootstrap is confined to the reviewed local dev-integration composition.");
   const legacySource = createWorkspaceIntakeSourceClient({ authorityRoot: intakeConfig.authorityRoot, python: intakeConfig.python,
-    provider: createWorkspaceIntakeGitHubClient({ owner: intakeConfig.owner, repositoryId: intakeConfig.repositoryId, tokenFile: intakeConfig.tokenFile, fetchImpl }) });
+    provider: createWorkspaceIntakeGitHubClient({ owner: intakeConfig.owner, repositoryId: intakeConfig.repositoryId, tokenFile: intakeConfig.tokenFile, readMetadata, fetchImpl }) });
   const instance = intakeConfig.instanceRecords;
   const sourceClient = instance?.instanceId ? createInstanceSourceOwnerClient({ enabled: instance.enabled, legacy: legacySource,
     reader: createInstanceRecordReader({ baseUrl: instance.baseUrl, instanceId: instance.instanceId,
       callerId: intakeConfig.wgcfCallerId, callerSecret: intakeConfig.wgcfCallerSecret, fetchImpl }) }) : legacySource;
-  const publicReader = createPublicBootstrapSourceReader({ fetchImpl });
-  const sourceReader = instance?.instanceId ? createBootstrapSourceReader({ publicReader, platformOperations }) : publicReader;
+  const sourceReader = createBootstrapSourceReader({ platformOperations });
   const preparations = createRepositoryOwnerBootstrapPreparation({ callerOperatorBindings: sourceConfig.callerOperatorBindings,
     custodySourceReader, intakeSourceClient: sourceClient, sourceReader });
   const service = createRepositoryOwnerBootstrapService({ callerOperatorBindings: sourceConfig.callerOperatorBindings, preparationService: preparations,

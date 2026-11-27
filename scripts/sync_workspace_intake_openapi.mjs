@@ -183,7 +183,8 @@ source = upsertOpenApiPath(source, "/v1/workspace-intake/requests", {
 source = upsertOpenApiPath(source, "/v1/workspace-intake/requests/{request_id}", { get: { ...common, operationId: "readWorkspaceIntake", summary: "Read caller-owned intake progress, findings, review and receipts", parameters: [requestId], responses: responses() } });
 for (const action of ["continue", "cancel"]) source = upsertOpenApiPath(source, `/v1/workspace-intake/requests/{request_id}/${action}`, { post: { ...common,
   operationId: `${action}WorkspaceIntake`, summary: `${action === "cancel" ? "Cancel" : "Continue"} an acknowledged intake workflow`, parameters: [requestId],
-  requestBody: { description: "No replacement input; continue or cancel the immutable acknowledged command.", required: true, content: { "application/json": { schema: object({}), example: {} } } }, responses: responses(),
+  requestBody: { description: "No replacement input; continue or cancel the immutable acknowledged command.", required: true, content: { "application/json": { schema: object({}), example: {} } } },
+  responses: { ...responses(), ...(action === "continue" ? { 429: { description: "GitHub throttled the repository visibility check. Retry the same request after the reported time." } } : {}) },
 } });
 if (process.argv.includes("--check")) {
   if (source !== readFileSync(openapiPath, "utf8")) throw new Error("Workspace Intake OpenAPI projection is stale.");

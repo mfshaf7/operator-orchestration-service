@@ -338,7 +338,7 @@ synchronized = upsertPlainOpenApiPath(synchronized, "/v1/repository-custody/prov
   parameters:["owner","name"].map(name=>({name,in:"query",required:true,schema:{type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"}})),
   responses:{200:{description:"Exact provider identity metadata.",content:{"application/json":{schema:{$ref:"#/components/schemas/RepositoryProviderLookupV1"},example:{schema_version:1,provider:"github",provider_host:"github.com",provider_repository_id:"123456789",owner:"example-organization",name:"example-source",canonical_url:"https://github.com/example-organization/example-source",visibility:"public",provider_lifecycle_state:"active",observed_at:"2026-11-03T10:00:00Z"}}}},
     400:errorResponse("Invalid coordinates or unsupported query."),403:errorResponse("Caller or provider access denied."),404:errorResponse("Repository not found or not accessible."),
-    409:errorResponse("Provider returned a different identity."),503:errorResponse("Runtime or provider read identity unavailable.")},
+    409:errorResponse("Provider returned a different identity."),429:errorResponse("GitHub throttled the repository read."),503:errorResponse("Runtime or provider read identity unavailable.")},
   "x-oos-owner":"operator-orchestration-service","x-oos-primary-caller":"governance-operations-console","x-oos-surface":"operator-facing","x-oos-workflow-family":"repository-custody",
 }});
 

@@ -1,3 +1,4 @@
+import { githubReadHeaders, githubReadResponse } from "../github-read.js";
 import { readFile } from "node:fs/promises";
 import { intakeError } from "./contracts.js";
 import { assertRepositoryRecordPublication } from "../source-publication-privacy.js";
@@ -6,30 +7,30 @@ const SHA = /^[0-9a-f]{40}$/;
 const BRANCH = /^intake\/[0-9a-f]{64}$/;
 const REGISTER = "contracts/intake-register.yaml";
 
-export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFile, apiBaseUrl = "https://api.github.com", sandbox = false, fetchImpl = globalThis.fetch }) {
+export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFile, readMetadata, apiBaseUrl = "https://api.github.com", sandbox = false, fetchImpl = globalThis.fetch }) {
   const url = new URL(apiBaseUrl);
   if (apiBaseUrl !== "https://api.github.com" && !(sandbox && url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) {
     throw intakeError("provider_destination_invalid", "Intake provider destination is not admitted.", 503);
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(owner) || !/^\d+$/.test(String(repositoryId))) throw intakeError("provider_identity_invalid", "Configure the exact authority repository identity.", 503);
   const prefix = `/repos/${owner}/workspace-governance`;
-  async function request(route, { method = "GET", body, absent = false, anonymous = false } = {}) {
-    if (anonymous && (method !== "GET" || !/^\/repositories\/[1-9][0-9]*$/.test(route))) {
-      throw intakeError("provider_scope_invalid", "Anonymous reads are confined to exact repository visibility metadata.");
-    }
+  async function request(route, { method = "GET", body, absent = false } = {}) {
     let token;
-    if (!anonymous) {
-      try { token = (await readFile(tokenFile, "utf8")).trim(); } catch { throw intakeError("credential_unavailable", "The Platform-issued intake credential is unavailable.", 503); }
-      if (!token.startsWith("ghs_")) throw intakeError("credential_invalid", "Intake requires a Platform-issued installation token.", 503);
-    }
+    try { token = (await readFile(tokenFile, "utf8")).trim(); } catch { throw intakeError("credential_unavailable", "The Platform-issued intake credential is unavailable.", 503); }
+    if (!token.startsWith("ghs_")) throw intakeError("credential_invalid", "Intake requires a Platform-issued installation token.", 503);
+    const headers = githubReadHeaders(token);
     let response;
     try {
-      response = await fetchImpl(`${apiBaseUrl}${route}`, {
-        method, redirect: "error", signal: AbortSignal.timeout(15000),
-        headers: { Accept: "application/vnd.github+json", ...(!anonymous ? { Authorization: `Bearer ${token}` } : {}), "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-    } catch { throw intakeError("provider_unavailable", "The intake source provider is unavailable.", 503); }
+      const url = `${apiBaseUrl}${route}`;
+      response = method === "GET"
+        ? await githubReadResponse(fetchImpl, url, { headers, timeoutMs: 15_000 })
+        : await fetchImpl(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
+            headers: { ...headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+            ...(body ? { body: JSON.stringify(body) } : {}) });
+    } catch (caught) {
+      if (caught?.code === "github_read_throttled") throw caught;
+      throw intakeError("provider_unavailable", "The intake source provider is unavailable.", 503);
+    }
     if (response.status === 404 && absent) return null;
     if (!response.ok) throw intakeError("provider_rejected", "The source provider did not accept the intake operation.", response.status >= 500 || response.status === 429 ? 503 : 409);
     const reader = response.body.getReader();
@@ -55,7 +56,7 @@ export function createWorkspaceIntakeGitHubClient({ owner, repositoryId, tokenFi
   }
   const assertRecordPublication = sourceRepository => assertRepositoryRecordPublication({
     sourceRepository, readAuthority: assertIdentity,
-    readPublicMetadata: id => request(`/repositories/${id}`, { anonymous: true }), error: intakeError,
+    readMetadata, error: intakeError,
   });
   async function mainRevision() {
     await assertIdentity();

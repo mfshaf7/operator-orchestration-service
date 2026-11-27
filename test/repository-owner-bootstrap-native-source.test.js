@@ -180,7 +180,7 @@ function harness(t, { existingControls = false, repairControls = false, privateR
   } : null;
   const adapter = createRepositoryOwnerBootstrapSourceAdapter({ privateGitReader, workspaceRoot, stateRoot: path.join(root, "private-checkout-state"), execute,
     authorityReader: readAuthority,
-    publicSourceReader: { async inspect() { providerReadHook?.(); return { fetched_base: base, visibility: "public", default_branch: "main", observed_files: observedFiles }; } },
+    protectedSourceReader: { async inspect() { providerReadHook?.(); return { fetched_base: base, visibility: "public", default_branch: "main", observed_files: observedFiles }; } },
     identityFactory: options => {
       calls.identityFactories++;
       assert.equal(existingControls, false, "Existing controls must not construct or borrow a source identity");

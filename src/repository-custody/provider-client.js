@@ -1,5 +1,6 @@
 import { credentialFile, installationCredentialFile, readerCredentialFile } from "./credential-files.js";
 import { HttpError } from "../errors.js";
+import { githubReadHeaders, githubReadResponse } from "../github-read.js";
 import { repositoryConnections } from "./connections.js";
 import {
   assertRepositoryProviderReadback,
@@ -19,9 +20,7 @@ function readbackId(request) {
 
 function providerHeaders(installationToken, { json = false } = {}) {
   return {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${installationToken}`,
-    "X-GitHub-Api-Version": "2022-11-28",
+    ...githubReadHeaders(installationToken),
     ...(json ? { "Content-Type": "application/json" } : {}),
   };
 }
@@ -222,8 +221,12 @@ export function createGitHubRepositoryProviderClient({
 
   async function providerRequest(url, options = {}) {
     try {
+      if (options.method === undefined || options.method === "GET") {
+        return await githubReadResponse(fetchImpl, url, { ...options, timeoutMs: 10_000, now: clock().getTime() });
+      }
       return await fetchImpl(url, { ...options, redirect: "error" });
-    } catch {
+    } catch (error) {
+      if (error?.code === "github_read_throttled") throw error;
       throw new HttpError(
         503,
         "repository_provider_unavailable",
@@ -310,7 +313,7 @@ export function createGitHubRepositoryProviderClient({
 
   return {
     connections() { if (connectionError) throw connectionError; return connected?.projection() ?? {schema_version: 1, default_connection_id: null, connections: []}; },
-    async lookup({ owner, name }) {
+    async lookup({ owner, name, providerRepositoryId = null }) {
       const coordinate = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
       if (typeof owner !== "string" || typeof name !== "string" || !coordinate.test(owner) || !coordinate.test(name) || name.toLowerCase().endsWith(".git")) {
         throw new HttpError(400, "repository_provider_lookup_invalid", "Use the organization and repository name from a GitHub repository URL.");
@@ -318,9 +321,15 @@ export function createGitHubRepositoryProviderClient({
       if (!connected && readAccount && owner.toLowerCase() !== readAccount.toLowerCase()) {
         throw new HttpError(403, "repository_provider_owner_not_admitted", "The repository is outside the connected account.");
       }
+      if (providerRepositoryId !== null && !/^[1-9][0-9]*$/.test(providerRepositoryId)) {
+        throw new HttpError(400, "repository_provider_lookup_invalid", "Provide the exact GitHub repository identifier.");
+      }
       const context = { action: "link-existing", target: {owner, provider: "github", provider_host: "github.com"} };
       assertConfigured(context);
-      const response = await providerRequest(`${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
+      const route = providerRepositoryId === null
+        ? `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`
+        : `/repositories/${providerRepositoryId}`;
+      const response = await providerRequest(`${baseUrl}${route}`,
         { method: "GET", headers: providerHeaders(installationToken(context)), signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw providerFailure(response);
       const body = await readBoundedJson(response);
@@ -331,6 +340,8 @@ export function createGitHubRepositoryProviderClient({
         }
       }
       if (!/^[1-9][0-9]*$/.test(String(body?.id ?? "")) || typeof body?.owner?.login !== "string" || typeof body?.name !== "string" ||
+          (providerRepositoryId !== null && (providerRepositoryId !== String(body.id) ||
+            !["public", "private", "internal"].includes(body.visibility) || body.private !== (body.visibility !== "public"))) ||
           body?.owner?.login?.toLowerCase() !== owner.toLowerCase() || body?.name?.toLowerCase() !== name.toLowerCase() ||
           body?.html_url !== `https://github.com/${body.owner.login}/${body.name}` ||
           typeof body.archived !== "boolean" ||

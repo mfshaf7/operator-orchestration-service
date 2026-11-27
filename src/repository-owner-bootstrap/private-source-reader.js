@@ -21,40 +21,53 @@ export function nativeSourceAuthorityRef(authority) {
 
 export function qualifiedOwnerSource(source, authority) {
   if (source?.default_branch !== "main") return false;
-  if (authority?.canonical_authority?.kind !== "internal-instance-record") return source.visibility === "public" && source.read_credential_issued !== true;
-  return ["public", "private", "internal"].includes(source.visibility) && source.read_scope === "trusted-owner-controls" &&
+  const native = authority?.canonical_authority?.kind === "internal-instance-record";
+  return (native ? ["public", "private", "internal"].includes(source.visibility) : source.visibility === "public")
+    && source.read_scope === "trusted-owner-controls" &&
     source.read_credential_issued === true && source.read_credential_revoked === true && object(source.authority_ref) &&
-    canonicalDigest(source.authority_ref) === canonicalDigest(nativeSourceAuthorityRef(authority));
+    canonicalDigest(source.authority_ref) === canonicalDigest(native ? nativeSourceAuthorityRef(authority) : legacySourceAuthorityRef(authority));
 }
 
-// No token, provider URL or arbitrary source file is accepted by this adapter.
-// Native records use the protected Platform reader; retained Git proof alone
-// selects the existing public adapter. Unavailable native access never does.
-export function createBootstrapSourceReader({ publicReader, platformOperations }) {
+function legacySourceAuthorityRef(authority) {
+  const revision = authority?.authority_revision;
+  const canonical = { kind: "legacy-git", repo: "workspace-governance", revision };
+  if (!/^[0-9a-f]{40}$/.test(revision ?? "") || !object(authority.provider_repository) ||
+      (authority.canonical_authority !== undefined && canonicalDigest(authority.canonical_authority) !== canonicalDigest(canonical))) {
+    fail("The source reader requires a current retained authority and exact repository.");
+  }
+  return { canonical_authority: canonical, provider_repository: authority.provider_repository };
+}
+
+// The protected Platform reader accepts bounded controls under current authority.
+export function createBootstrapSourceReader({ platformOperations }) {
   return {
     requiresOwnerAuthority: true,
-    inspectPrototypeImport: (...args) => publicReader.inspectPrototypeImport(...args),
     async inspect({ providerRepository, paths, ownerAuthority, callerId, operatorId, operation = "bootstrap" }) {
-      if (ownerAuthority?.canonical_authority?.kind !== "internal-instance-record") {
-        if (ownerAuthority?.canonical_authority !== undefined && ownerAuthority.canonical_authority.kind !== "legacy-git") fail("The source storage authority is not recognized.");
-        if (ownerAuthority.canonical_authority?.kind === "legacy-git" && (ownerAuthority.canonical_authority.repo !== "workspace-governance" || ownerAuthority.canonical_authority.revision !== ownerAuthority.authority_revision)) fail("The legacy source revision changed during its read.");
-        if (!/^[0-9a-f]{40}$/.test(ownerAuthority?.authority_revision ?? "")) fail("The source reader has no positive current legacy authority.");
-        return publicReader.inspect({ providerRepository, paths });
-      }
+      const native = ownerAuthority?.canonical_authority?.kind === "internal-instance-record";
+      const reference = native ? nativeSourceAuthorityRef(ownerAuthority) : legacySourceAuthorityRef(ownerAuthority);
       if (!Array.isArray(paths) || !paths.length || paths.some(path => !SOURCE_OWNER_BOOTSTRAP_PATHS.includes(path)) || new Set(paths).size !== paths.length ||
           !["bootstrap", "configure-verification"].includes(operation) || canonicalDigest(providerRepository) !== canonicalDigest(ownerAuthority.provider_repository)) {
         fail("Select only the exact current repository and trusted owner control files.");
       }
       const platform = typeof platformOperations === "function" ? platformOperations() : platformOperations;
       if (typeof platform?.inspectOwnerControls !== "function") fail("The protected private-source connection is not commissioned.");
-      const requestedPaths = [...paths].sort(), reference = nativeSourceAuthorityRef(ownerAuthority);
+      const requestedPaths = [...paths].sort();
       const input = { schema_version: 1, owner_repo: ownerAuthority.owner_repo, operation, paths: requestedPaths, authority_ref: reference };
-      const source = await platform.inspectOwnerControls({ callerId, operatorId, input });
+      let source;
+      try {
+        source = await platform.inspectOwnerControls({ callerId, operatorId, input });
+      } catch (error) {
+        if (error?.code === "github_read_throttled") {
+          throw new HttpError(429, "repository_owner_bootstrap_provider_throttled", error.message, error.details);
+        }
+        throw error;
+      }
       if (!keys(source, ["schema_version", "read_scope", "read_credential_issued", "read_credential_revoked", "owner_repo", "operation", "authority_ref", "provider_repository", "fetched_base", "observed_files", "visibility", "default_branch"]) ||
           source.schema_version !== 1 || source.read_scope !== "trusted-owner-controls" || source.owner_repo !== ownerAuthority.owner_repo || source.operation !== operation ||
           source.read_credential_issued !== true || source.read_credential_revoked !== true ||
           canonicalDigest(source.authority_ref) !== canonicalDigest(reference) || canonicalDigest(source.provider_repository) !== canonicalDigest(providerRepository) ||
           !/^[0-9a-f]{40}$/.test(source.fetched_base ?? "") || !["public", "private", "internal"].includes(source.visibility) || source.default_branch !== "main" ||
+          (!native && source.visibility !== "public") ||
           !keys(source.observed_files, requestedPaths) || Buffer.byteLength(JSON.stringify(source)) > 524288 ||
           Object.values(source.observed_files).some(value => value !== null && (typeof value !== "string" || !value.isWellFormed() || Buffer.byteLength(value) > 65536))) {
         fail("Private source inspection did not prove its exact current authority, files and read boundary.");

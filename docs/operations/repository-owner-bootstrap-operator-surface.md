@@ -100,6 +100,12 @@ the checkpoint or repin contract bundles to bypass a missing Platform refresh.
 
 ## Prepare and inspect
 
+Platform verifies the current owner registration and reads only the requested
+control files with a temporary one-repository Source App grant. Retained Git
+registrations require verified public visibility. Native registration uses its
+installation-bound authority. Platform returns the controls after revoking the
+read grant. A rate-limited read can be resumed on the original request.
+
 1. Complete the existing canonical custody and proposed Intake decisions.
 2. `POST /v1/repository-owner-bootstrap/preparations` with the exact owner key,
    custody request id, nullable owner evidence profile, optional project marker

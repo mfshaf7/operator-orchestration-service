@@ -54,7 +54,7 @@ function fixture(change = () => {}) {
       assert.deepEqual(reference, { uri: review.custody.uri, digest: review.integrity.content_digest });
       state.checked.push("native-artifact"); return { artifact: review };
     } },
-    publicSourceReader: { async inspectPrototypeImport({ providerRepository, mergeCommit, prototypeId, validateManifest }) {
+    importSourceReader: { async inspectPrototypeImport({ providerRepository, mergeCommit, prototypeId, validateManifest }) {
       assert.deepEqual(providerRepository, provider); assert.equal(mergeCommit, merge); assert.equal(prototypeId, "sample-tool");
       validateManifest(manifest); state.checked.push("public-canonical-merge");
       return { manifest, metadata_digest: `sha256:${"6".repeat(64)}`, regularFile(target) {

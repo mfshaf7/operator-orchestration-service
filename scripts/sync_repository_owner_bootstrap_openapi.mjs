@@ -78,7 +78,7 @@ export const ownerBootstrapSchemas = {
     model_invoked: no, app_import: no, canonical_mutation: no, runtime_activation: no, plan_digest: digest }, ["schema_version", "workflow_id", "owner_repo", "provider_repository", "intake_entry_ref", "fetched_base", "template", "evidence_profile_digest", "application_markers", "ci_selected", "requires_workflow_permission", "source_change_required", "files", "model_invoked", "app_import", "canonical_mutation", "runtime_activation", "plan_digest"]),
   OwnerBootstrapPreparation: { oneOf: [
     closed(preparationFields, Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key))),
-    closed({ ...preparationFields, owner_authority: nativeAuthority, credential_issued: { const: true },
+    closed({ ...preparationFields, owner_authority: { oneOf: [...authority.oneOf, ...nativeAuthority.oneOf] }, credential_issued: { const: true },
       read_authorization: closed({ scope: { const: "trusted-owner-controls" }, credential_revoked: { const: true } }) },
       [...Object.keys(preparationFields).filter(key => !["operation", "existing_owner_controls", "next_action"].includes(key)), "read_authorization"]),
   ] },
@@ -118,7 +118,8 @@ const plan = planSourceOwnerBootstrap({ authority: exampleAuthority, fetchedBase
 const { schema_version: _schema, owner_purpose: _purpose, ...selectedAuthority } = exampleAuthority;
 const preparationBody = { schema_version: 1, workflow_id: "repository-owner-bootstrap-preparation", caller_id: "example-console", operator_id: "operator:example",
   decision_ref: input.decision_ref, custody_request_id: input.custody_request_id, custody_receipt_digest: sha,
-  owner_authority: { ...selectedAuthority, custody_receipt_digest: sha }, plan, authorization: "preparation-only", credential_issued: false,
+  owner_authority: { ...selectedAuthority, custody_receipt_digest: sha }, plan, authorization: "preparation-only", credential_issued: true,
+  read_authorization: { scope: "trusted-owner-controls", credential_revoked: true },
   checkout_created: false, canonical_mutation: false, runtime_activation: false };
 const preparation = { ...preparationBody, preparation_digest: canonicalDigest(preparationBody) };
 const nativePreparationBody = { ...preparationBody, owner_authority: { ...preparationBody.owner_authority,
@@ -169,10 +170,10 @@ const paths = {
   "/v1/repository-owner-bootstrap/requests/{request_id}/publish": { post: post("Publish", "OwnerBootstrapPublish", { command: { ...control, expected_pull_request: null }, source_intent_ref: source }) },
 };
 paths["/v1/repository-owner-bootstrap/preparations"].post.responses["429"] = {
-  description: "The GitHub public read limit was reached. The optional retry time identifies when another provider check can run.",
+  description: "GitHub throttled the protected repository read. Resume the original request after the reported retry time.",
   content: { "application/json": { schema: ref("ErrorResponse"), example: {
     error: "repository_owner_bootstrap_provider_throttled",
-    message: "GitHub temporarily limited public repository reads.",
+    message: "GitHub temporarily limited repository reads. Retry the same request after 2026-11-22T14:00:00.000Z.",
     details: { retry_at: "2026-11-22T14:00:00.000Z" },
   } } },
 };
