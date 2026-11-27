@@ -563,10 +563,10 @@ function normalizeRegexRoute(literal) {
     return pattern.replace("[^/]+", "{workflow_id}");
   }
   if (pattern.startsWith("/v1/delivery-initiatives/")) {
-    return pattern.replace("[^/]+", "{delivery_id}");
+    return pattern.replace("[^/]+", "{delivery_id}").replace("/commands/[^/]+", "/commands/{command_id}");
   }
   if (pattern.startsWith("/v1/delivery-work-items/")) {
-    return pattern.replace("[^/]+", "{work_item_id}");
+    return pattern.replace("[^/]+", "{work_item_id}").replace("/commands/[^/]+", "/commands/{command_id}");
   }
   if (pattern.startsWith("/v1/delivery-work-design/")) {
     return pattern.replace("[^/]+", "{package_id}");

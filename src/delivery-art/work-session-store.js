@@ -16,6 +16,7 @@ import lockfile from "proper-lockfile";
 import { instanceSourceWorktreePrefix, sourceWorktreeRelativePath } from "../instance-records/source-location.js";
 import { canonicalDigest } from "./canonical-json.js";
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
+import { syncPrivateDirectory, writePrivateJson } from "../persistence/private-file-transactions.js";
 
 const INDEX = Object.freeze({ aliases: {}, schema_version: 1 });
 const FORBIDDEN_KEY = /(credential|password|secret|token)/i;
@@ -23,6 +24,8 @@ const SAFE_REFERENCE_KEY = /(?:credential|password|secret|token)_ref$/i;
 const LOCK_INITIALIZATION_GRACE_MS = 5_000;
 const LOCK_STALE_MS = 10_000;
 const LOCK_UPDATE_MS = 2_000;
+const SOURCE_INTENT_BINDING = "artifacts/source-intent.json";
+const PRIVATE_SOURCE_ARTIFACT = /^(?:source-realization|draft-(?:ack|history)-[a-f0-9]{64}|artifacts\/source-intent)\.json$/;
 
 export function isForbiddenCoordinationField(key, value) {
   if (!FORBIDDEN_KEY.test(key)) return false;
@@ -67,11 +70,24 @@ function readJson(filePath, { missing = null } = {}) {
   try {
     return JSON.parse(readFileSync(filePath, "utf8"));
   } catch (error) {
+    if (error.code === "ENOENT") return missing;
     throw new DeliveryArtWorkSessionStoreError(
       "delivery_art_work_session_state_corrupt",
       `Delivery ART work-session state is not valid JSON: ${filePath}`,
       { cause: error.message },
     );
+  }
+}
+
+function persistPrivate(filePath, value) {
+  const directory = path.dirname(filePath);
+  const created = mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writePrivateJson(filePath, value);
+  if (created) {
+    for (let parent = path.dirname(directory); ; parent = path.dirname(parent)) {
+      syncPrivateDirectory(parent);
+      if (parent === path.dirname(created)) break;
+    }
   }
 }
 
@@ -243,6 +259,10 @@ export function createDeliveryArtWorkSessionStore({
     return path.join(sessionDirectory(sessionId), "session.json");
   }
 
+  function preparedSessionPath(sessionId) {
+    return path.join(sessionDirectory(sessionId), "prepared-session.json");
+  }
+
   function decisionPath(workItemId) {
     return path.join(root, "decisions", `${storageName(workItemId)}.json`);
   }
@@ -321,6 +341,31 @@ export function createDeliveryArtWorkSessionStore({
       );
     }
     return resolved;
+  }
+
+  function privateSourcePath(session, relativeFile) {
+    return path.join(root, "private-source", storageName(session.session_id), relativeFile);
+  }
+
+  function retainLegacySource(session) {
+    const directory = sessionDirectory(session.session_id);
+    for (const name of readdirSync(directory).filter(name => PRIVATE_SOURCE_ARTIFACT.test(name))) {
+      const target = privateSourcePath(session, name);
+      const source = readJson(artifactPath(session, name));
+      if (canonicalDigest(readJson(target)) !== canonicalDigest(source)) persistPrivate(target, source);
+    }
+  }
+
+  function replacementPath(sessionId) {
+    return path.join(root, "session-replacements", `${storageName(sessionId)}.json`);
+  }
+
+  function readReplacement(sessionId) {
+    return readJson(replacementPath(sessionId));
+  }
+
+  function predecessorPath(sessionId) {
+    return path.join(root, "session-replacement-predecessors", `${storageName(sessionId)}.json`);
   }
 
   function readIndex() {
@@ -420,49 +465,53 @@ export function createDeliveryArtWorkSessionStore({
     return session;
   }
 
-  function readBySessionId(sessionId) {
-    return readSessionFile(sessionPath(sessionId));
+  function readBySessionId(sessionId, replacementFor = readReplacement) {
+    if (replacementFor(sessionId)?.state === "activated") return null;
+    const predecessor = readJson(predecessorPath(sessionId));
+    if (predecessor) {
+      const transition = replacementFor(predecessor.session_id);
+      if (transition?.state !== "activated" || transition.replacement.session_id !== sessionId) return null;
+    }
+    return readSessionFile(sessionPath(sessionId)) ?? (predecessor ? readSessionFile(preparedSessionPath(sessionId)) : null);
   }
 
-  function listSessions() {
+  function listSessions(replacementFor = readReplacement) {
     const sessionsRoot = path.join(root, "sessions");
     if (!existsSync(sessionsRoot)) {
       return [];
     }
     return readdirSync(sessionsRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) =>
-        readSessionFile(path.join(sessionsRoot, entry.name, "session.json")))
+      .map((entry) => readBySessionId(decodeURIComponent(entry.name), replacementFor))
       .filter(Boolean)
       .sort((left, right) => left.session_id.localeCompare(right.session_id));
   }
 
-  function discoverSessionIds(alias) {
-    return listSessions()
-      .filter((session) => session?.aliases.includes(alias))
-      .map((session) => session.session_id);
-  }
-
   function readByAlias(alias) {
-    const index = readIndex();
-    const indexed = indexedSessionIds(index, alias);
-    const matches = [...new Set([
-      ...indexed,
-      ...discoverSessionIds(alias),
-    ])]
-      .filter((sessionId) => readBySessionId(sessionId) !== null)
-      .sort();
+    const indexed = indexedSessionIds(readIndex(), alias);
+    const observedReplacements = new Map();
+    const replacementFor = sessionId => {
+      if (!observedReplacements.has(sessionId)) observedReplacements.set(sessionId, readReplacement(sessionId));
+      return observedReplacements.get(sessionId);
+    };
+    let matches = listSessions(replacementFor).filter(session => session.aliases.includes(alias));
+    // A concurrent reader may see the predecessor just as its inactive
+    // directory is retired. Recheck visibility against a fresh marker view.
+    if (!matches.length && indexed.length && observedReplacements.size) {
+      observedReplacements.clear();
+      matches = listSessions(replacementFor).filter(session => session.aliases.includes(alias));
+    }
     if (matches.length > 1) {
       throw new DeliveryArtWorkSessionStoreError(
         "delivery_art_work_session_alias_ambiguous",
         `Alias ${alias} resolves to more than one active work session.`,
-        { session_ids: matches },
+        { session_ids: matches.map(session => session.session_id) },
       );
     }
-    return matches.length === 1 ? readBySessionId(matches[0]) : null;
+    return matches[0] ?? null;
   }
 
-  function writeSession(session) {
+  function writeSession(session, { durable = false } = {}) {
     const validation = validateSession(session);
     if (!validation.valid) {
       throw new DeliveryArtWorkSessionStoreError(
@@ -472,7 +521,7 @@ export function createDeliveryArtWorkSessionStore({
       );
     }
     assertCoordinationOnly(session);
-    atomicWrite(sessionPath(session.session_id), session);
+    (durable ? persistPrivate : atomicWrite)(sessionPath(session.session_id), session);
     const index = readIndex();
     for (const alias of session.aliases) {
       const existing = indexedSessionIds(index, alias);
@@ -492,8 +541,112 @@ export function createDeliveryArtWorkSessionStore({
         delete index.aliases[alias];
       }
     }
+    const sourceBinding = readJson(artifactPath(session, SOURCE_INTENT_BINDING));
+    if (sourceBinding) persistPrivate(privateSourcePath(session, SOURCE_INTENT_BINDING), sourceBinding);
     rmSync(sessionDirectory(session.session_id), { force: true, recursive: true });
     atomicWrite(indexPath, index);
+  }
+
+  function nextReplacementId(previous, baseId) {
+    let generation = previous.session_id === baseId ? 1 : 0;
+    if (previous.session_id.startsWith(`${baseId}:r`)) generation = Number(previous.session_id.slice(baseId.length + 2)) + 1;
+    while (true) {
+      const candidate = generation === 0 ? baseId : `${baseId}:r${generation}`;
+      const predecessor = readJson(predecessorPath(candidate));
+      if (predecessor?.session_id === previous.session_id && !readReplacement(candidate) && !readRecoveredSessionBySessionId(candidate)) return candidate;
+      if (!predecessor && !existsSync(sessionDirectory(candidate)) && !readReplacement(candidate) && !readRecoveredSessionBySessionId(candidate) && !readCleanupReceiptBySessionId(candidate)) return candidate;
+      generation += 1;
+    }
+  }
+
+  function prepareReplacement(previous, replacement, artifacts, kind) {
+    const existing = readReplacement(previous.session_id);
+    if (existing?.state === "activated") {
+      throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_replacement_changed", "This source session has already been replaced.");
+    }
+    if (canonicalDigest(readBySessionId(previous.session_id)) !== canonicalDigest(previous) ||
+        replacement.session_id === previous.session_id || readBySessionId(replacement.session_id)) {
+      throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_replacement_changed", "The active source session changed before replacement could be prepared.");
+    }
+    // Mark the successor before writing its state so discovery never exposes
+    // an unfinished generation. One journal write later switches all aliases.
+    persistPrivate(predecessorPath(replacement.session_id), { session_id: previous.session_id });
+    for (const [file, value] of artifacts) persistPrivate(artifactPath(replacement, file), value);
+    const validation = validateSession(replacement);
+    if (!validation.valid) throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_state_invalid", "The prepared session failed its contract.", validation);
+    assertCoordinationOnly(replacement);
+    persistPrivate(preparedSessionPath(replacement.session_id), replacement);
+    const artifactDigests = artifacts.map(([file, value]) => [file, canonicalDigest(value)]);
+    const transition = { kind, previous, replacement, artifactDigests, state: "prepared" };
+    persistPrivate(replacementPath(previous.session_id), transition);
+    return transition;
+  }
+
+  function assertPreparedReplacement(transition) {
+    const { previous, replacement } = transition;
+    const current = readReplacement(previous.session_id);
+    if (canonicalDigest(current) !== canonicalDigest(transition) ||
+        canonicalDigest(readSessionFile(preparedSessionPath(replacement.session_id))) !== canonicalDigest(replacement) ||
+        transition.artifactDigests.some(([file, digest]) => canonicalDigest(readArtifact(replacement, file)) !== digest)) {
+      throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_replacement_changed", "The prepared successor changed before activation.");
+    }
+  }
+
+  function activateReplacement(transition, outcome) {
+    assertPreparedReplacement(transition);
+    const { previous } = transition;
+    const activated = { ...transition, outcome, state: "activated" };
+    persistPrivate(replacementPath(previous.session_id), activated);
+    return activated;
+  }
+
+  function materializeReplacement(transition) {
+    const { previous, replacement } = transition;
+    const stored = readReplacement(previous.session_id);
+    if (stored?.state !== "activated" || canonicalDigest(stored) !== canonicalDigest(transition)) {
+      throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_replacement_changed", "The activated replacement no longer matches the original rebuild.");
+    }
+    if (!readSessionFile(sessionPath(replacement.session_id))) {
+      const prepared = readSessionFile(preparedSessionPath(replacement.session_id));
+      if (canonicalDigest(prepared) !== canonicalDigest(replacement)) {
+        throw new DeliveryArtWorkSessionStoreError("delivery_art_work_session_state_corrupt", "The activated replacement record could not be verified.");
+      }
+      writeSession(prepared, { durable: true });
+    }
+    removeSession(previous);
+    rmSync(preparedSessionPath(replacement.session_id), { force: true });
+  }
+
+  function readPredecessor(session) {
+    const pointer = readJson(predecessorPath(session.session_id));
+    const transition = pointer && readReplacement(pointer.session_id);
+    return transition?.state === "activated" && transition.replacement.session_id === session.session_id
+      ? transition.previous
+      : null;
+  }
+
+  function rebuildCommandPath(sessionId) {
+    return path.join(root, "session-rebuild-commands", `${storageName(sessionId)}.json`);
+  }
+
+  function writeRebuildCommandRef(session, commandId) {
+    persistPrivate(rebuildCommandPath(session.session_id), { command_id: commandId });
+  }
+
+  function readRebuildCommand(session) {
+    const reference = readJson(rebuildCommandPath(session.session_id));
+    if (!reference) return null;
+    const record = readCommandRecord(reference.command_id);
+    return record?.action === "reconstruct" && record.replacement_session_id === session.session_id ? record : null;
+  }
+
+  function readPendingRebuild(session) {
+    if (!session) return null;
+    for (const generation of [session, readPredecessor(session)].filter(Boolean)) {
+      const record = readRebuildCommand(generation);
+      if (record?.state === "pending") return record;
+    }
+    return null;
   }
 
   function writeDecisionDraft(workItemId, decision) {
@@ -535,7 +688,7 @@ export function createDeliveryArtWorkSessionStore({
 
   function writeCommandRecord(commandId, record) {
     assertCoordinationOnly(record, "command_record");
-    atomicWrite(commandRecordPath(commandId), record);
+    (record.action === "reconstruct" ? persistPrivate : atomicWrite)(commandRecordPath(commandId), record);
     return record;
   }
 
@@ -574,11 +727,32 @@ export function createDeliveryArtWorkSessionStore({
     return decision;
   }
 
+  function readAcceptedDecision(workItemId) {
+    try {
+      return readDecision(decisionPath(workItemId));
+    } catch (error) {
+      if (error?.code !== "delivery_art_work_session_decision_invalid") throw error;
+      return null;
+    }
+  }
+
   function writeArtifact(session, relativeFile, value) {
+    if (PRIVATE_SOURCE_ARTIFACT.test(relativeFile)) {
+      persistPrivate(privateSourcePath(session, relativeFile), value);
+      // Keep the acknowledged active view readable by the previous runtime.
+      // An interrupted update leaves its prior committed view available.
+      persistPrivate(artifactPath(session, relativeFile), value);
+      return;
+    }
     atomicWrite(artifactPath(session, relativeFile), value);
   }
 
   function readArtifact(session, relativeFile) {
+    if (PRIVATE_SOURCE_ARTIFACT.test(relativeFile)) {
+      const activePath = artifactPath(session, relativeFile);
+      if (existsSync(activePath) || existsSync(sessionPath(session.session_id))) return readJson(activePath);
+      return readJson(privateSourcePath(session, relativeFile));
+    }
     return readJson(artifactPath(session, relativeFile));
   }
 
@@ -598,7 +772,7 @@ export function createDeliveryArtWorkSessionStore({
       );
     }
     assertCoordinationOnly(receipt, "architecture_supersession_receipt");
-    atomicWrite(architectureSupersessionReceiptPath(receipt.receipt_id), receipt);
+    persistPrivate(architectureSupersessionReceiptPath(receipt.receipt_id), receipt);
     return receipt;
   }
 
@@ -1044,6 +1218,16 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   return {
+    activateReplacement,
+    assertPreparedReplacement,
+    materializeReplacement,
+    nextReplacementId,
+    prepareReplacement,
+    readPredecessor,
+    readPendingRebuild,
+    readReplacement,
+    retainLegacySource,
+    writeRebuildCommandRef,
     archiveRecoveredSession,
     architectureSupersessionReceiptPath,
     artifactPath,
@@ -1063,6 +1247,8 @@ export function createDeliveryArtWorkSessionStore({
     readCleanupReceiptBySessionId,
     readCleanupManifestBySessionId,
     readDecision,
+    readAcceptedDecision,
+    readRebuildCommand,
     readLifecycleContextLedger,
     readResourceManifest,
     readRecoveryReceiptBySessionId,

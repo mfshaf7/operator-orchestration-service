@@ -316,10 +316,11 @@ export function createPlatformOperationService({
       assertOperator(operatorBindings, callerId, operatorId);
       return requireSourceAuthority().stopUnissued({ callerId, operatorId, intentId });
     },
-    async listSourcePreparations({ callerId, limit = 100 }) {
+    async listSourcePreparations({ callerId, limit = 100, workItemRef = null }) {
       const operatorId = assertCaller(operatorBindings, callerId);
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "platform_source_preparation_limit_invalid", "Source preparation limit must be between 1 and 200.");
-      return { workflow_id: "source-credential-preparation-list", preparations: requireSourceAuthority().list({ callerId, operatorId, limit }) };
+      if (workItemRef !== null && !/^work-item-[1-9][0-9]*$/.test(workItemRef)) throw new HttpError(400, "platform_source_work_item_invalid", "Choose a valid Delivery work item for source access.");
+      return { workflow_id: "source-credential-preparation-list", preparations: requireSourceAuthority().list({ callerId, operatorId, limit, workItemRef }) };
     },
   };
 }

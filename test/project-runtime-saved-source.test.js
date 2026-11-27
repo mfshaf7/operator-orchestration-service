@@ -82,7 +82,8 @@ test("snapshots pinned Git bytes with the exact saved overlay, a large asset, an
   f.commit();
   const nextText = "\uFEFFsaved\r\n";
   const command = savedDraft(f.command, [
-    { path: "apps/site/index.txt", action: "replace", content: nextText, expected_digest: hash("\uFEFFbase\r\n") },
+    { path: "apps/site/index.txt", action: "patch", content: "saved", expected_digest: hash("\uFEFFbase\r\n"),
+      patch: { offset_utf16: 1, before: "base" } },
     { path: "apps/site/obsolete.txt", action: "delete", content: null, expected_digest: hash("remove\n") },
     { path: "apps/site/new/components.txt", action: "create", content: "new\n", expected_digest: null },
   ]);

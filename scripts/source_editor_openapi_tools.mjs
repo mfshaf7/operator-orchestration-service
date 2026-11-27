@@ -8,10 +8,18 @@ const command=JSON.parse(readFileSync(new URL('../contracts/delivery-art-work-se
 delete command.$id;delete command.$schema;
 function fixRefs(v){if(!v||typeof v!=='object')return;if(typeof v.$ref==='string'&&v.$ref.startsWith('#/$defs/'))v.$ref=`#/components/schemas/OperatorSourceDraftCommand/$defs/${v.$ref.slice(8)}`;for(const c of Object.values(v))fixRefs(c);}
 fixRefs(command);
+const prototypeCommand=structuredClone(command);
+const prototypeOperation=prototypeCommand.properties.operations.items;
+delete prototypeOperation.properties.patch;
+prototypeOperation.properties.action.enum=prototypeOperation.properties.action.enum.filter(action=>action!=='patch');
+prototypeOperation.allOf=prototypeOperation.allOf.filter(entry=>entry.if.properties?.action?.const!=='patch');
 const provenance=closed({origin:{enum:['operator','operator-amended-model']},input_origin:{enum:['manual','import']},operator_id:id,command_id:id,amended_at:{type:'string',format:'date-time'},
   previous_draft_ref:nullable({oneOf:[{type:'string',pattern:'^draft-history-[a-f0-9]{64}\\.json$'},closed({request_id:id,digest})]}),
   previous_draft_digest:nullable(digest),original_model:nullable({type:'object',description:'Original owner-validated model metadata is lineage only; it does not attest operator-edited bytes.'})});
-const file=closed({path:{type:'string',maxLength:240},content:{type:'string',maxLength:65536},content_digest:digest,size_bytes:{type:'integer',minimum:0,maximum:65536}});
+const file=closed({path:{type:'string',maxLength:240},content:{type:'string',maxLength:65536},content_digest:digest,size_bytes:{type:'integer',minimum:0,maximum:65536},
+  region:closed({start_line:{type:'integer',minimum:1},end_line:{type:'integer',minimum:1},total_lines:{type:'integer',minimum:1},
+    offset_utf16:{type:'integer',minimum:0},baseline_digest:digest,baseline_bytes:{type:'integer',minimum:0,maximum:262144}})},
+  ['path','content','content_digest','size_bytes']);
 const assistantRequest=JSON.parse(readFileSync(new URL('../contracts/delivery-art-work-session/source-editor-assistant-request.schema.json',import.meta.url),'utf8'));delete assistantRequest.$schema;
 const assistantOutput=JSON.parse(readFileSync(new URL('../contracts/delivery-art-work-session/source-editor-assistance.schema.json',import.meta.url),'utf8'));delete assistantOutput.$schema;delete assistantOutput.$id;
 export const sourceEditorSchemas={
@@ -19,6 +27,10 @@ export const sourceEditorSchemas={
   SourceEditorAssistantReply:closed({schema_version:{const:1},request_id:id,snapshot_id:id,session_id:id,revision:{type:'string',format:'date-time'},...assistantOutput.properties,created_paths:{type:"array",maxItems:64,uniqueItems:true,items:{type:"string",maxLength:240}},
     evidence:closed({profile_id:{type:'string',minLength:1},audit_ref:{type:'string',minLength:1},context_ref:{type:'string',minLength:1},effective_selection:{type:'object'}},['profile_id','audit_ref','context_ref']),replayed:{type:'boolean'}}),
   OperatorSourceDraftCommand:command,
+  PrototypeOperatorSourceDraftCommand:prototypeCommand,
+  DeliveryArtEditedSourceChangeSet:closed({schema_version:{const:1},change_set_id:id,session_id:id,
+    base_commit:{type:'string',pattern:'^[a-f0-9]{40}$'},objective_digest:digest,
+    commit_message:command.properties.commit_message,operations:command.properties.operations}),
   OperatorSourceDraftProvenance:provenance,
   OperatorSourceDraftRequestSummary:closed({kind:{const:'operator'},command_id:id,execution_id:id,objective:{type:'string',minLength:8,maxLength:16384}}),
   SourceEditorFiles:closed({schema_version:{const:1},session_id:id,owner_repo:{type:'string',minLength:1},landing_unit_id:id,
@@ -26,7 +38,8 @@ export const sourceEditorSchemas={
     tree:closed({paths:{type:'array',maxItems:5000,items:{type:'string',maxLength:240}},total_path_count:{type:'integer',minimum:0},truncated:{type:'boolean'}}),
     files:{type:'array',maxItems:48,items:file},admitted_bytes:{type:'integer',minimum:0,maximum:262144},context_digest:digest}),
   DeliveryArtSourceDraft:closed({schema_version:{const:1},workflow_id:{const:'delivery-art-source-draft'},session_id:id,revision:{type:'string',format:'date-time'},digest,
-    objective:{type:'string',minLength:20,maxLength:12000},change_set:ref('PrototypeSourceChangeSet'),accepted:{type:'boolean'},operator_draft:nullable(ref('OperatorSourceDraftProvenance'))}),
+    objective:{type:'string',minLength:20,maxLength:12000},change_set:ref('DeliveryArtEditedSourceChangeSet'),accepted:{type:'boolean'},operator_draft:nullable(ref('OperatorSourceDraftProvenance')),
+    retained_for_session:id,same_repository:{type:'boolean'}},['schema_version','workflow_id','session_id','revision','digest','objective','change_set','accepted','operator_draft']),
 };
 const bearer={security:[{CallerIdHeader:[],CallerSecretHeader:[]}],tags:['Source Authoring'],
   'x-oos-owner':'operator-orchestration-service','x-oos-primary-caller':'governance-operations-console',
@@ -63,15 +76,16 @@ export function sourceEditorPaths(){
     const surface={...bearer,tags:[prototype?'Prototype Source Authoring':'Delivery ART'],'x-oos-workflow-family':prototype?'prototype-source-authoring':'delivery-art-source-realization'};
     paths[base+'/files']={get:{...surface,operationId:prefix+'EditorFiles',summary:'Inspect bounded exact-base source files',
       description:'Reads only this authenticated owner session. With no path selectors return its bounded file tree and no source bytes; select at most48 distinct paths for text. No credential renewal, model invocation or source mutation.',
-      parameters:[...parameters,{name:'path',in:'query',required:false,style:'form',explode:true,schema:{type:'array',maxItems:48,uniqueItems:true,items:{type:'string',minLength:1,maxLength:240}}}],responses:responses('SourceEditorFiles')}};
+      parameters:[...parameters,{name:'path',in:'query',required:false,style:'form',explode:true,schema:{type:'array',maxItems:48,uniqueItems:true,items:{type:'string',minLength:1,maxLength:240}}},
+        ...(!prototype?[{name:'line',in:'query',required:false,schema:{type:'integer',minimum:1,maximum:262144},description:'With one path, read up to 40 lines and bind the exact file digest for a manual section edit.'}]:[])],responses:responses('SourceEditorFiles')}};
     const properties={realization:ref('OperatorSourceDraftCommand')};
     paths[base+'/assist']={post:{...surface,operationId:prefix+'SourceAssistant',summary:'Ask about selected source or propose inert file edits',
       description:'Explicit caller-bound selected files and unsaved buffers enter CGG and the configured source-authoring model. Replies cannot save, accept or apply source. Original retries retain immutable input and owner evidence.',parameters,
       requestBody:{required:true,description:'Stable caller-bound source assistant request with selected unsaved text and the exact owner revision/draft digest. No source action is performed.',content:{'application/json':{schema:prototype?ref('SourceEditorAssistantRequest'):closed({realization:ref('SourceEditorAssistantRequest')}),example:prototype?assistantExample:{realization:assistantExample}}}},responses:responses('SourceEditorAssistantReply')}};
     paths[base+'/draft']={post:{...surface,operationId:prefix+'SaveOperatorDraft',summary:'Save a private operator-authored source draft',
       description:'Retain manual/imported text or an operator amendment of a model proposal. Identity, base, scope, expected revision/digest and original-command replay are owner-bound. Save neither invokes a model nor accepts/applies/commits source; trusted owner preparations remain read-only.',parameters,
-      requestBody:{required:true,description:'Exact immutable save command and optimistic source revision/digest. Retain the original command for lost-response recovery.',content:{'application/json':{schema:prototype?ref('OperatorSourceDraftCommand'):closed(properties),example:prototype?exampleCommand:{realization:exampleCommand}}}},responses:responses(prototype?'PrototypeSourceRealization':'DeliveryArtSourceRealizationProjectionV1')}};
-    if(!prototype)paths[base+'/draft'].get={...surface,operationId:prefix+'ReadOperatorDraft',summary:'Inspect the exact private retained source draft',description:'Caller-bound inert text for review; this read never accepts, applies or invokes a model.',parameters,responses:responses('DeliveryArtSourceDraft')};
+      requestBody:{required:true,description:'Exact immutable save command and optimistic source revision/digest. Retain the original command for lost-response recovery.',content:{'application/json':{schema:prototype?ref('PrototypeOperatorSourceDraftCommand'):closed(properties),example:prototype?exampleCommand:{realization:exampleCommand}}}},responses:responses(prototype?'PrototypeSourceRealization':'DeliveryArtSourceRealizationProjectionV1')}};
+    if(!prototype)paths[base+'/draft'].get={...surface,operationId:prefix+'ReadOperatorDraft',summary:'Inspect the exact private retained source draft',description:'Caller-bound inert text for review. The retained selector reads a predecessor of this exact rebuilt session. Neither read accepts, applies or invokes a model.',parameters:[...parameters,{name:'retained',in:'query',required:false,schema:{type:'string',enum:['1']}}],responses:responses('DeliveryArtSourceDraft')};
   }
   return paths;
 }

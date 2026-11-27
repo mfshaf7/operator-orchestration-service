@@ -648,6 +648,27 @@ merge-ready evidence.
 The mode rejects draft or finalized packets, readiness receipts, custody or
 digest mismatches, source-binding mismatches, and unmerged pull requests.
 
+#### Verify an original merge with a separately reviewed verifier
+
+For an admitted pairing, the existing Work Session projects the original
+merged pull request, the retained Review Packet digest, the reviewed verifier
+revision, and the exact approved operating cases. Review these in the Console
+and choose **Verify Runtime Results**. The command identifies the displayed
+pairing by digest. The owner checks the current session and rejects a stale
+pairing before requesting the executor.
+
+The source executor verifies the retained PR head, original merged tree,
+reviewed verifier bytes and the sealed rehearsal for the exact original merge.
+Each approved case receives its own result, with the original source and the
+reviewed evidence profile recorded separately. The merge-ready packet remains
+available throughout acquisition. The existing finalization and closeout
+procedure consumes the passing results. Missing or mismatched evidence blocks
+the transition.
+
+The initial reviewed pairing covers Broker PR #433 and verifier PR #435.
+Other verification uses its existing reviewed source revision. Future pairings
+require reviewed source and case bindings in the owner source.
+
 #### Unmerged Architecture Recovery
 
 Use this path only when `work status` reports `architecture-superseded`, the
@@ -757,11 +778,34 @@ the prior Review Packet and readiness projections are cleared so they must be
 regenerated against the current binding. Any change to the active projection
 stops in `architecture-superseded`.
 
-OOS permits explicit reconstruction only when Git, GitHub, evidence, Review
-Packet, and readiness state prove that no work began. It records both
-architecture bindings and source-retirement outcomes outside the replaced
-session. Sessions with any activity and a changed active projection remain
-fail-closed for a deliberate recovery decision.
+OOS permits explicit reconstruction when Git, GitHub, evidence, Review
+Packet, and readiness state show no source application or review activity.
+Saved editor drafts are private retained source. OOS preserves older drafts
+before retiring session resources, and blocks a rebuild while source apply or
+recovery has an unresolved outcome. The successor is prepared with its exact
+source and work-start evidence. One durable activation record switches the
+covered work aliases to the successor. The original accepted rebuild command
+can resume after an interruption before or after this switch. Architecture
+bindings and retirement outcomes remain available after the old session is
+removed. A changed active projection with source or review activity requires
+an explicit recovery decision.
+
+Before restoring a previous Broker or source-executor revision, finish pending
+rebuilds. Prepared generations stay outside the previous revision's active
+session view. Acknowledged drafts in active sessions remain in the common
+on-disk format, so the previous revision can read them and newer code can
+read any later saves when it returns. Retained predecessor drafts stay in
+private custody across rollback and are available again under the newer
+editor after its exact source revision is restored.
+
+From the Console, choose **Resume Saved Rebuild** when the original pending
+command is shown. After preparing the new source workspace, choose **Review
+Previous Draft** in its editor. The private read binds the original caller,
+operator, and covered work to the new session. **Check and Recover Files**
+copies compatible text into local editor buffers. Saving requires the current
+source baseline and normal owner validation. If a file has changed or the
+repository differs, inspect the retained text and reconcile it against current
+source. The old draft grants no authorization or acceptance for the successor.
 
 Superseded Architecture Packets remain immutable evidence. Dependency reads
 therefore recheck their schema, canonical content, digest, custody, reference
@@ -956,6 +1000,16 @@ review branch. Wrong, absent or stale branch refs remain unpushed; clean-tree,
 recorded base/branch, provider PR head and exact human review checks remain.
 Do not republish a successful source operation merely to repair its display,
 or change an independent repository's fetch configuration as a workaround.
+The command read can show the provider-confirmed pull request while owner
+checks continue. If GitHub reports the branch is behind, the merge action
+requires an updated branch and the checks and review for its new head.
+
+During a Work Session rebuild, replace source access after the original Platform
+operation confirms closure. The Broker projects the current scope and the
+previous request from the rebuild journal. Approve replacement access in the
+Console before preparing its workspace. A compatible plan refresh retains valid
+same-session access. When that approval has expired, close it before preparing
+replacement access for the current recorded plan.
 
 For an already active promoted organization owner, use that same maintenance
 path after Platform admits its current canonical Inventory/provider binding.
@@ -1005,6 +1059,9 @@ reads initiative closeout readiness. The returned next action either identifies
 remaining initiative work, directs the operator to satisfy closeout gates, or
 starts the separate guided initiative closeout. Resource cleanup receipts stay
 immutable; replay recomputes this follow-up from current ART truth.
+The completed session retains the exact source intent reference. When access
+closure is pending, the session can be reopened to check the original Platform
+operation. Once Platform confirms closure, the current package follow-up resumes.
 
 Before retirement planning, the OOS source adapter establishes a canonical
 cleanup execution boundary. If `work close` was started inside its managed
@@ -1802,6 +1859,21 @@ The broker still enforces assignability from the live OpenProject form schema,
 but the operator should not discover that constraint only after a rejected
 write.
 
+## Read a submitted command after an interrupted response
+
+Use the exact command id that was submitted from the Console. For a work
+session, OOS reads the existing command record for the selected work item,
+caller and operator. For a work-structure or PI plan change, it reads the
+existing acceptance or result event for the initiative and operator. These
+reads never run a source action, grant a lease or write a Delivery record.
+
+The result is pending if acceptance exists and the outcome is still open.
+An unconfirmed read means OOS could not find a record bound to that scope.
+Keep following the same reference and check current owner state before taking
+another action. A completed result carries the original receipt. A reported
+failure still requires a current state read when the owner could have made
+partial effects.
+
 ## Caller Rules
 
 - callers use broker workflow routes, not raw OpenProject REST writes
@@ -2086,6 +2158,19 @@ lifecycle, access, and handoff details where the change requires them.
 
 Validation produces a local draft. Explicit operator approval binds the reviewed
 plan to fresh ART; changed scope/source requires renewed validation and review.
+For a revision, **Impact on work in progress** shows which sessions can refresh
+their plan link, which can be rebuilt, and which require review. It also shows
+when a session can keep working under its existing approval. OOS uses the
+same Landing Unit comparison and source and evidence checks as work-session
+continuation. If the current plan or an observed session changes during
+recording, OOS keeps the current plan and asks for fresh validation. After
+recording, the Console can open affected sessions for the accountable operator.
+For a fresh review after an interrupted recording, OOS reads the newest
+stored WGCF reference for the same plan and uses it for the next custody
+generation. Operator approval still binds the active OpenProject plan and
+its observed sessions. Retrying a recording with its exact approved
+candidate can reuse the custody receipt while the reviewed state is current.
+Any refresh, rebuild, or recovery remains a separate work-session action.
 Recording uses the existing OOS/WGCF custody path and does not start work or grant
 release permission. Missing current architecture (`delivery_art_reference_missing`)
 is distinct from an unavailable owner read and does not establish that a plan is

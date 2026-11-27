@@ -98,6 +98,10 @@ function sameValues(left, right) {
   return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
 }
 
+export function defaultArchitecturePacketId(deliveryId) {
+  return `architecture-packet:${deliveryId}-v1`;
+}
+
 export function createDeliveryArtArchitecturePacketDraft({
   architecture,
   artDigest,
@@ -113,7 +117,7 @@ export function createDeliveryArtArchitecturePacketDraft({
 }) {
   const timestamp = assertTimestamp(createdAt, "createdAt");
   const orderedWorkItems = [...new Set(coveredWorkItemIds ?? [])].sort();
-  const resolvedArtifactId = artifactId ?? `architecture-packet:${deliveryId}-v1`;
+  const resolvedArtifactId = artifactId ?? defaultArchitecturePacketId(deliveryId);
   const status = decision?.status;
   const candidate = {
     schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,

@@ -64,7 +64,9 @@ for (const internal of [false, true]) test(`${internal ? "internally registered"
   git(repoRoot, ["config", "user.email", "operator@example.invalid"]);
   git(repoRoot, ["config", "user.name", "Operator"]);
   await writeFile(path.join(repoRoot, "README.md"), "base\n", "utf8");
-  git(repoRoot, ["add", "README.md"]);
+  const large = "baseline line one\n".repeat(5000);
+  await writeFile(path.join(repoRoot, "large.txt"), large, "utf8");
+  git(repoRoot, ["add", "README.md", "large.txt"]);
   git(repoRoot, ["commit", "-m", "base"]);
   git(repoRoot, ["branch", "-M", "main"]);
   git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
@@ -120,6 +122,18 @@ for (const internal of [false, true]) test(`${internal ? "internally registered"
   assert.equal(context.head_commit, baseCommit);
   assert.equal(context.files.some((file) => file.path === "README.md"), true);
   assert.match(context.context_digest, /^sha256:[0-9a-f]{64}$/);
+  await assert.rejects(adapter.captureRealizationContext(session, { requestedPaths: ["large.txt"] }),
+    { code: "delivery_art_source_realization_patch_required" });
+  const { files: [section] } = await adapter.captureRealizationContext(session, { requestedPaths: ["large.txt"], startLine: 200 });
+  assert.equal(section.content, "baseline line one\n".repeat(40));
+  assert.equal(section.region.offset_utf16, "baseline line one\n".length * 199);
+  assert.equal(section.region.baseline_digest, digest(large));
+  const worktree = await adapter.resolveWorktree(session);
+  await writeFile(path.join(worktree, "README.md"), "uncommitted change\n");
+  await assert.rejects(adapter.captureRealizationContext(session, { treeOnly: true }),
+    { code: "delivery_art_source_realization_worktree_dirty" });
+  assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "uncommitted change\n");
+  await writeFile(path.join(worktree, "README.md"), "base\n");
 
   const changeSet = {
     schema_version: 1,
@@ -133,6 +147,12 @@ for (const internal of [false, true]) test(`${internal ? "internally registered"
       path: "README.md",
       content: "base\nrealized\n",
       expected_digest: digest("base\n"),
+    }, {
+      action: "patch",
+      path: "large.txt",
+      content: "revised line\n",
+      expected_digest: section.region.baseline_digest,
+      patch: { before: "baseline line one\n", offset_utf16: section.region.offset_utf16 },
     }],
   };
 
@@ -147,7 +167,11 @@ for (const internal of [false, true]) test(`${internal ? "internally registered"
     }),
     /diff --check failed/,
   );
-  const worktree = await adapter.resolveWorktree(session);
+  const staleSection = structuredClone(changeSet);
+  staleSection.operations[1].patch.before = "different line\n";
+  await assert.rejects(() => adapter.validateSourceRealization(session, staleSection),
+    { code: "delivery_art_source_realization_source_drift" });
+  assert.equal((await adapter.validateSourceRealization(session, changeSet)).valid, true);
   if (internal) {
     assert.ok(worktree.startsWith(path.join(workspaceRoot, location.worktreePrefix)));
     assert.ok(reads.some(read => read.action === "fetch" && read.branch === "main"));
@@ -160,9 +184,11 @@ for (const internal of [false, true]) test(`${internal ? "internally registered"
 
   assert.equal(receipt.outcome, "committed");
   assert.equal(receipt.change_set_digest, canonicalDigest(changeSet));
-  assert.deepEqual(receipt.changed_files, ["README.md"]);
+  assert.deepEqual(receipt.changed_files, ["README.md", "large.txt"]);
   assert.match(receipt.author, /^Agent Gary </);
   assert.equal(await readFile(path.join(worktree, "README.md"), "utf8"), "base\nrealized\n");
+  assert.equal(await readFile(path.join(worktree, "large.txt"), "utf8"),
+    "baseline line one\n".repeat(199) + "revised line\n" + "baseline line one\n".repeat(4800));
   assert.equal(git(worktree, ["status", "--porcelain"]), "");
   assert.match(
     git(worktree, ["show", "-s", "--format=%B", "HEAD"]),
@@ -522,6 +548,7 @@ test("source adapter merges only the exact observed pull-request head", async ()
   const url = "https://github.com/example/repo/pull/12";
   const calls = [];
   let merged = false;
+  let behind = false;
   const adapter = createDeliveryArtWorkSessionSourceAdapter({
     workspaceRoot,
     agentSourceIdentity: {
@@ -559,6 +586,7 @@ test("source adapter merges only the exact observed pull-request head", async ()
         headRefOid: headCommit,
         isDraft: false,
         mergeCommit: merged ? { oid: mergeCommit } : null,
+        mergeStateStatus: behind ? "BEHIND" : "CLEAN",
         number: 12,
         state: merged ? "MERGED" : "OPEN",
         url,
@@ -581,6 +609,15 @@ test("source adapter merges only the exact observed pull-request head", async ()
     (error) => error.code === "delivery_art_work_session_merge_binding_blocked",
   );
   assert.equal(calls.some((call) => call.args[1] === "merge"), false);
+
+  behind = true;
+  assert.equal((await adapter.inspectPullRequest(session)).base_update_required, true);
+  await assert.rejects(
+    () => adapter.mergePullRequest(session, { base_ref: "main", head_commit: headCommit, state: "open", url }),
+    { code: "delivery_art_work_session_merge_base_behind" },
+  );
+  assert.equal(calls.some((call) => call.args[1] === "merge"), false);
+  behind = false;
 
   const result = await adapter.mergePullRequest(session, {
     base_ref: "main",

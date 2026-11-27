@@ -77,6 +77,14 @@ const sourceAuthorization = {
     session_id: { type: "string", minLength: 1 }, revision: { type: "string", format: "date-time" },
     state: { enum: ["revocation-pending", "revocation-required", "revoked"] }, operation_ref: { type: ["string", "null"] } },
 };
+const sourceAccessScope = {
+  type: "object", additionalProperties: false, required: ["work_item_ref", "source_start_digest"],
+  properties: {
+    work_item_ref: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+    source_start_digest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+    predecessor_intent_ref: sourceAuthorization.properties.intent_ref,
+  },
+};
 
 const components = {
   ...sourceEditorSchemas,
@@ -149,6 +157,31 @@ const components = {
       input: {
         $ref: "#/components/schemas/DeliveryArtArchitecturePacketDraftInputV1",
       },
+      include_session_impact: { type: "boolean" },
+    },
+  },
+  DeliveryArtArchitectureSessionImpact: {
+    type: "object",
+    required: ["revision", "sessions"],
+    additionalProperties: false,
+    properties: {
+      revision: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      sessions: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["disposition", "reason", "owner_repo", "work_item_ids", "open_work_item_id"],
+          additionalProperties: false,
+          properties: {
+            disposition: { enum: ["refresh", "rebuild", "review", "continues"] },
+            reason: { enum: ["plan-not-required", "session-operator", "operation-pending", "binding-unavailable",
+              "scope-unchanged", "scope-regrouped", "scope-changed-clean", "source-or-evidence-exists"] },
+            owner_repo: { type: "string" },
+            work_item_ids: { type: "array", minItems: 1, items: { type: "string", pattern: "^work-item-[1-9][0-9]*$" } },
+            open_work_item_id: { type: ["string", "null"], pattern: "^work-item-[1-9][0-9]*$" },
+          },
+        },
+      },
     },
   },
   DeliveryArtArchitecturePacketDraftResponseV1: {
@@ -159,6 +192,7 @@ const components = {
       architecture_packet: {
         $ref: "#/components/schemas/DeliveryArtCustodyArtifact",
       },
+      session_impact: { $ref: "#/components/schemas/DeliveryArtArchitectureSessionImpact" },
       source_snapshot: {
         type: "object",
         additionalProperties: false,
@@ -184,6 +218,7 @@ const components = {
     required: ["artifact"],
     properties: {
       artifact: { $ref: "#/components/schemas/DeliveryArtCustodyArtifact" },
+      expected_impact_revision: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
     },
   },
   DeliveryArtArchitecturePacketPersistResponseV1: {
@@ -194,6 +229,7 @@ const components = {
       artifact: { $ref: "#/components/schemas/DeliveryArtCustodyArtifact" },
       custody_receipt: { type: "object", additionalProperties: true },
       owner_receipt: { type: "object", additionalProperties: true },
+      session_impact: { $ref: "#/components/schemas/DeliveryArtArchitectureSessionImpact" },
       workflow_id: { const: "delivery-art-architecture-packet-persist" },
     },
   },
@@ -339,6 +375,19 @@ const components = {
         },
       },
     },
+  },
+  DeliveryArtWorkSessionContinueRequestV1: {
+    type: "object", additionalProperties: false, required: ["command"],
+    properties: { command: {
+      type: "object", additionalProperties: false, required: ["command_id", "expected_session_revision"],
+      properties: {
+        command_id: commandId,
+        expected_session_revision: { type: "string", format: "date-time" },
+        source_intent_ref: { type: "string", pattern: "^source-intent:[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,241}$" },
+        reviewed_verification_digest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+      },
+      not: { required: ["source_intent_ref", "reviewed_verification_digest"] },
+    } },
   },
   DeliveryArtWorkSessionRecoveryRequestV1: {
     type: "object",
@@ -773,6 +822,7 @@ const components = {
     properties: {
       workflow_id: { const: "delivery-art-work-session" },
       source_authorization: sourceAuthorization,
+      source_access_scope: sourceAccessScope,
       delivery_id: {
         oneOf: [
           { type: "string", pattern: "^delivery-[1-9][0-9]*$" },
@@ -789,6 +839,8 @@ const components = {
       landing_unit_id: { type: ["string", "null"] },
       session_id: { type: ["string", "null"] },
       session_revision: nullableRevision,
+      pending_rebuild: { type: "object", additionalProperties: false, required: ["command_id", "expected_session_revision"],
+        properties: { command_id: commandId, expected_session_revision: { type: "string", format: "date-time" } } },
       state: { type: "string", minLength: 1 },
       next_action: { $ref: "#/components/schemas/DeliveryArtWorkSessionNextActionV1" },
       decision_draft: { $ref: "#/components/schemas/DeliveryArtWorkSessionDecisionV1" },
@@ -808,6 +860,21 @@ const components = {
       projection: { type: "object", additionalProperties: true },
       agent_source: { $ref: "#/components/schemas/DeliveryArtAgentSourceIdentityV1" },
       pull_request: { type: "object", additionalProperties: true },
+      operating_verification: {
+        type: "object", additionalProperties: false, required: ["digest", "source", "verifier", "review_packet_digest", "cases"],
+        properties: {
+          digest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          review_packet_digest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          source: { type: "object", additionalProperties: false, required: ["pull_request_url", "head_commit", "merge_commit"],
+            properties: { pull_request_url: { type: "string", format: "uri" },
+              head_commit: { type: "string", pattern: "^[a-f0-9]{40}$" }, merge_commit: { type: "string", pattern: "^[a-f0-9]{40}$" } } },
+          verifier: { type: "object", additionalProperties: false, required: ["pull_request_url", "revision"],
+            properties: { pull_request_url: { type: "string", format: "uri" }, revision: { type: "string", pattern: "^[a-f0-9]{40}$" } } },
+          cases: { type: "array", minItems: 1, maxItems: 24,
+            items: { type: "object", additionalProperties: false, required: ["id", "title"],
+              properties: { id: { type: "string", minLength: 1 }, title: { type: "string", minLength: 1 } } } },
+        },
+      },
       source: { $ref: "#/components/schemas/DeliveryArtSourceObservationV1" },
       replayed: { type: "boolean" },
       command_receipt: {
@@ -911,7 +978,9 @@ const components = {
     properties: {
       schema_version: { const: 1 },
       workflow_id: { const: "delivery-art-source-realization" },
+      retained_draft_available: { type: "boolean" },
       source_authorization: sourceAuthorization,
+      source_access_scope: sourceAccessScope,
       session_id: { type: "string", minLength: 1 },
       work_item_id: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
       revision: nullableRevision,
@@ -1298,7 +1367,7 @@ const paths = {
       },
       responses: {
         200: {
-          description: "Canonical local Architecture Packet candidate and bounded fresh-snapshot summary.",
+          description: "Canonical local Architecture Packet candidate, fresh-snapshot summary, and requested work-session impact.",
           content: {
             "application/json": {
               schema: {
@@ -1331,9 +1400,10 @@ const paths = {
         400: errorResponse("The authoring envelope or request version is invalid."),
         401: errorResponse("Caller authentication is missing or invalid."),
         403: errorResponse("The caller-specific credential or caller-to-operator binding is invalid."),
-        409: errorResponse("The proposed design contradicts current scoped ART truth."),
+        409: errorResponse("The proposed design contradicts current scoped ART truth or session state changed during review."),
         422: errorResponse("The generated candidate fails the canonical schema-v6 contract."),
         502: errorResponse("Current ART or projected architecture authority is inconsistent."),
+        503: errorResponse("The requested work-session impact could not be checked."),
       },
       "x-oos-owner": "operator-orchestration-service",
       "x-oos-primary-caller": "governance-operations-console",
@@ -1351,7 +1421,7 @@ const paths = {
       parameters: [operatorParameter],
       requestBody: {
         required: true,
-        description: "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. OOS recomputes fingerprints and digest.",
+        description: "Provide the exact local candidate returned by the authoring route with decision.status=architecture-ready. Console recording also sends the reviewed impact revision. OOS rechecks the current plan and work sessions before projection.",
         content: {
           "application/json": {
             schema: {
@@ -1677,10 +1747,45 @@ const paths = {
       ...operationMetadata,
     },
   },
+  "/v1/delivery-work-items/{work_item_id}/work-session/commands/{command_id}": {
+    get: {
+      tags: ["Delivery ART"],
+      summary: "Read the recorded outcome of one exact command",
+      description: "Read-only lookup using the existing owner journal. A matching caller and operator may see the durable result. Unconfirmed means there is no matching record, and does not establish that replay is safe.",
+      operationId: "getDeliveryArtWorkSessionCommand",
+      security,
+      parameters: [{ name: "work_item_id", in: "path", required: true, schema: workItemId }, { name: "command_id", in: "path", required: true, schema: commandId },
+        { name: "X-OOS-Operator-Id", in: "header", required: true, schema: { type: "string" } }],
+      responses: {
+        200: {
+          description: "No matching record, recorded acceptance, or terminal command outcome.",
+          content: { "application/json": { schema: {
+            type: "object", required: ["command_id", "state"],
+            properties: {
+              command_id: commandId,
+              state: { enum: ["unconfirmed", "pending", "completed", "failed"] },
+              rebuild_revision: { type: "string", format: "date-time", description: "Original expected revision for an accepted, resumable rebuild command." },
+              publication: { type: "object", additionalProperties: false, required: ["url", "head_commit"],
+                description: "The provider-confirmed open pull request for this command while verification continues.",
+                properties: { url: { type: "string", format: "uri" }, head_commit: { type: "string", pattern: "^[0-9a-f]{40}$" } } },
+              result: { $ref: "#/components/schemas/DeliveryArtWorkSessionProjectionV1" },
+              error: { type: "object", required: ["code", "message", "status_code"],
+                properties: { code: { type: "string" }, message: { type: "string" }, status_code: { type: "integer" } } },
+            },
+          }, example: { command_id: "work-session-command:example", state: "pending" } } },
+        },
+        400: errorResponse("The target or command id is invalid."),
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("Caller or operator attribution is not admitted."),
+        503: errorResponse("The owner journal is unavailable."),
+      },
+      ...operationMetadata,
+    },
+  },
   "/v1/delivery-work-items/{work_item_id}/work-session/continue": commandOperation({
     action: "continue",
     description: "Runs only the next deterministic transition already authorized by the session and exact source observation. A stale session revision fails without execution.",
-    schemaName: "DeliveryArtWorkSessionCommandRequestV1",
+    schemaName: "DeliveryArtWorkSessionContinueRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/reconstruct": commandOperation({
     action: "reconstruct",

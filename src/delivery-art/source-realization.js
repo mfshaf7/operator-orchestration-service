@@ -9,7 +9,8 @@ import addFormats from "ajv-formats";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import { createBoundedSourceActions, normalizeBoundedSourceCommand } from "../source-authoring/bounded-actions.js";
 import { createEditorAssistant, editorContext } from "../source-authoring/editor-assistant.js";
-import { createOperatorDraftEditor } from "../source-authoring/operator-drafts.js";
+import { createOperatorDraftEditor, sourcePatchFieldSchema, sourcePatchRestriction } from "../source-authoring/operator-drafts.js";
+import { validSourcePatch } from "../source-authoring/source-text-patch.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
 const CONTRACT_ROOT = fileURLToPath(
@@ -24,6 +25,12 @@ const startSchema = JSON.parse(
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validateChangeSetSchema = ajv.compile(changeSetSchema);
+const operatorChangeSetSchema = structuredClone(changeSetSchema);
+delete operatorChangeSetSchema.$id;
+operatorChangeSetSchema.properties.operations.items.properties.patch = sourcePatchFieldSchema;
+operatorChangeSetSchema.properties.operations.items.properties.action.enum.push("patch");
+operatorChangeSetSchema.properties.operations.items.allOf.push(sourcePatchRestriction);
+const validateOperatorChangeSetSchema = ajv.compile(operatorChangeSetSchema);
 const validateStartSchema = ajv.compile(startSchema);
 export const DELIVERY_SOURCE_REALIZATION_RECORD = "source-realization.json";
 const ARTIFACT_FILE = DELIVERY_SOURCE_REALIZATION_RECORD;
@@ -58,16 +65,20 @@ function assertStart(value) {
   return structuredClone(value);
 }
 
-export function validateDeliveryArtSourceRealizationChangeSet(value) {
-  const valid = validateChangeSetSchema(value);
+export function validateDeliveryArtSourceRealizationChangeSet(value, { allowPatch = false } = {}) {
+  const validator = allowPatch ? validateOperatorChangeSetSchema : validateChangeSetSchema;
+  const valid = validator(value);
+  if (valid && value.operations.some(operation => operation.action === "patch" && !validSourcePatch(operation))) {
+    return { valid: false, errors: ["/operations bounded section edits require the operator draft path"] };
+  }
   return {
     valid: Boolean(valid),
-    errors: valid ? [] : schemaErrors(validateChangeSetSchema),
+    errors: valid ? [] : schemaErrors(validator),
   };
 }
 
-function assertChangeSet(value, { baseCommit, objectiveDigest, sessionId }) {
-  const validation = validateDeliveryArtSourceRealizationChangeSet(value);
+function assertChangeSet(value, { baseCommit, objectiveDigest, sessionId, allowPatch = false }) {
+  const validation = validateDeliveryArtSourceRealizationChangeSet(value, { allowPatch });
   if (
     !validation.valid ||
     value.session_id !== sessionId ||
@@ -394,10 +405,20 @@ export function createDeliveryArtSourceRealizationService({
     }
   }
 
+  function withActiveSourceLock(session, operation) {
+    return store.withLock(`source-realization:${session.session_id}`, () => {
+      const active = store.readByAlias(session.covered_work_item_ids[0]);
+      if (active?.session_id !== session.session_id) {
+        throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_session_changed", "Reload the current source workspace before editing or applying a draft.", { statusCode: 409 });
+      }
+      return operation();
+    });
+  }
+
   async function read({ callerId, operatorId, workItemId }) {
     const session = sessionFor(workItemId);
     assertIdentity(session, callerId, operatorId);
-    return project(readRecord(session) ?? {
+    const projection = project(readRecord(session) ?? {
       schema_version: 1,
       artifact_type: "delivery_art_source_realization_record",
       session_id: session.session_id,
@@ -405,6 +426,7 @@ export function createDeliveryArtSourceRealizationService({
       attempts: [],
       revision: session.updated_at ?? session.created_at ?? null,
     }, configured);
+    return retainedSource(session, workItemId) ? { ...projection, retained_draft_available: true } : projection;
   }
 
   // Historical acknowledgements are reads, not fresh source authority. A lost
@@ -433,7 +455,7 @@ export function createDeliveryArtSourceRealizationService({
     }
     assertIdentity(session, callerId, operatorId);
     const requestDigest = canonicalDigest(request);
-    return store.withLock(`source-realization:${session.session_id}`, async () => {
+    return withActiveSourceLock(session, async () => {
       let record = readRecord(session);
       const prior = record?.attempts?.find((attempt) => attempt.request_id === request.request_id);
       if (prior) {
@@ -588,20 +610,26 @@ export function createDeliveryArtSourceRealizationService({
 
 
   const actions = createBoundedSourceActions({
-    assertCommand, assertIdentity, boundedFailure, configured, project, readRecord,
+    assertCommand, assertIdentity, boundedFailure, configured, project,
+    readRecord(session) {
+      if (store.readByAlias(session.covered_work_item_ids[0])?.session_id !== session.session_id) {
+        throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_session_changed", "Reload the current source workspace before applying a draft.", { statusCode: 409 });
+      }
+      return readRecord(session);
+    },
     revision, sessionFor, sourceAdapter, store, writeRecord,
     error: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
   });
   const bind = action => args => actions[action]({ ...args, subjectRef: args.workItemId });
-  const save = createOperatorDraftEditor({ enabled: configured, sessionFor, assertIdentity,
+  const save = createOperatorDraftEditor({ enabled: configured, sessionFor, assertIdentity, allowPatch: true,
     readRecord: (session, workItemId) => readRecord(session) ?? { schema_version: 1, artifact_type: "delivery_art_source_realization_record",
       session_id: session.session_id, work_item_id: normalizeWorkItemId(workItemId), attempts: [], revision: session.updated_at ?? session.created_at },
-    writeRecord, withLock: (session, operation) => store.withLock(`source-realization:${session.session_id}`, operation),
+    writeRecord, withLock: withActiveSourceLock,
     putArtifact(session, name, value) { store.writeArtifact(session, name, value); return name; },
     readArtifact: (session, reference) => store.readArtifact(session, reference),
     validateDraft: async (session, changeSet, command) => {
       if (command.objective.length < 20 || command.objective.length > 12000) throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_invalid", "Keep the bounded Delivery source objective between 20 and 12000 characters.");
-      assertChangeSet(changeSet, { baseCommit: session.landing_unit.base_commit, objectiveDigest: changeSet.objective_digest, sessionId: session.session_id });
+      assertChangeSet(changeSet, { baseCommit: session.landing_unit.base_commit, objectiveDigest: changeSet.objective_digest, sessionId: session.session_id, allowPatch: true });
       if (typeof sourceAdapter.validateSourceRealization !== "function") throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_runtime_unavailable", "The source owner has not commissioned operator draft validation.", { statusCode: 503 });
       const result = await sourceAdapter.validateSourceRealization(session, changeSet);
       if (result?.valid !== true || result.session_id !== session.session_id || result.base_commit !== session.landing_unit.base_commit || result.change_set_digest !== canonicalDigest(changeSet)) {
@@ -612,18 +640,42 @@ export function createDeliveryArtSourceRealizationService({
     project: record => project(record, configured), clock,
     error: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
   });
-  async function files({ callerId, operatorId, workItemId, requestedPaths = [] }) {
+  async function files({ callerId, operatorId, workItemId, requestedPaths = [], startLine }) {
     const session = sessionFor(workItemId); assertIdentity(session, callerId, operatorId);
-    return sourceAdapter.captureRealizationContext(session, { requestedPaths, treeOnly: requestedPaths.length === 0 });
+    return sourceAdapter.captureRealizationContext(session, { requestedPaths, treeOnly: requestedPaths.length === 0, startLine });
   }
-  async function draft({ callerId, operatorId, workItemId }) {
-    const session = sessionFor(workItemId); assertIdentity(session, callerId, operatorId);
-    const record = readRecord(session), attempt = record?.attempts.at(-1);
+  function retainedSource(active, workItemId) {
+    const seen = new Set([active.session_id]);
+    for (let previous = store.readPredecessor?.(active); previous; previous = store.readPredecessor(previous)) {
+      if (seen.has(previous.session_id) || previous.delivery_id !== active.delivery_id ||
+          !previous.covered_work_item_ids.includes(normalizeWorkItemId(workItemId)) ||
+          previous.caller_id !== active.caller_id || previous.operator.id !== active.operator.id) break;
+      seen.add(previous.session_id);
+      const record = readRecord(previous);
+      const attempt = record?.attempts.at(-1);
+      if (attempt?.state === "draft-ready" && attempt.change_set) return { session: previous, record };
+    }
+    return null;
+  }
+
+  async function draft({ callerId, operatorId, workItemId, retained = false }) {
+    const active = sessionFor(workItemId);
+    assertIdentity(active, callerId, operatorId);
+    const selected = retained ? retainedSource(active, workItemId) : { session: active, record: readRecord(active) };
+    const session = selected?.session;
+    const record = selected?.record;
+    const attempt = record?.attempts.at(-1);
     if (!attempt?.change_set) throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_missing", "No retained source draft is available.", { statusCode: 404 });
+    if (retained && (attempt.change_set.session_id !== session.session_id ||
+        attempt.change_set.base_commit !== session.landing_unit.base_commit ||
+        canonicalDigest(attempt.change_set) !== attempt.change_set_digest)) {
+      throw new DeliveryArtSourceRealizationError("delivery_art_source_realization_draft_integrity", "The retained source draft could not be verified.", { statusCode: 503 });
+    }
     return { schema_version: 1, workflow_id: "delivery-art-source-draft", session_id: session.session_id,
       revision: record.revision, digest: attempt.change_set_digest, objective: attempt.objective ?? attempt.request?.objective,
       change_set: structuredClone(attempt.change_set), accepted: attempt.state === "source-created",
-      operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null };
+      operator_draft: attempt.operator_draft ? structuredClone(attempt.operator_draft) : null,
+      ...(retained ? { retained_for_session: active.session_id, same_repository: active.owner_repo === session.owner_repo } : {}) };
   }
   const assist = createEditorAssistant({ enabled: modelConfigured, gatewayClient,
     fail: (code, message, options) => new DeliveryArtSourceRealizationError(`delivery_art_source_realization_${code}`, message, options),
@@ -636,7 +688,7 @@ export function createDeliveryArtSourceRealizationService({
         objectiveDigest: attempt?.objective_digest ?? canonicalDigest(args.input.prompt), operatorId: args.operatorId,
         profileId, modelCaller: "operator-orchestration-service/source-realization", workflow: "source-realization", scope: null };
     },
-    withLock: (bound, operation) => store.withLock(`source-realization:${bound.sessionId}`, operation),
+    withLock: (bound, operation) => withActiveSourceLock(bound.session, operation),
     readArtifact: (bound, key) => store.readArtifact(bound.session, key),
     writeArtifact: (bound, key, value) => store.writeArtifact(bound.session, key, value),
     capture: (bound, paths) => sourceAdapter.captureRealizationContext(bound.session, { requestedPaths: paths, treeOnly: paths.length === 0 }),

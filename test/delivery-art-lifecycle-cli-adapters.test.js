@@ -426,11 +426,16 @@ test("CLI source adapter acquires typed evidence from a trusted profile for the 
       timeout_seconds: 30,
     }],
   };
+  profile.commands.push(
+    { ...profile.commands[0], id: "same-source-check", conformance_binding: "none" },
+    { ...profile.commands[0], id: "separate-fidelity", fidelity: "sandbox-runtime", conformance_binding: "none" },
+  );
   await writeFile(profilePath, `${JSON.stringify(profile)}\n`, "utf8");
   const timestamps = [
     new Date("2026-09-24T07:00:00.000Z"),
     new Date("2026-09-24T07:00:01.000Z"),
   ];
+  let executions = 0;
   const adapters = createDeliveryArtLifecycleCliAdapters({
     async brokerRequest() {
       throw new Error("broker request was not expected");
@@ -438,6 +443,10 @@ test("CLI source adapter acquires typed evidence from a trusted profile for the 
     clock: () => timestamps.shift() ?? new Date("2026-09-24T07:00:01.000Z"),
     evidenceProfilePath: profilePath,
     providerId: "delivery-source-executor",
+    execFileSyncImpl(executable, args, options) {
+      if (executable === "git" && args[0] === "diff" && args[1] === "--check") executions++;
+      return execFileSync(executable, args, options);
+    },
   });
   const landingUnit = {
     base_commit: recordedBase,
@@ -457,6 +466,10 @@ test("CLI source adapter acquires typed evidence from a trusted profile for the 
   assert.equal(receipt.source_revision, source.head_commit);
   assert.equal(receipt.results[0].result, "pass");
   assert.deepEqual(receipt.results[0].conformance_case_ids, ["case:exact-source"]);
+  assert.equal(executions, 2);
+  assert.equal(receipt.results.length, 3);
+  assert.deepEqual(receipt.results[1].conformance_case_ids, []);
+  assert.notEqual(receipt.results[0].result_digest, receipt.results[1].result_digest);
   assert.match(receipt.evidence_digest, /^sha256:[0-9a-f]{64}$/);
   assert.match(receipt.receipt_digest, /^sha256:[0-9a-f]{64}$/);
 

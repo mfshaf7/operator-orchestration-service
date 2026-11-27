@@ -1715,6 +1715,16 @@ async function handleDeliveryChangeProjection({
   }));
 }
 
+async function handleDeliveryChangeCommandRead({ config, deliveryChangeService, deliveryId, commandId, request, response }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery change command reads");
+  if (caller.id !== "governance-operations-console") {
+    throw new HttpError(403, "delivery_change_command_reader_forbidden", "Delivery change command reads require the authenticated Console caller.");
+  }
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  sendJson(response, 200, await deliveryChangeService.readCommand({ commandId, deliveryId, operatorId }));
+}
+
 async function handleDeliveryChangeCommand({
   config,
   deliveryChangeService,
@@ -2012,6 +2022,14 @@ async function handleGetDeliveryArtWorkSession({
   }));
 }
 
+async function handleDeliveryArtWorkSessionCommandRead({ config, deliveryArtWorkSessionService, commandId, workItemId, request, response }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery work-session command reads");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  sendJson(response, 200, deliveryArtWorkSessionService.readCommand({ callerId: caller.id, commandId, operatorId, workItemId }));
+}
+
 async function handlePreflightDeliveryArtWorkSession({
   config,
   deliveryArtWorkSessionService,
@@ -2096,18 +2114,28 @@ async function handleDeliveryArtSourceRealization({
   const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
   assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
   if (["read", "files", "draft"].includes(action)) {
-    const requestedPaths = action === "files" ? sourceFileSelectors(url) : [];
+    const requestedPaths = action === "files" ? sourceFileSelectors(url, ["line"]) : [];
+    const lines = action === "files" ? url.searchParams.getAll("line") : [];
+    if (lines.length && (lines.length !== 1 || requestedPaths.length !== 1 || !/^[1-9]\d{0,5}$/.test(lines[0]) || Number(lines[0]) > 262144)) {
+      throw new HttpError(400, "source_file_selector_invalid", "Choose one file and a valid starting line.");
+    }
+    const startLine = lines.length ? Number(lines[0]) : undefined;
+    const draftSelectors = action === "draft" ? [...url.searchParams.entries()] : [];
+    const retained = draftSelectors.length === 1 && draftSelectors[0][0] === "retained" && draftSelectors[0][1] === "1";
+    if (draftSelectors.length && !retained) {
+      throw new HttpError(400, "delivery_art_source_draft_selector_invalid", "Select the current draft or its retained predecessor.");
+    }
     const args = {
       callerId: caller.id,
       operatorId,
       workItemId,
     };
     const result = action === "read" ? await deliveryArtWorkSessionService.readRealization(args)
-      : await deliveryArtWorkSessionService.readRealizationSource({ ...args, kind: action, requestedPaths });
+      : await deliveryArtWorkSessionService.readRealizationSource({ ...args, kind: action, requestedPaths, retained, startLine });
     sendSourceProjection(response, request, result, () => ({
       recordRef: `openproject://work_packages/${String(workItemId).replace(/^work-item-/, "")}/source-realization${action === "read" ? "" : `/${action}`}`,
       sourceOwner: "workspace-delivery-art",
-      sourceRef: sourceReadViewRef(url, action === "files" ? { path: requestedPaths } : {}),
+      sourceRef: sourceReadViewRef(url, action === "files" ? { path: requestedPaths, ...(startLine === undefined ? {} : { line: lines }) } : retained ? { retained: ["1"] } : {}),
       sourceRevision: sourceRevisionDigest(result),
       sourceTimestamp: result.revision ?? new Date().toISOString(),
     }));
@@ -2133,8 +2161,8 @@ async function handleDeliveryArtSourceRealization({
   }));
 }
 
-function sourceFileSelectors(url) {
-  if ([...url.searchParams.keys()].some(key => key !== "path")) throw new HttpError(400, "source_file_selector_invalid", "Use only bounded relative source-file selectors.");
+function sourceFileSelectors(url, extraKeys = []) {
+  if ([...url.searchParams.keys()].some(key => key !== "path" && !extraKeys.includes(key))) throw new HttpError(400, "source_file_selector_invalid", "Use only bounded relative source-file selectors.");
   const paths = url.searchParams.getAll("path");
   if (paths.length > 48 || new Set(paths).size !== paths.length || paths.some(value => !value || value.length > 240)) {
     throw new HttpError(400, "source_file_selector_invalid", "Select at most 48 distinct relative source files.");
@@ -2320,6 +2348,7 @@ async function handlePersistDeliveryArchitecturePacket({
     callerId: caller.id,
     correlationId,
     operatorId,
+    ...(body.expected_impact_revision === undefined ? {} : { expectedImpactRevision: body.expected_impact_revision }),
   });
   sendJson(response, 200, {
     ...result,
@@ -2344,6 +2373,7 @@ async function handleDraftDeliveryArchitecturePacket({
     correlationId: createCorrelationId(request),
     input: body.input,
     operatorId,
+    ...(body.include_session_impact === true ? { includeSessionImpact: true } : {}),
   });
   sendJson(response, 200, {
     ...result,
@@ -5708,7 +5738,8 @@ async function handlePlatformOperation({
   const caller = authenticateCaller(request, config);
   if (action === "source-preparation-list") {
     const limit = Number(url?.searchParams.get("limit") ?? "100");
-    sendJson(response, 200, await platformOperationService.listSourcePreparations({ callerId: caller.id, limit }));
+    const workItemRef = url?.searchParams.get("work_item_ref") ?? null;
+    sendJson(response, 200, await platformOperationService.listSourcePreparations({ callerId: caller.id, limit, workItemRef }));
     return;
   }
   if (action === "source-preparation-read") {
@@ -6113,6 +6144,19 @@ export function createApp({
           request,
           response,
           transitionId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/commands\/[^/]+$/.test(url.pathname)
+      ) {
+        const segments = url.pathname.split("/");
+        await handleDeliveryArtWorkSessionCommandRead({
+          config, deliveryArtWorkSessionService, request, response,
+          workItemId: decodeURIComponent(segments[3]),
+          commandId: decodeURIComponent(segments[6]),
         });
         return;
       }
@@ -7608,6 +7652,19 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/change-control\/commands\/[^/]+$/.test(url.pathname)
+      ) {
+        const segments = url.pathname.split("/");
+        await handleDeliveryChangeCommandRead({
+          config, deliveryChangeService, request, response,
+          deliveryId: decodeURIComponent(segments[3]),
+          commandId: decodeURIComponent(segments[6]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/change-control$/.test(url.pathname)
       ) {
         await handleDeliveryChangeProjection({
@@ -8376,6 +8433,19 @@ export function createApp({
 
       if (error instanceof DeliveryArtWorkSessionServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
+      if (error instanceof DeliveryArtSourceExecutorError && [
+        "delivery_art_source_realization_worktree_dirty",
+        "delivery_art_source_realization_source_drift",
+        "delivery_art_source_realization_worktree_missing",
+        "delivery_art_source_realization_context_unavailable",
+        "delivery_art_source_realization_patch_required",
+        "delivery_art_source_realization_patch_line_unavailable",
+        "delivery_art_source_realization_patch_limit",
+      ].includes(error.code)) {
+        sendJson(response, 409, { error: error.code, message: "The source workspace could not confirm the requested baseline." });
         return;
       }
 

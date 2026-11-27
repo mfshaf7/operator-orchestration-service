@@ -24,6 +24,7 @@ import { createHostSourceGitReader } from "../instance-records/host-source-git.j
 import { captureSavedProjectSource } from "../project-runtime/saved-source.js";
 import { HttpError } from "../errors.js";
 import { readAcknowledgedProjectDraft } from "../source-authoring/operator-drafts.js";
+import { applySourcePatch, MAX_PATCH_FILE_BYTES, readSourceTextRegion } from "../source-authoring/source-text-patch.js";
 import { DELIVERY_SOURCE_REALIZATION_RECORD } from "./source-realization.js";
 import {
   DELIVERY_ART_EVIDENCE_PROFILE_PATH,
@@ -499,7 +500,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   async function inspectPullRequest(session) {
     const repoRoot = canonicalRepo(session.owner_repo);
-    const fields = "number,state,isDraft,url,headRefOid,baseRefName,mergeCommit";
+    const fields = "number,state,isDraft,url,headRefOid,baseRefName,mergeCommit,mergeStateStatus";
     const raw = executableCommand(
       execFileSyncImpl,
       "gh",
@@ -592,6 +593,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       base_ref: pullRequest.baseRefName ?? null,
       head_commit: pullRequest.headRefOid ?? null,
       merge_commit: pullRequest.mergeCommit?.oid ?? null,
+      ...(state === "OPEN" && pullRequest.mergeStateStatus === "BEHIND" ? { base_update_required: true } : {}),
       review,
       state: state === "MERGED"
         ? "merged"
@@ -710,6 +712,12 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   async function mergePullRequest(session, expectedPullRequest) {
     const current = await inspectPullRequest(session);
+    if (current.base_update_required) {
+      const error = new Error("GitHub requires the pull request to include the current base branch before merging.");
+      error.code = "delivery_art_work_session_merge_base_behind";
+      error.statusCode = 409;
+      throw error;
+    }
     const expectedBase = branchName(session.landing_unit.base_ref);
     if (
       current.state !== "open" ||
@@ -1014,12 +1022,24 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     return { normalized, target };
   }
 
-  function readableRealizationFile(worktree, relativePath) {
+  function readableRealizationFile(worktree, relativePath, { explicit = false, startLine } = {}) {
     const { normalized, target } = realizationTarget(worktree, relativePath);
     if (!existsSync(target)) return null;
     const stat = lstatSync(target);
-    if (!stat.isFile() || stat.size > MAX_REALIZATION_FILE_BYTES) return null;
+    if (!stat.isFile()) return null;
+    if (startLine !== undefined && stat.size > MAX_PATCH_FILE_BYTES || explicit && startLine === undefined && stat.size > MAX_REALIZATION_FILE_BYTES) {
+      const error = new Error("The requested file exceeds the selected source edit limit.");
+      error.code = stat.size > MAX_PATCH_FILE_BYTES
+        ? "delivery_art_source_realization_patch_limit"
+        : "delivery_art_source_realization_patch_required";
+      throw error;
+    }
+    if (startLine === undefined && stat.size > MAX_REALIZATION_FILE_BYTES) return null;
     const content = readFileSync(target);
+    if (startLine !== undefined) {
+      const region = readSourceTextRegion(content, startLine);
+      return { path: normalized, ...region, content_digest: contentDigest(region.content), size_bytes: Buffer.byteLength(region.content) };
+    }
     if (content.includes(0)) return null;
     let text;
     try { text = strictSourceText(content); } catch { return null; }
@@ -1031,8 +1051,9 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     };
   }
 
-  async function captureRealizationContext(session, { requestedPaths = [], treeOnly = false } = {}) {
-    if (!Array.isArray(requestedPaths) || requestedPaths.length > MAX_REALIZATION_FILES || typeof treeOnly !== "boolean") throw new Error("Use bounded source-file selectors.");
+  async function captureRealizationContext(session, { requestedPaths = [], treeOnly = false, startLine } = {}) {
+    if (!Array.isArray(requestedPaths) || requestedPaths.length > MAX_REALIZATION_FILES || typeof treeOnly !== "boolean" ||
+        startLine !== undefined && (requestedPaths.length !== 1 || treeOnly || !Number.isSafeInteger(startLine) || startLine < 1 || startLine > MAX_PATCH_FILE_BYTES)) throw new Error("Use bounded source-file selectors.");
     const worktree = await resolveWorktree(session);
     if (!worktree) {
       const error = new Error("Prepare or reconstruct the managed worktree through authorized work continuation before capturing source context.");
@@ -1083,7 +1104,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     let admittedBytes = 0;
     for (const candidate of treeOnly ? [] : preferred) {
       if (files.length >= MAX_REALIZATION_FILES) break;
-      const file = readableRealizationFile(worktree, candidate);
+      const file = readableRealizationFile(worktree, candidate, { explicit: explicit.length > 0, startLine });
       if (!file) continue;
       if (admittedBytes + file.size_bytes > MAX_REALIZATION_CONTEXT_BYTES) break;
       files.push(file);
@@ -1144,7 +1165,8 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     const prepared = [];
     let totalBytes = 0;
     for (const operation of changeSet.operations ?? []) {
-      if (!["create", "replace", "delete"].includes(operation?.action)) {
+      if (!["create", "replace", "delete", "patch"].includes(operation?.action) ||
+          operation.action !== "patch" && Object.hasOwn(operation, "patch")) {
         throw new Error("Source realization action is not allowlisted.");
       }
       const { normalized, target } = realizationTarget(worktree, operation.path);
@@ -1156,10 +1178,12 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       if (exists && (!current.isFile() || current.isSymbolicLink())) {
         throw new Error(`Source realization target is not a regular file: ${normalized}.`);
       }
-      if (current && current.size > MAX_REALIZATION_FILE_BYTES) {
+      const isPatch = operation.action === "patch";
+      if (current && current.size > (isPatch ? MAX_PATCH_FILE_BYTES : MAX_REALIZATION_FILE_BYTES)) {
         throw new Error(`Source realization target exceeds the bounded text-file limit: ${normalized}.`);
       }
-      const currentContent = exists ? strictSourceText(readFileSync(target)) : null;
+      const currentBytes = exists ? readFileSync(target) : null;
+      const currentContent = currentBytes === null ? null : strictSourceText(currentBytes);
       const currentDigest = currentContent === null ? null : contentDigest(currentContent);
       if (operation.action === "delete" && operation.content !== null || operation.action === "create" && operation.expected_digest !== null) {
         throw new Error("Source realization action/content/digest fields are inconsistent.");
@@ -1175,18 +1199,20 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         error.code = "delivery_art_source_realization_source_drift";
         throw error;
       }
+      const finalContent = isPatch ? applySourcePatch(currentBytes, operation) : operation.content;
       if (operation.action !== "delete") {
-        if (typeof operation.content !== "string" || !operation.content.isWellFormed() || operation.content.includes("\0")) {
+        if (typeof finalContent !== "string" || !finalContent.isWellFormed() || finalContent.includes("\0")) {
           throw new Error("Source realization requires well-formed UTF-8 text without binary NUL bytes.");
         }
-        const size = Buffer.byteLength(operation.content, "utf8");
+        const size = Buffer.byteLength(finalContent, "utf8");
         totalBytes += size;
-        if (size > MAX_REALIZATION_FILE_BYTES || totalBytes > 512 * 1024) {
+        if (size > (isPatch ? MAX_PATCH_FILE_BYTES : MAX_REALIZATION_FILE_BYTES) || totalBytes > 512 * 1024) {
           throw new Error("Source realization change set exceeds the bounded content limit.");
         }
       }
       prepared.push({
         ...operation,
+        content: finalContent,
         normalized,
         target,
         mode: current?.mode ?? 0o644,
@@ -1199,10 +1225,11 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   async function validateSourceRealization(session, changeSet) {
     assertRealizationBinding(session, changeSet);
     const worktree = await resolveWorktree(session);
-    if (!worktree || command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree) !== session.landing_unit.base_commit ||
-        command(execFileSyncImpl, ["status", "--porcelain", "--untracked-files=normal"], worktree)) {
+    const dirty = worktree && command(execFileSyncImpl, ["status", "--porcelain", "--untracked-files=normal"], worktree);
+    if (!worktree || dirty || command(execFileSyncImpl, ["rev-parse", "HEAD"], worktree) !== session.landing_unit.base_commit) {
       const error = new Error("Draft validation requires the existing clean exact-base managed worktree.");
-      error.code = "delivery_art_source_realization_source_drift";
+      error.code = !worktree ? "delivery_art_source_realization_worktree_missing" :
+        dirty ? "delivery_art_source_realization_worktree_dirty" : "delivery_art_source_realization_source_drift";
       throw error;
     }
     prepareRealizationOperations(worktree, changeSet);
@@ -1265,9 +1292,12 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         changeSet.operations.every((operation) => {
           const { target } = realizationTarget(worktree, operation.path);
           if (operation.action === "delete") return !existsSync(target);
+          const expected = operation.action === "patch" ? applySourcePatch(execFileSyncImpl("git", [
+            "--no-replace-objects", "cat-file", "blob", `${changeSet.base_commit}:${operation.path}`,
+          ], { cwd: worktree, maxBuffer: MAX_PATCH_FILE_BYTES }), operation) : operation.content;
           return existsSync(target) &&
             lstatSync(target).isFile() &&
-            contentDigest(readFileSync(target, "utf8")) === contentDigest(operation.content);
+            contentDigest(readFileSync(target)) === contentDigest(expected);
         });
       if (exactCommit) return committedReceipt(headBefore);
       const error = new Error("Source realization binding changed before apply.");

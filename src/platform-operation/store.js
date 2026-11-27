@@ -48,11 +48,11 @@ export function createPlatformOperationStore({ root = platformOperationStateRoot
     sourcePreparation(intentId) {
       return read(path.join(sourcePreparations, `${key(intentId)}.json`), "Source credential preparation");
     },
-    listSourcePreparations({ limit = 100 } = {}) {
+    listSourcePreparations({ limit = 100, matches = () => true } = {}) {
       return readdirSync(sourcePreparations, { withFileTypes: true })
         .filter(entry => entry.isFile() && entry.name.endsWith(".json"))
         .map(entry => read(path.join(sourcePreparations, entry.name), "Source credential preparation"))
-        .filter(Boolean).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+        .filter(record => record && matches(record)).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
     },
     transactSourcePreparation(intentId, operation) {
       return withLock(`source-intent:${intentId}`, async () => {

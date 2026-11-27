@@ -74,6 +74,7 @@ const ACTIONS = Object.freeze({
     workSource.captureRealizationContext(input.session, {
       requestedPaths: input.requested_paths ?? [],
       treeOnly: input.tree_only ?? false,
+      startLine: input.start_line,
     }),
   "work.inspect-configured-path": ({ workSource }, input) =>
     workSource.inspectConfiguredPath(input.session, {
@@ -495,10 +496,11 @@ export function createDeliveryArtSourceExecutorClient({
         change_set: changeSet,
         session,
       }),
-    captureRealizationContext: (session, { requestedPaths = [], treeOnly = false } = {}) =>
+    captureRealizationContext: (session, { requestedPaths = [], treeOnly = false, startLine } = {}) =>
       invoke("work.capture-source-realization-context", {
         tree_only: treeOnly,
         requested_paths: requestedPaths,
+        ...(startLine === undefined ? {} : { start_line: startLine }),
         session,
       }),
     captureProjectRuntimeSource: (session, selection) =>

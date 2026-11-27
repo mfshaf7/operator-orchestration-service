@@ -108,12 +108,32 @@ unavailable first-use read.
 | Delivery | `/v1/delivery-work-items/{work_item_id}/work-session/realization` |
 
 The exact schemas and examples are in the [OpenAPI contract](../api/openapi.json).
-Each file is at most64KiB of valid UTF-8, with at most64 operations and512KiB
-changed text. JSON escaping, session metadata and the future apply command must
+Ordinary whole-file operations support up to 64 KiB of valid UTF-8 per file.
+Drafts allow up to 64 operations and 512 KiB of changed text. JSON escaping,
+session metadata and the future apply command must
 also fit the executor's existing1MiB serialized envelope. These bounds are not
 permission to truncate source. Split a genuinely larger source change through
 its existing owner workflow; do not raise a browser-only limit or claim support
 for arbitrary binary/archive/private-client projects.
+
+Delivery's manual section editor uses the same endpoints and draft custody.
+With exactly one selected path, `GET <base>/files?path=…&line=…` reads at most
+40 lines and 16 KiB of a regular UTF-8 source file, with exact full-file
+digest, excerpt digest, position and size. A section replacement sends the
+distinct `patch` operation with `patch.offset_utf16` and `patch.before`.
+Older source executors reject this operation before writing source.
+The executor verifies the exact full-file digest and original range at
+validation and apply. The snapshot overlay and lost-commit replay reconstruct
+the same exact result. The section representation limits both original and
+replacement text to 16 KiB and limits the original and resulting file to
+256 KiB. The total apply budget and future serialized wire check still apply.
+The retained patch can be read and reviewed through the existing draft route.
+
+The issued caller, admitted path, clean checked-out base, expected draft
+revision and separate source lease are still enforced. Section edits are
+available through manual Delivery authoring. Before reverting to a runtime that
+only understands whole-file drafts, resolve or retain existing section drafts
+with their paired owner revision.
 
 ## Amend a model proposal or recover a save
 

@@ -75,6 +75,24 @@ function client(fetchImpl) {
   });
 }
 
+test("WGCF reads the latest stored reference for one exact plan subject", async () => {
+  const deliveryId = "delivery-38";
+  const artifactId = "architecture-packet:delivery-38-v1";
+  const reference = { digest: CONTENT_DIGEST, uri: ARTIFACT_URI };
+  const registry = client(async (url, options) => {
+    const target = new URL(url);
+    assert.equal(options.method, "GET");
+    assert.equal(target.pathname, "/v1/artifacts/delivery-art/architecture-packets/latest");
+    assert.deepEqual(Object.fromEntries(target.searchParams), { delivery_id: deliveryId, artifact_id: artifactId });
+    return jsonResponse({ delivery_id: deliveryId, artifact_id: artifactId, artifact_ref: reference });
+  });
+  assert.deepEqual(await registry.readLatestArchitectureReference({ deliveryId, artifactId }), reference);
+  const foreign = client(async () => jsonResponse({ delivery_id: "delivery-49", artifact_id: artifactId, artifact_ref: reference }));
+  await assert.rejects(() => foreign.readLatestArchitectureReference({ deliveryId, artifactId }), {
+    code: "wgcf_artifact_registry_invalid_response",
+  });
+});
+
 test("WGCF artifact registry client registers canonical content with method-scoped identity", async () => {
   const calls = [];
   const artifactContent = {

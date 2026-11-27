@@ -83,6 +83,26 @@ export function createWgcfArtifactRegistryClient({
   });
 
   return {
+    async readLatestArchitectureReference({ deliveryId, artifactId }) {
+      const query = new URLSearchParams({ delivery_id: deliveryId, artifact_id: artifactId });
+      const response = await transport.request(
+        `/v1/artifacts/delivery-art/architecture-packets/latest?${query}`,
+        { method: "GET" },
+      );
+      const reference = response?.artifact_ref;
+      if (
+        response?.delivery_id !== deliveryId ||
+        response?.artifact_id !== artifactId ||
+        (reference !== null && (
+          !DIGEST_PATTERN.test(reference?.digest ?? "") ||
+          reference.uri !== `wgcf://artifacts/delivery-art/sha256/${reference.digest.slice("sha256:".length)}`
+        ))
+      ) {
+        throw new HttpError(502, "wgcf_artifact_registry_invalid_response", "WGCF returned an inconsistent Technical Plan custody reference.");
+      }
+      return reference === null ? null : { uri: reference.uri, digest: reference.digest };
+    },
+
     async read({ contentDigest }) {
       assertDigest(contentDigest);
       const digestHex = contentDigest.slice("sha256:".length);

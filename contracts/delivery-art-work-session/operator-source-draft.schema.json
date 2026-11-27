@@ -89,6 +89,7 @@
             "enum": [
               "create",
               "replace",
+              "patch",
               "delete"
             ]
           },
@@ -109,6 +110,15 @@
               }
             ]
           },
+          "patch": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["offset_utf16", "before"],
+            "properties": {
+              "offset_utf16": {"type": "integer", "minimum": 0, "maximum": 262144},
+              "before": {"type": "string", "maxLength": 16384}
+            }
+          },
           "expected_digest": {
             "oneOf": [
               {
@@ -121,6 +131,17 @@
           }
         },
         "allOf": [
+          {
+            "if": {"properties": {"action": {"const": "patch"}}},
+            "then": {
+              "required": ["patch"],
+              "properties": {
+                "content": {"type": "string", "maxLength": 16384},
+                "expected_digest": {"$ref": "#/$defs/digest"}
+              }
+            },
+            "else": {"not": {"required": ["patch"]}}
+          },
           {
             "if": {
               "properties": {

@@ -159,6 +159,37 @@ test("prepared scope cannot write or renew before exact issue approval", async t
   await assert.rejects(f.lease(prepared.intent_id), { code: "platform_source_renewal_required" });
 });
 
+test("a rebuilt Delivery session prepares replacement access after verified predecessor closure", async t => {
+  const sessionId = "work-session:delivery-42:source-example";
+  const successorSessionId = `${sessionId}:r1`;
+  const f = fixture(t, plan({ session_id: sessionId }));
+  const previous = await f.prepare();
+  const issued = command(previous);
+  await f.auth(issued);
+  await f.observe(issued);
+
+  f.setPlan(plan({ session_id: successorSessionId, source_start_digest: d("6"), predecessor_intent_ref: previous.intent_id }));
+  const replacement = preparation({ preparation_id: "delivery-42-rebuilt", decision: null,
+    supersedes_intent_digest: previous.source_intent_digest });
+  await assert.rejects(f.prepare(replacement), { code: "platform_source_predecessor_not_closed" });
+  const stopped = command(previous, "agent-source.revoke");
+  await f.auth(stopped);
+  await assert.rejects(f.prepare(replacement), { code: "platform_source_predecessor_not_closed" });
+  await f.observe(stopped);
+  await assert.rejects(f.prepare({ ...replacement, supersedes_intent_digest: null }), { code: "platform_source_predecessor_required" });
+  await assert.rejects(f.lease(previous.intent_id, sessionId), { code: "platform_source_intent_revoked" });
+
+  const prepared = await f.prepare(replacement);
+  assert.equal(prepared.session_id, successorSessionId);
+  assert.equal(prepared.source_intent.source_start_digest, d("6"));
+  await assert.rejects(f.lease(prepared.intent_id, successorSessionId), { code: "platform_source_approval_required" });
+  const approved = command(prepared, "agent-source.issue", successorSessionId, "replacement-issue");
+  await f.auth(approved);
+  await assert.rejects(f.lease(prepared.intent_id, successorSessionId), { code: "platform_source_renewal_required" });
+  await f.observe(approved);
+  assert.equal(await f.lease(prepared.intent_id, successorSessionId), "written");
+});
+
 test("canonical subject, source start and every source coordinate are rechecked", async t => {
   const f = fixture(t); const prepared = await f.prepare(); const input = command(prepared);
   for (const [field, value] of Object.entries({ source_start_digest: d("5"), repository: "example/other", repository_id: 124, installation_id: 457,

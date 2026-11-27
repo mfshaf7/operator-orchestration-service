@@ -2,21 +2,25 @@ import { readFileSync } from "node:fs";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { canonicalDigest } from "../delivery-art/canonical-json.js";
+import { validSourcePatch } from "./source-text-patch.js";
 
 const schema = JSON.parse(readFileSync(new URL("../../contracts/delivery-art-work-session/operator-source-draft.schema.json", import.meta.url), "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validate = ajv.compile(schema);
+const draftOperationSchema = schema.properties.operations.items;
+export const sourcePatchFieldSchema = draftOperationSchema.properties.patch;
+export const sourcePatchRestriction = draftOperationSchema.allOf.find(entry => entry.if.properties?.action?.const === "patch");
 
 // This kernel retains inert operator input in the subject owner's existing
 // private artifacts. It cannot select a repository, obtain a credential,
 // invoke a model, accept a draft or perform a source action.
-export function assertOperatorDraftCommand(value, error) {
+export function assertOperatorDraftCommand(value, error, allowPatch = false) {
   if (!validate(value) || !value.objective.isWellFormed() || !value.commit_message.isWellFormed() ||
       new Set(value.operations.map(operation => operation.path)).size !== value.operations.length ||
-      value.operations.some(operation => typeof operation.content === "string" &&
-        (!operation.content.isWellFormed() || operation.content.includes("\0") || Buffer.byteLength(operation.content) > 65_536)) ||
-      value.operations.reduce((size, operation) => size + (typeof operation.content === "string" ? Buffer.byteLength(operation.content) : 0), 0) > 512 * 1024) {
+      value.operations.some(operation => operation.patch ? !allowPatch || !validSourcePatch(operation) :
+        typeof operation.content === "string" && (!operation.content.isWellFormed() || operation.content.includes("\0") || Buffer.byteLength(operation.content) > 65_536)) ||
+      value.operations.reduce((size, operation) => size + Buffer.byteLength(operation.content ?? "") + Buffer.byteLength(operation.patch?.before ?? ""), 0) > 512 * 1024) {
     throw error("draft_invalid", "Use the exact bounded text-source draft contract, distinct paths and valid UTF-8 content.", { statusCode: 400 });
   }
   return structuredClone(value);
@@ -43,9 +47,9 @@ export function readAcknowledgedProjectDraft({ session, source, record, readArti
 
 export function createOperatorDraftEditor({ enabled, sessionFor, assertIdentity, readRecord, writeRecord,
   withLock, putArtifact, readArtifact, validateDraft, project, nextRevision, clock = () => new Date(),
-  canonicalObjective = () => null, assertEditable = () => {}, commitRecord = null, error }) {
+  canonicalObjective = () => null, assertEditable = () => {}, commitRecord = null, allowPatch = false, error }) {
   return async function save({ callerId, operatorId, subjectRef, request: input }) {
-    const command = assertOperatorDraftCommand(input, error);
+    const command = assertOperatorDraftCommand(input, error, allowPatch);
     const session = await sessionFor(subjectRef);
     assertIdentity(session, callerId, operatorId);
     return withLock(session, async () => {
