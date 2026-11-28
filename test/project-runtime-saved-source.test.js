@@ -12,6 +12,7 @@ import test from "node:test";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { captureSavedProjectSource } from "../src/project-runtime/saved-source.js";
 import { createProjectRuntimeCommands } from "../src/project-runtime/source-commands.js";
+import { createProjectRuntime } from "../src/project-runtime/runtime.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { createDeliveryArtSourceExecutorClient, createDeliveryArtSourceExecutorServer } from "../src/delivery-art/source-executor.js";
 import { createOperatorDraftEditor } from "../src/source-authoring/operator-drafts.js";
@@ -300,4 +301,71 @@ test("the acknowledged draft traverses the real source executor and survives a l
   assert.equal(unconfirmed.observation, null);
   assert.equal(unconfirmed.last_observation.state, "ready");
   assert.equal(sends, 1);
+});
+
+test("Prototype composition reads the admitted setup and reconciles one exact saved run", async t => {
+  const f = fixture(t);
+  const subject = { kind: "prototype", ref: "prototype-request:one" };
+  const binding = { project_ref: "project:site", subject, scope: f.command.scope };
+  const second = { project_ref: "project:other", subject: { kind: "prototype", ref: "prototype-request:other" },
+    scope: { ...binding.scope, project_custody_ref: "custody:other" } };
+  const identity = { callerId: "console", operatorId: "operator:a", requestId: subject.ref };
+  const selected = savedDraft(f.command, [{ path: "apps/site/index.txt", action: "replace",
+    content: "the acknowledged Prototype draft\n", expected_digest: hash("\uFEFFbase\r\n") }]);
+  const readySetup = { ...binding, setup: f.command.setup, limits: { max_files: 80, max_bytes: 2_000_000 } };
+  let currentSetup = readySetup;
+  let effect = null;
+  let submissions = 0;
+  const runtime = createProjectRuntime({
+    root: f.root, rawBindings: JSON.stringify([binding, second]),
+    operatorBindings: { console: "operator:a" },
+    prototype: {
+      read: ({ requestId }) => ({ session_id: selected.source.session_id, request_id: requestId, source_request: {} }),
+      draft: () => ({ operator_draft: true, session_id: selected.source.session_id, revision: selected.saved.revision,
+        digest: selected.source.change_set_digest, change_set: selected.saved.change_set }),
+      captureProjectRuntimeSource: ({ selection }) => captureSavedProjectSource({ ...selected,
+        commandId: selection.command_id, scope: selection.scope, source: selection.source,
+        setup: selection.setup, limits: selection.limits }),
+      withAuthorizedProjectSource: (_input, operation) => operation(),
+    },
+    provider: {
+      readProjectRuntimeSetup: () => currentSetup,
+      submitProjectRuntime: async command => {
+        submissions++;
+        effect = { command_id: command.command_id, operation_id: command.operation_id, scope_digest: command.scope_digest,
+          configuration_revision: command.setup.configuration_revision, manifest_digest: command.snapshot.manifest_digest,
+          state: "ready", observed_at: "2026-11-28T09:00:00.000Z",
+          instance_ref: "instance:site", owner_receipt_ref: "receipt:site" };
+        throw new Error("lost response after owner dispatch");
+      },
+      readProjectRuntime: async () => effect,
+    },
+  });
+  await assert.rejects(runtime.overview({ ...identity, operatorId: "operator:other" }), { code: "project_runtime_operator_forbidden" });
+  assert.deepEqual(await runtime.overview(identity), { project_ref: binding.project_ref, setup: f.command.setup,
+    revision: 0, records: [], before: null });
+
+  const command = { command_id: "run:prototype-one", expected_revision: 0, source_revision: selected.saved.revision,
+    source_digest: selected.source.change_set_digest, configuration_revision: f.command.setup.configuration_revision };
+  await assert.rejects(runtime.run({ ...identity, command: { ...command, source_digest: hash("an unsaved buffer") } }),
+    { code: "project_runtime_selection_changed" });
+  currentSetup = { ...readySetup, scope: second.scope };
+  await assert.rejects(runtime.overview(identity), { code: "project_runtime_setup_mismatch" });
+  currentSetup = readySetup;
+  assert.equal(submissions, 0);
+
+  const first = await runtime.run({ ...identity, command });
+  assert.equal(first.status, "unknown");
+  assert.equal(first.source_digest, command.source_digest);
+  const commandKey = { ...identity, commandId: command.command_id };
+  const manifest = JSON.parse(readFileSync(path.join(f.snapshot(first.acknowledgement.snapshot), "manifest.json")));
+  assert.equal(manifest.files.find(file => file.path === "apps/site/index.txt").blob_digest,
+    hash("the acknowledged Prototype draft\n"));
+  await assert.rejects(runtime.reconcile({ ...commandKey, requestId: second.subject.ref }, true),
+    { code: "project_runtime_command_not_found" });
+  const recovered = await runtime.reconcile(commandKey, true);
+  assert.equal(recovered.status, "ready");
+  assert.equal(submissions, 1);
+  assert.deepEqual((await runtime.overview({ ...identity, limit: 1 })).records, [recovered]);
+  assert.deepEqual((await runtime.overview({ ...identity, before: 1 })).records, []);
 });

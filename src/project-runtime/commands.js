@@ -63,6 +63,9 @@ function receipt(record) {
 function project(record) {
   return {
     acknowledgement: receipt(record),
+    source_revision: record.source.revision,
+    source_digest: record.source.change_set_digest,
+    configuration_revision: record.setup.configuration_revision,
     status: record.dispatch === "observed" ? record.observation.state :
       record.dispatch === "retained" ? "acknowledged" :
         record.dispatch === "superseded" ? "stale" : "unknown",
@@ -198,14 +201,45 @@ export function createSavedProjectRuntimeCommands({
     return entry;
   }
 
+  function matchesSelection(record, selection) {
+    return !selection || (record.scope_digest === scopeIdentity(selection.scope) &&
+      record.request.project_ref === selection.project_ref &&
+      canonicalDigest(record.subject) === canonicalDigest(selection.subject));
+  }
+
   function read(input) {
     const { record } = original(input);
+    if (!matchesSelection(record, input.selection)) fail(404, "command_not_found", "No original command was admitted for this project.");
     return project(record);
+  }
+
+  function history({ callerId, operatorId, selection, limit, before }) {
+    const scopeDigest = scopeIdentity(selection.scope);
+    const projectDirectory = directory(scopeDigest);
+    const revision = projectRevision(projectDirectory);
+    const first = Math.min(before === null ? revision : before - 1, revision);
+    const records = [];
+    let cursor = first;
+    const lowerBound = Math.max(0, first - limit);
+    while (cursor > lowerBound) {
+      const record = tx.read(statePath(projectDirectory, cursor), "Project runtime history", { maxBytes: 32_768 });
+      if (!record || record.scope_revision !== cursor || record.scope_digest !== scopeDigest) {
+        fail(503, "state_corrupt", "The retained runtime history is incomplete.");
+      }
+      cursor -= 1;
+      if (record.caller_id !== callerId || record.operator_id !== operatorId ||
+          record.request?.project_ref !== selection.project_ref ||
+          canonicalDigest(record.subject) !== canonicalDigest(selection.subject)) continue;
+      const entry = original({ callerId, operatorId, commandId: record.command_id });
+      records.push(project(entry.record));
+    }
+    return { revision, records, before: cursor > 0 ? cursor + 1 : null };
   }
 
   async function advance(input) {
     return tx.withLock(`command:${input.commandId}`, async () => {
       const { file, record } = original(input);
+      if (!matchesSelection(record, input.selection)) fail(404, "command_not_found", "No original command was admitted for this project.");
       if (record.dispatch === "superseded") return project(record);
       const payload = {
         command_id: record.request.command_id, project_ref: record.request.project_ref, operation_id: record.operation_id,
@@ -266,5 +300,5 @@ export function createSavedProjectRuntimeCommands({
     });
   }
 
-  return { accept, advance, read };
+  return { accept, advance, history, read };
 }

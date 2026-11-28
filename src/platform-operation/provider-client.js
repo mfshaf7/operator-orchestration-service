@@ -99,6 +99,7 @@ export function createPlatformOperationProviderClient({
   };
 
   return {
+    readProjectRuntimeSetup: binding => request("/v1/console-operations/project-runtime/setup/read", { body: binding, method: "POST" }),
     submitProjectRuntime: binding => request("/v1/console-operations/project-runtime/run", { body: binding, method: "POST" }),
     readProjectRuntime: ({ scope, command_id, operation_id }) => request("/v1/console-operations/project-runtime/read", {
       body: { scope, command_id, operation_id }, method: "POST",
