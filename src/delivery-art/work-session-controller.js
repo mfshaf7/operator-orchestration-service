@@ -14,6 +14,7 @@ import {
   pendingArchitectureHumanGate,
   validateDeliveryArtWorkSessionDecision,
 } from "./work-session.js";
+import { deliveryWorkHold } from "../delivery-blocker.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import { isDeliveryArtPostMergeAction } from "./lifecycle.js";
@@ -190,6 +191,73 @@ function resultEnvelope({
 
 function targetItem(continuation) {
   return continuation?.continuation_context?.target_item ?? null;
+}
+
+function recordedWorkHold(continuation) {
+  const context = continuation?.continuation_context;
+  const target = targetItem(continuation);
+  const parents = context?.parent_chain ?? [];
+  const scope = [target, ...parents.slice().reverse(), context?.delivery_epic];
+  const paused = scope.find(item => deliveryWorkHold(item) === "deferred");
+  const blocked = scope.find(item => deliveryWorkHold(item) === "blocked");
+  const waiting = scope.find(item => item !== target && deliveryWorkHold(item) === "dependency");
+  const item = paused ?? blocked ?? waiting;
+  if (!item) return null;
+  const label = `${item.type ?? "Work item"} #${item.id}`;
+  return {
+    workItemId: `work-item-${item.id}`,
+    reason: paused ? `${label} is deferred. Review the recorded decision before resuming work.`
+      : blocked ? `${label} has a recorded blocker. Review the blocker before starting this work.`
+      : `${label} is waiting on prerequisite work.`,
+  };
+}
+
+function assertWorkScopeOpen(continuation) {
+  const hold = recordedWorkHold(continuation);
+  if (hold) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_target_blocked", hold.reason, { work_item_id: hold.workItemId },
+    );
+  }
+}
+
+function workScopeHoldAction(hold) {
+  return {
+    code: "work-scope-held",
+    reason: hold.reason,
+    authority: "workspace-delivery-art",
+    inputs: { work_item_id: hold.workItemId },
+  };
+}
+
+function workSessionStartAction(continuation, workItemId) {
+  const target = targetItem(continuation);
+  const hold = recordedWorkHold(continuation);
+  if (hold) return workScopeHoldAction(hold);
+  if (deliveryWorkHold(target) === "dependency") {
+    const dependencies = continuation.continuation_context.dependency_context?.unresolved_dependencies ?? [];
+    const names = dependencies.map(item => `${item.type ?? "Work item"} #${item.id}`);
+    return {
+      code: "work-prerequisites-review-required",
+      reason: names.length ? `Waiting for ${names.join(", ")}. Review the work requirements before starting.`
+        : "This item is waiting for prerequisite work. Review the work requirements before starting.",
+      authority: "workspace-delivery-art",
+      ...(dependencies.length === 1 && { inputs: { work_item_id: `work-item-${dependencies[0].id}` } }),
+    };
+  }
+  if (target.ready_contract_satisfied === false && target.ready_contract_missing_fields?.includes("Iteration")) {
+    return {
+      code: "work-planning-required",
+      reason: "This item needs an iteration assignment. Open PI Planning to schedule it before preparing a work session.",
+      authority: "workspace-delivery-art",
+    };
+  }
+  return {
+    code: "work-session-start-required",
+    command: `npm run art -- work start ${workItemId}`,
+    reason: "Check the work requirements before starting a session.",
+    authority: "operator",
+  };
 }
 
 function artItemProjection(item) {
@@ -1160,6 +1228,7 @@ export function createDeliveryArtWorkSessionController({
     for (const workItemId of decision.covered_work_item_ids) {
       const value = knownByWorkItemId.get(workItemId) ??
         await continuation(workItemId);
+      assertWorkScopeOpen(value);
       assertOpenTarget(targetItem(value), workItemId, {
         allowDependencyBlocked: true,
       });
@@ -1204,6 +1273,7 @@ export function createDeliveryArtWorkSessionController({
     });
 
     try {
+      assertWorkScopeOpen(current);
       assertOpenTarget(target, workItemId, {
         allowDependencyBlocked: Boolean(decision),
       });
@@ -1211,7 +1281,7 @@ export function createDeliveryArtWorkSessionController({
       blockers.push(configuredPathBlocker({
         authority: "workspace-delivery-art",
         code: error.code ?? "art-posture-blocked",
-        inputs: { work_item_id: workItemId },
+        inputs: { work_item_id: error.details?.work_item_id ?? workItemId },
         reason: error.message,
       }));
     }
@@ -2018,8 +2088,14 @@ export function createDeliveryArtWorkSessionController({
       });
     }
 
+    const scopeHold = currentContexts.filter(entry =>
+      !CLOSED_ART_STATES.has(String(targetItem(entry)?.status).toLowerCase()),
+    ).map(recordedWorkHold).find(Boolean);
     const repoRoot = await sourceAdapter.resolveWorktree(session);
     if (!repoRoot) {
+      if (scopeHold) return resultEnvelope({
+        context: current, nextAction: workScopeHoldAction(scopeHold), session, state: "blocked", workContract, workItemId,
+      });
       const source = await sourceAdapter.inspectPristineSession(session);
       if (source.pristine === true && source.base_commit_available === false) {
         return resultEnvelope({
@@ -2075,6 +2151,13 @@ export function createDeliveryArtWorkSessionController({
       repo_root: repoRoot,
       session,
     };
+    // A hold pauses source advancement. Readback and completion of an
+    // already merged revision use the original verification and closeout gates.
+    if (scopeHold && context.facts?.pull_request !== "merged" && context.pull_request?.state !== "merged") {
+      return resultEnvelope({
+        context, nextAction: workScopeHoldAction(scopeHold), session, state: "blocked", workContract, workItemId,
+      });
+    }
     const pendingPrerequisite = pendingArchitectureExecutionPrerequisite({
       bindings: architecturePrerequisiteBindings,
       context,
@@ -2426,12 +2509,7 @@ export function createDeliveryArtWorkSessionController({
             reason: "Workspace Delivery ART reports this work item as closed.",
             authority: "workspace-delivery-art",
           }
-        : {
-            code: "work-session-start-required",
-            command: `npm run art -- work start ${workItemId}`,
-            reason: "No active reconstructable work session exists for this item.",
-            authority: "operator",
-          },
+        : workSessionStartAction(current, workItemId),
       state: closed ? "closed" : "decision-required",
       workItemId,
     });
@@ -2518,6 +2596,7 @@ export function createDeliveryArtWorkSessionController({
           "architecture-prerequisite-required",
           "architecture-reconstruction-required",
           "architecture-recovery-required",
+          "work-scope-held",
         ].includes(current.next_action.code)) {
           return current;
         }

@@ -1234,8 +1234,10 @@ export function createDeliveryService({
           const descendants = new Map();
           const visit = node => { descendants.set(`work-item-${node.id}`, node); for (const child of node.children ?? []) visit(child); };
           visit(item.execution_tree);
+          const heldTargets = new Set([...navigation.blocked_work_item_ids, ...(navigation.held_work_item_ids ?? []), ...(navigation.deferred_work_item_ids ?? [])]);
           const openSessionTargets = [...new Set(scoped.flatMap(session => session.covered_work_item_ids))]
-            .map(id => descendants.get(id)).filter(node => node && !["done", "retired", "parked"].includes(node.status));
+            .map(id => descendants.get(id)).filter(node => node && !heldTargets.has(node.id) &&
+              !["done", "retired", "parked"].includes(node.status));
           if (openSessionTargets.length && !["done", "retired", "parked"].includes(item.epic.status)) {
             navigation.workflow_phase = "execution";
             if (["New", "Ready"].includes(navigation.package_posture)) navigation.package_posture = "In Progress";

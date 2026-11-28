@@ -20,6 +20,13 @@ export const DELIVERY_BLOCKER_RESUME_ALLOWED_STATUSES = new Set(
   DELIVERY_BLOCKER_WORKFLOW.resume_allowed_statuses,
 );
 
+export function deliveryWorkHold(item) {
+  if (item?.status === "parked") return "deferred";
+  if (item?.status === "blocked" || item?.blocked === true) return "blocked";
+  if (item?.dependency_blocked === true) return "dependency";
+  return null;
+}
+
 export function normalizeDeliveryBlockerAction(
   value,
   { allowRecommendationAliases = false } = {},

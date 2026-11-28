@@ -2101,17 +2101,23 @@ The current board retains the recorded session entry point after native work-ite
 completion so the source closeout can finish. No caller credentials, source paths
 or provider secrets are part of this summary.
 
-Completing the last story, defect or task retains the open Epic under **Closeout
-Pending**. This means review is needed, including remaining parent work or
-closeout gates; it does not certify readiness or change the Epic to Done.
-Deferred, blocked, retired and completed records retain their distinct meaning.
-The exact ART status remains available in the tree and work-item details.
+The package is **Blocked** when it has a package-wide hold or every
+remaining execution path is held. One story or risk waiting on another item
+can coexist with **In Progress** or **Ready**. The navigation identifies the
+direct waits, work held by an ancestor, and work paused by a deferred parent.
+An explicit hold can require operator review. An ordinary dependency wait is
+shown with the affected work. The exact recorded ART status remains available
+alongside the execution status.
+
+**Closeout Pending** indicates that the recorded descendant obligations are
+terminal. Open Features, PI Objectives, risks, and other remaining work
+still count. The closeout read continues to decide whether the required
+verification, approvals and evidence are satisfied.
 
 Choose Work Item lists recorded sessions, active ART work and prepared
-candidates, without choosing or starting one automatically. Exact child blocker
-records and dependency references stay with their work item; they are never
-promoted to a package blocker. Current owner preflight resolves dependencies
-against the actual Landing Unit coverage.
+candidates. The selected Work Session names a recorded hold, prerequisite,
+or missing iteration before offering preparation. A reviewed Landing Unit
+can contain a dependency when its approved order and coverage permit it.
 
 After source completion, use the owner-returned next action: retry partial
 Landing Unit closeout, choose remaining work, or review package closeout. Source

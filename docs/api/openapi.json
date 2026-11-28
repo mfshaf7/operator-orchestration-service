@@ -100905,6 +100905,42 @@
               "minimum": 1
             }
           },
+          "blocking_scope": {
+            "description": "Recorded package hold, all executable work held, some items waiting, or no hold.",
+            "enum": [
+              "package",
+              "all-work",
+              "some-work",
+              "none"
+            ]
+          },
+          "actionable_blocker_ids": {
+            "description": "Explicit work blockers requiring operator attention. May include the package root.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "held_work_item_ids": {
+            "description": "Open descendants held by a parent. Direct waiting items are reported separately.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "deferred_work_item_ids": {
+            "description": "Open descendants paused by a deferred parent.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
           "planning_prepared_work_item_ids": {
             "type": "array",
             "uniqueItems": true,

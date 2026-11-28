@@ -1,5 +1,7 @@
 import { isRefinementMetadataTarget, REFINEMENT_METADATA_FIELDS } from "./refinement/packet-model.js";
 
+import { deliveryWorkHold } from "./delivery-blocker.js";
+
 const workTypes = new Set(["User story", "Defect", "Task"]);
 export const piPlanningAssignmentTypes = new Set(["Feature", ...workTypes, "Risk", "Milestone"]);
 
@@ -27,40 +29,73 @@ export function preparedForPIPlanning(node) {
 }
 
 export function deliveryExecutionNavigation(root) {
-  const nodes = (root.children ?? []).flatMap(function walk(node) {
-    return [node, ...(node.children ?? []).flatMap(walk)];
-  });
   const terminal = node => ["done", "retired"].includes(node.status);
+  const rootHold = terminal(root) ? null : deliveryWorkHold(root);
+  const nodes = [];
+  const current = [];
+  const fronts = [];
+  const deferred = [];
+  function visit(node, ancestorHold, ancestorInactive, ancestorDeferred) {
+    nodes.push(node);
+    const hold = deliveryWorkHold(node);
+    const deferredHere = ancestorDeferred || hold === "deferred";
+    const inactive = ancestorInactive || terminal(node) || deferredHere;
+    if (ancestorDeferred && !terminal(node) && hold !== "deferred") deferred.push(node.id);
+    const held = ancestorHold || hold !== null;
+    if (!inactive) current.push({ node, hold, held, inherited: ancestorHold && hold === null });
+    const childFronts = (node.children ?? []).map(child => visit(child, held, inactive, deferredHere));
+    const hasWorkBelow = childFronts.includes(true);
+    if (inactive) return false;
+    const isFront = workTypes.has(node.type) || (node.type === "Feature" && !hasWorkBelow);
+    if (isFront) fronts.push({ node, held });
+    return isFront || hasWorkBelow;
+  }
+  for (const child of root.children ?? []) {
+    visit(child, rootHold !== null, terminal(root), rootHold === "deferred");
+  }
+
   const leaves = nodes.filter(node => workTypes.has(node.type));
-  const open = leaves.filter(node => !terminal(node));
-  const active = nodes.filter(node => node.status === "in-progress");
-  const prepared = open.filter(node => ["new", "ready"].includes(node.status) && node.ready_contract_satisfied === true);
-  const planningPrepared = nodes.filter(preparedForPIPlanning);
-  const blocked = nodes.filter(node => !terminal(node) && (node.blocked || node.dependency_blocked || node.status === "blocked"));
-  const finishedScope = leaves.length > 0 && leaves.every(terminal);
-  const executionSeen = leaves.length > 0 && ["in-progress", "blocked", "parked"].includes(root.status) ||
-    active.length > 0 || blocked.length > 0 || leaves.some(terminal) || prepared.length > 0;
+  const active = current.filter(({ node, held }) => !held && node.status === "in-progress");
+  const prepared = current.filter(({ node, held }) => !held && workTypes.has(node.type) &&
+    ["new", "ready"].includes(node.status) && node.ready_contract_satisfied === true);
+  const planningPrepared = current.filter(({ node }) => preparedForPIPlanning(node));
+  const blocked = current.filter(({ hold }) => hold !== null);
+  const blockingScope = rootHold === "blocked" || rootHold === "dependency" ? "package"
+    : fronts.length && fronts.every(({ held }) => held) ? "all-work"
+    : blocked.length ? "some-work" : "none";
+  const started = root.status === "in-progress" || active.length > 0 || leaves.some(node => node.status === "done");
+  const executionSeen = active.some(({ node }) => workTypes.has(node.type)) ||
+    prepared.length > 0 || leaves.some(terminal) ||
+    (leaves.length > 0 && (root.status === "in-progress" || rootHold !== null || fronts.some(({ held }) => held)));
   const phase = terminal(root) ? "audit_only" : executionSeen ? "execution" : leaves.length ? "refinement" : "work_design";
   const refinementOpen = phase !== "work_design" && phase !== "audit_only" && root.status !== "parked";
   const needsRefinement = node => isRefinementMetadataTarget(node) && node.status !== "in-progress" &&
     (piPlanningAssignmentTypes.has(node.type) ? !hasRefinementPreparation(node) : hasMissingRefinementFields(node, "work_item"));
-  const closeoutPending = !terminal(root) && finishedScope;
+  const closeoutPending = !terminal(root) && rootHold === null && leaves.length > 0 && nodes.every(terminal);
   const posture = root.status === "done" ? "Done" : root.status === "retired" ? "Retired" :
-    root.status === "parked" ? "Deferred" : root.status === "blocked" || blocked.length ? "Blocked" :
-    closeoutPending ? "Closeout Pending" : active.length || root.status === "in-progress" || leaves.some(terminal) ? "In Progress" :
-    phase === "execution" || root.status === "ready" ? "Ready" : "New";
+    rootHold === "deferred" ? "Deferred" : ["package", "all-work"].includes(blockingScope) ? "Blocked" :
+    closeoutPending ? "Closeout Pending" : started ? "In Progress" :
+    prepared.length ? "Ready" : "New";
   return {
     authority: "operator-orchestration-service",
     workflow_phase: phase,
     package_posture: posture,
     native_status: root.status,
     closeout_pending: closeoutPending,
-    active_work_item_ids: active.map(node => node.id),
-    prepared_work_item_ids: prepared.map(node => node.id),
-    planning_prepared_work_item_ids: planningPrepared.map(node => node.id),
-    blocked_work_item_ids: blocked.map(node => node.id),
+    active_work_item_ids: active.map(({ node }) => node.id),
+    prepared_work_item_ids: prepared.map(({ node }) => node.id),
+    planning_prepared_work_item_ids: planningPrepared.map(({ node }) => node.id),
+    blocked_work_item_ids: blocked.map(({ node }) => node.id),
+    blocking_scope: blockingScope,
+    actionable_blocker_ids: [
+      ...(rootHold === "blocked" ? [root.id] : []),
+      ...blocked.filter(({ hold, node }) => hold === "blocked" &&
+        (workTypes.has(node.type) || node.type === "Feature" || node.blocker)).map(({ node }) => node.id),
+    ],
+    held_work_item_ids: current.filter(({ inherited }) => inherited).map(({ node }) => node.id),
+    deferred_work_item_ids: deferred,
     // A package can have actionable work in more than one surface.
-    refinement_work_item_ids: refinementOpen ? nodes.filter(needsRefinement).map(node => node.id) : [],
+    refinement_work_item_ids: refinementOpen ? current.filter(({ node }) => needsRefinement(node)).map(({ node }) => node.id) : [],
     ...(refinementOpen && hasMissingRefinementFields(root, "initiative") ? { refinement_governance_pending: true } : {}),
     eligibility: "check-selected-work-item",
   };

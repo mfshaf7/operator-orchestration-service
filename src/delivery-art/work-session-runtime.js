@@ -136,31 +136,46 @@ export function createDeliveryArtWorkSessionCloseAdapter({
   store,
 } = {}) {
   async function followUp({ deliveryId }) {
-    if (typeof deliveryService?.getDeliveryCloseoutReadiness !== "function") {
-      throw new Error("Delivery ART getDeliveryCloseoutReadiness service is unavailable.");
+    const command = `npm run art -- initiative closeout-readiness ${deliveryId} --json`;
+    const unavailable = {
+      initiative_disposition: null,
+      next_action: {
+        code: "initiative-follow-up-required",
+        command,
+        reason: "The work session is complete. Read the initiative to check its remaining work.",
+        authority: "workspace-delivery-art",
+      },
+    };
+    let response;
+    try {
+      response = await deliveryService.getDeliveryCloseoutReadiness({
+        callerId: "operator-orchestration-service",
+        correlationId: randomUUID(),
+        deliveryId,
+      });
+    } catch {
+      return unavailable;
     }
-    const response = await deliveryService.getDeliveryCloseoutReadiness({
-      callerId: "operator-orchestration-service",
-      correlationId: randomUUID(),
-      deliveryId,
-    });
-    const readiness = response?.closeoutReadiness ?? {};
-    const epicStatus = String(readiness.epic?.status ?? "").toLowerCase();
-    const openDescendantCount = readiness.summary?.open_descendant_count ?? null;
+    const readiness = response?.closeout_readiness;
+    const openDescendantCount = readiness?.summary?.open_descendant_count;
+    if (typeof readiness?.epic?.status !== "string" || !readiness.epic.status.trim() ||
+        typeof readiness.ready_for_closeout !== "boolean" ||
+        !Number.isSafeInteger(openDescendantCount) || openDescendantCount < 0) return unavailable;
+    const epicStatus = readiness.epic.status.toLowerCase();
     const initiativeDisposition = {
       blocked_count: readiness.summary?.blocked_count ?? null,
       delivery_id: deliveryId,
       epic_status: readiness.epic?.status ?? null,
       open_descendant_count: openDescendantCount,
       ready_for_closeout: readiness.ready_for_closeout === true,
-      reasons: [...(readiness.reasons ?? [])],
+      reasons: Array.isArray(readiness.reasons) ? readiness.reasons : [],
     };
     if (["closed", "done", "retired"].includes(epicStatus)) {
       return {
         initiative_disposition: { ...initiativeDisposition, disposition: "closed" },
         next_action: {
           code: "work-complete",
-          command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+          command,
           reason: "The Landing Unit and its Delivery initiative are closed.",
           authority: "workspace-delivery-art",
         },
@@ -194,7 +209,7 @@ export function createDeliveryArtWorkSessionCloseAdapter({
         code: openDescendantCount > 0
           ? "initiative-work-remains"
           : "initiative-closeout-gates-required",
-        command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+        command,
         reason: openDescendantCount > 0
           ? `The Landing Unit is complete; ${openDescendantCount} initiative descendants remain open.`
           : "The Landing Unit is complete; initiative closeout gates remain unsatisfied.",
