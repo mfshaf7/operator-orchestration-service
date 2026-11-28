@@ -36,9 +36,9 @@ changes to which children were complete.
 A completion read can request the recorded outcome and the finalized reviews
 of completed direct children. The Broker binds both optional reads to the
 dedicated Delivery source caller and the operator. It matches packets against
-the requested child and review source. The completion revision includes the
-exact child identities. If the child set changes before submission, the
-Broker rejects the stale command before writing. Normal continuation reads
+the requested child and review source. The Console completion revision includes the exact child identities. If its
+pre-submission read detects a changed child set, the Console rejects the stale
+command before calling the existing Broker write. Normal continuation reads
 retain their existing behavior.
 
 ## Artifact And Deployment Evidence
