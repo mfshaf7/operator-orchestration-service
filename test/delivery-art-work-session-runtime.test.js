@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {createDeliveryArtSourceExecutorServer} from "../src/delivery-art/source-executor.js";
+import { createDeliveryService } from "../src/delivery-service.js";
 import {OpenProjectError} from "../src/errors.js";
 
 import {
@@ -107,7 +108,7 @@ function initiativeReadiness({
   status = "in-progress",
 } = {}) {
   return {
-    closeoutReadiness: {
+    closeout_readiness: {
       epic: { status },
       ready_for_closeout: readyForCloseout,
       reasons: readyForCloseout ? [] : ["Open initiative work remains."],
@@ -115,6 +116,32 @@ function initiativeReadiness({
     },
   };
 }
+
+test("work-session follow-up reads the service envelope and preserves completion across failed reads", async () => {
+  let available = true;
+  const deliveryService = createDeliveryService({
+    audit: { emit() {} },
+    openProjectClient: {
+      async getDeliveryCloseoutReadiness({ recordId }) {
+        if (!available) throw new Error("Owner temporarily unavailable");
+        return {
+          closeoutReadiness: initiativeReadiness({ openDescendantCount: 27 }).closeout_readiness,
+          deliveryRecordId: recordId,
+          deliveryRecordRef: `openproject://work_packages/${recordId}`,
+        };
+      },
+    },
+  });
+  const adapter = createDeliveryArtWorkSessionCloseAdapter({ deliveryService });
+  const input = { deliveryId: "delivery-1384" };
+  const result = await adapter.followUp(input);
+  assert.equal(result.next_action.code, "initiative-work-remains");
+  assert.equal(result.initiative_disposition.open_descendant_count, 27);
+  available = false;
+  const unavailable = await adapter.followUp(input);
+  assert.equal(unavailable.next_action.code, "initiative-follow-up-required");
+  assert.equal(unavailable.initiative_disposition, null);
+});
 
 test("work-session runtime stays disabled without an admitted source executor", () => {
   assert.equal(createDeliveryArtWorkSessionRuntime({ config: {} }), null);

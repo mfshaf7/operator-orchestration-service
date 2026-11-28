@@ -3309,6 +3309,45 @@ test("work start admits a dependency wholly ordered inside one exact Landing Uni
   );
 });
 
+test("selected work status identifies the missing iteration, prerequisite and held parent", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-before-start-"));
+  const unscheduled = continuation("work-item-963", "new");
+  Object.assign(unscheduled.continuation_context.target_item, {
+    ready_contract_satisfied: false,
+    ready_contract_missing_fields: ["Iteration"],
+  });
+  const waiting = dependencyBlockedContinuation("work-item-965", [963]);
+  const deferred = continuation("work-item-966", "new");
+  deferred.continuation_context.parent_chain = [{ id: 962, type: "Feature", status: "parked" }];
+  const { controller } = createHarness(root, {
+    continuationByWorkItemId: { "work-item-963": unscheduled, "work-item-965": waiting, "work-item-966": deferred },
+  });
+  assert.equal((await controller.status("963")).next_action.code, "work-planning-required");
+  const dependency = (await controller.status("965")).next_action;
+  assert.equal(dependency.code, "work-prerequisites-review-required");
+  assert.deepEqual(dependency.inputs, { work_item_id: "work-item-963" });
+  const hold = (await controller.status("966")).next_action;
+  assert.equal(hold.code, "work-scope-held");
+  assert.deepEqual(hold.inputs, { work_item_id: "work-item-962" });
+  assert.equal((await controller.start("966")).state, "blocked");
+});
+
+test("an existing session reads a new parent hold before advancing source", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-hold-"));
+  const current = continuation("work-item-963");
+  const { controller, store } = createHarness(root, {
+    continuationByWorkItemId: { "work-item-963": current },
+  });
+  const started = await controller.start("963", { decision: acceptedDecision() });
+  assert.ok(started.session_id);
+  current.continuation_context.parent_chain = [{ id: 958, type: "Epic", status: "blocked" }];
+  const projected = await controller.status("963");
+  assert.equal(projected.next_action.code, "work-scope-held");
+  const paused = await controller.continue("963");
+  assert.equal(paused.next_action.code, "work-scope-held");
+  assert.equal(store.readByAlias("work-item-963").session_id, started.session_id);
+});
+
 test("a dependency-blocked item cannot draft an unbound work session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-unbound-dependency-"));
   const harness = createHarness(root, {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { OpenProjectError } from "../src/errors.js";
 import { createDeliveryService } from "../src/delivery-service.js";
+import { deliveryExecutionNavigation } from "../src/delivery-execution-navigation.js";
 
 function createAudit() {
   return {
@@ -2790,6 +2791,48 @@ test("createDeliveryWorkItem returns null when the backend reports not found", a
   });
 
   assert.equal(result, null);
+});
+
+test("read-only Delivery overview promotes a recorded session only while its scope can advance", async () => {
+  const recordRef = "openproject://work_packages/42";
+  const callerId = "governance-operations-console";
+  const makeStory = id => ({ id, type: "User story", status: "new", children: [] });
+  const held = makeStory(44);
+  const tree = { id: 42, type: "Epic", status: "new", record_ref: recordRef, children: [
+    { id: 43, type: "Feature", status: "blocked", children: [held] },
+    { id: 45, type: "Feature", status: "new", children: [makeStory(46)] },
+  ] };
+  let coveredWorkItem = held.id;
+  const service = createDeliveryService({
+    openProjectClient: {
+      async listPrototypeDeliveryApplicationTargets() {
+        return [{ recordId: 42, recordRef, title: "A shared package", status: "new" }];
+      },
+      async listDeliveryScopedInitiatives({ recordIds }) {
+        assert.deepEqual(recordIds, [42]);
+        return [{ epic: tree, execution_tree: tree, execution_navigation: deliveryExecutionNavigation(tree) }];
+      },
+      async updateWorkPackage() { assert.fail("The overview cannot write to OpenProject."); },
+    },
+    workSessionStore: {
+      listSessions() {
+        return [{
+          delivery_id: "delivery-42", caller_id: callerId, session_id: "work-session:delivery-42:test",
+          covered_work_item_ids: [`work-item-${coveredWorkItem}`],
+        }];
+      },
+    },
+  });
+  const read = () => service.listDeliveryConsoleOverview({ callerId });
+  const idle = (await read()).operational_initiatives[0];
+  assert.equal(idle.execution_navigation.package_posture, "New");
+  assert.deepEqual(idle.execution_navigation.held_work_item_ids, [44]);
+  assert.deepEqual(idle.work_sessions[0].work_item_ids, ["work-item-44"]);
+
+  coveredWorkItem = 46;
+  const active = (await read()).operational_initiatives[0];
+  assert.equal(active.execution_navigation.package_posture, "In Progress");
+  assert.equal(active.execution_navigation.workflow_phase, "execution");
 });
 
 test("Delivery global overview retains every root and batches only operational trees, including parked work", async () => {

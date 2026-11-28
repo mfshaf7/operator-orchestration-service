@@ -50,7 +50,8 @@ test("package routing keeps both real dependencies and independent Refinement ob
   assert.deepEqual(navigation.blocked_work_item_ids, [4]);
   assert.deepEqual(navigation.prepared_work_item_ids, []);
   assert.equal(navigation.native_status, "new");
-  assert.equal(navigation.package_posture, "Blocked");
+  assert.equal(navigation.package_posture, "New");
+  assert.equal(navigation.blocking_scope, "some-work");
   assert.deepEqual(deliveryExecutionNavigation({ ...tree, status: "done" }).refinement_work_item_ids, []);
 });
 test("final-child completion and retirement retain closeout, including legacy work without receipts", () => {
@@ -72,6 +73,46 @@ test("blocked, deferred and terminal packages retain their distinct controls", (
   assert.equal(parentBlocked.workflow_phase,"execution");assert.equal(parentBlocked.package_posture,"Blocked");assert.deepEqual(parentBlocked.blocked_work_item_ids,[2]);
   for(const status of ["done","retired"]){const result=deliveryExecutionNavigation({...tree,status});assert.equal(result.workflow_phase,"audit_only");assert.equal(result.closeout_pending,false);}
 });
+test("independent work can advance while a story and its linked risk wait", () => {
+  const result = deliveryExecutionNavigation(root(
+    node(2, "Feature", "in-progress", [
+      node(3, "User story", "done"),
+      node(4, "User story", "ready", [], { dependency_blocked: true, ready_contract_satisfied: true }),
+      node(5, "User story", "new", [], { ready_contract_satisfied: true }),
+    ]),
+    node(6, "Risk", "new", [], { dependency_blocked: true }),
+  ));
+  assert.equal(result.package_posture, "In Progress");
+  assert.equal(result.blocking_scope, "some-work");
+  assert.deepEqual(result.blocked_work_item_ids, [4, 6]);
+  assert.deepEqual(result.actionable_blocker_ids, []);
+  assert.deepEqual(result.prepared_work_item_ids, [5]);
+});
+
+test("holds distinguish all execution work, held Features and deferred scope", () => {
+  const child = node(3, "User story", "in-progress");
+  const feature = node(2, "Feature", "blocked", [child]);
+  const allHeld = deliveryExecutionNavigation(root(feature));
+  assert.equal(allHeld.package_posture, "Blocked");
+  assert.deepEqual(allHeld.held_work_item_ids, [3]);
+  assert.deepEqual(allHeld.actionable_blocker_ids, [2]);
+  assert.deepEqual(allHeld.active_work_item_ids, []);
+  const deferred = deliveryExecutionNavigation(root({ ...feature, status: "parked" }));
+  assert.deepEqual(deferred.deferred_work_item_ids, [3]);
+  assert.deepEqual(deferred.blocked_work_item_ids, []);
+  const epicHeld = deliveryExecutionNavigation({ ...root(child), blocked: true });
+  assert.equal(epicHeld.blocking_scope, "package");
+  assert.deepEqual(epicHeld.actionable_blocker_ids, [1]);
+});
+
+test("completed stories do not imply closeout while the Feature or PI objective stays open", () => {
+  const feature = node(2, "Feature", "in-progress", [node(3, "User story", "done")]);
+  const objective = node(4, "PI Objective", "new");
+  assert.equal(deliveryExecutionNavigation(root(feature, objective)).closeout_pending, false);
+  assert.equal(deliveryExecutionNavigation(root({ ...feature, status: "done" }, objective)).closeout_pending, false);
+  assert.equal(deliveryExecutionNavigation(root({ ...feature, status: "done" }, { ...objective, status: "done" })).closeout_pending, true);
+});
+
 test("overview reads existing caller-bound sessions once without Git or provider inspection",async()=>{
   let reads=0;
   const tree=root(node(3,"Task","new"));
