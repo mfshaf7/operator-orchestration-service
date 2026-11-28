@@ -1,4 +1,5 @@
 import { HttpError } from "../errors.js";
+import { createProjectRuntime } from "../project-runtime/runtime.js";
 import { assertPlatformOperationSecurityDecision } from "./contracts.js";
 import { createPlatformOperationProviderClient } from "./provider-client.js";
 import { createPlatformOperationService } from "./service.js";
@@ -8,7 +9,8 @@ import { createDevIntegrationProfileService } from "./dev-integration-service.js
 import path from "node:path";
 import { platformOperationStateRoot } from "./store.js";
 
-export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourceCredentialResolvers } = {}) {
+export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourceCredentialResolvers,
+  projectRuntimeBindings, projectSourceOwners } = {}) {
   if (!config?.enabled) return null;
   if (config.profile !== "dev-integration") {
     throw new HttpError(
@@ -44,5 +46,10 @@ export function createPlatformOperationRuntime({ audit, config, fetchImpl, sourc
     ? createDevIntegrationProfileService({ root: path.join(config.stateRoot ?? platformOperationStateRoot(), "dev-integration"),
       providerClient, operatorBindings: config.operatorBindings, audit }) : null;
   service.governedProducts = config.productsEnabled === true ? async ({query}) => providerClient.getGovernedProducts(query) : null;
+  service.projectRuntime = createProjectRuntime({
+    root: config.stateRoot ?? platformOperationStateRoot(), rawBindings: projectRuntimeBindings,
+    prototype: projectSourceOwners?.prototype, delivery: projectSourceOwners?.delivery,
+    provider: providerClient, operatorBindings: config.operatorBindings,
+  });
   return service;
 }

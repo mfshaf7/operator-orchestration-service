@@ -25949,6 +25949,439 @@
         }
       }
     },
+    "/v1/prototype-source-requests/{request_id}/project-runtime": {
+      "get": {
+        "tags": [
+          "Prototype Source Authoring"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "prototype-source-authoring",
+        "operationId": "readPrototypeProjectRuntime",
+        "summary": "Read the admitted runtime and history",
+        "description": "Return the exact setup revision, current command revision and bounded source-bound history for the selected Prototype source request. This read starts no operation.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner result for the exact admitted scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeProjectRuntimeOverview"
+                },
+                "example": {
+                  "project_ref": "project:example",
+                  "setup": {
+                    "recipe_id": "static",
+                    "configuration_revision": "project-setup:example:1"
+                  },
+                  "revision": 1,
+                  "records": [
+                    {
+                      "acknowledgement": {
+                        "command_id": "saved-runtime:example",
+                        "operation_id": "project-operation:example",
+                        "scope_revision": 1,
+                        "accepted_at": "2026-11-28T08:00:00Z",
+                        "snapshot": {
+                          "snapshot_id": "project-source:example",
+                          "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        }
+                      },
+                      "status": "building",
+                      "source_revision": "saved-draft:4",
+                      "source_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "configuration_revision": "project-setup:example:1",
+                      "observation": {
+                        "state": "building",
+                        "observed_at": "2026-11-28T08:00:01Z"
+                      },
+                      "last_observation": null
+                    }
+                  ],
+                  "before": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator is not admitted."
+          },
+          "404": {
+            "description": "The selected source request or original command is unavailable."
+          },
+          "409": {
+            "description": "The current setup or saved source cannot satisfy the requested action."
+          },
+          "503": {
+            "description": "The shared runtime connection is unavailable."
+          }
+        }
+      }
+    },
+    "/v1/prototype-source-requests/{request_id}/project-runtime/run": {
+      "post": {
+        "tags": [
+          "Prototype Source Authoring"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "prototype-source-authoring",
+        "operationId": "runPrototypeSavedProject",
+        "summary": "Run the explicitly saved project revision",
+        "description": "Bind an idempotent command to the selected source request, exact acknowledged private draft, and current Platform setup before dispatch.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Current owner result for the exact admitted scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeProjectRuntimeCommand"
+                },
+                "example": {
+                  "acknowledgement": {
+                    "command_id": "saved-runtime:example",
+                    "operation_id": "project-operation:example",
+                    "scope_revision": 1,
+                    "accepted_at": "2026-11-28T08:00:00Z",
+                    "snapshot": {
+                      "snapshot_id": "project-source:example",
+                      "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    }
+                  },
+                  "status": "building",
+                  "source_revision": "saved-draft:4",
+                  "source_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "configuration_revision": "project-setup:example:1",
+                  "observation": {
+                    "state": "building",
+                    "observed_at": "2026-11-28T08:00:01Z"
+                  },
+                  "last_observation": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator is not admitted."
+          },
+          "404": {
+            "description": "The selected source request or original command is unavailable."
+          },
+          "409": {
+            "description": "The current setup or saved source cannot satisfy the requested action."
+          },
+          "503": {
+            "description": "The shared runtime connection is unavailable."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command_id",
+                  "expected_revision",
+                  "source_revision",
+                  "source_digest",
+                  "configuration_revision"
+                ],
+                "properties": {
+                  "command_id": {
+                    "type": "string"
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source_revision": {
+                    "type": "string"
+                  },
+                  "source_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "configuration_revision": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "command_id": "saved-runtime:example",
+                "expected_revision": 0,
+                "source_revision": "saved-draft:4",
+                "source_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "configuration_revision": "project-setup:example:1"
+              }
+            }
+          },
+          "description": "The operator-confirmed exact saved draft and setup from the current project overview."
+        }
+      }
+    },
+    "/v1/prototype-source-requests/{request_id}/project-runtime/commands/{command_id}": {
+      "get": {
+        "tags": [
+          "Prototype Source Authoring"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "prototype-source-authoring",
+        "operationId": "readPrototypeProjectRuntimeCommand",
+        "summary": "Read the original project command",
+        "description": "Read its retained acknowledgement and last owner observation without dispatch.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner result for the exact admitted scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeProjectRuntimeCommand"
+                },
+                "example": {
+                  "acknowledgement": {
+                    "command_id": "saved-runtime:example",
+                    "operation_id": "project-operation:example",
+                    "scope_revision": 1,
+                    "accepted_at": "2026-11-28T08:00:00Z",
+                    "snapshot": {
+                      "snapshot_id": "project-source:example",
+                      "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    }
+                  },
+                  "status": "building",
+                  "source_revision": "saved-draft:4",
+                  "source_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "configuration_revision": "project-setup:example:1",
+                  "observation": {
+                    "state": "building",
+                    "observed_at": "2026-11-28T08:00:01Z"
+                  },
+                  "last_observation": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator is not admitted."
+          },
+          "404": {
+            "description": "The selected source request or original command is unavailable."
+          },
+          "409": {
+            "description": "The current setup or saved source cannot satisfy the requested action."
+          },
+          "503": {
+            "description": "The shared runtime connection is unavailable."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Prototype Source Authoring"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "prototype-source-authoring",
+        "operationId": "reconcilePrototypeProjectRuntimeCommand",
+        "summary": "Continue or observe the original project command",
+        "description": "Read or continue the exact retained command. After dispatch, recovery observes the original Platform operation without submitting another run.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner result for the exact admitted scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeProjectRuntimeCommand"
+                },
+                "example": {
+                  "acknowledgement": {
+                    "command_id": "saved-runtime:example",
+                    "operation_id": "project-operation:example",
+                    "scope_revision": 1,
+                    "accepted_at": "2026-11-28T08:00:00Z",
+                    "snapshot": {
+                      "snapshot_id": "project-source:example",
+                      "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    }
+                  },
+                  "status": "building",
+                  "source_revision": "saved-draft:4",
+                  "source_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "configuration_revision": "project-setup:example:1",
+                  "observation": {
+                    "state": "building",
+                    "observed_at": "2026-11-28T08:00:01Z"
+                  },
+                  "last_observation": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator is not admitted."
+          },
+          "404": {
+            "description": "The selected source request or original command is unavailable."
+          },
+          "409": {
+            "description": "The current setup or saved source cannot satisfy the requested action."
+          },
+          "503": {
+            "description": "The shared runtime connection is unavailable."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "No replacement source or setup values are supplied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
     "/v1/prototype-source-requests/{request_id}/draft": {
       "get": {
         "tags": [
@@ -39012,6 +39445,212 @@
       }
     },
     "schemas": {
+      "PrototypeProjectRuntimeObservation": {
+        "type": "object",
+        "required": [
+          "state",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "preparing",
+              "building",
+              "starting",
+              "ready",
+              "failed",
+              "stopped",
+              "stale",
+              "unknown"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "instance_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner_receipt_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "log_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "endpoint_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeProjectRuntimeCommand": {
+        "type": "object",
+        "required": [
+          "acknowledgement",
+          "status",
+          "source_revision",
+          "source_digest",
+          "configuration_revision",
+          "observation",
+          "last_observation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgement": {
+            "type": "object",
+            "required": [
+              "command_id",
+              "operation_id",
+              "scope_revision",
+              "accepted_at",
+              "snapshot"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operation_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope_revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "snapshot": {
+                "type": "object",
+                "required": [
+                  "snapshot_id",
+                  "manifest_digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "snapshot_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "manifest_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              }
+            }
+          },
+          "status": {
+            "enum": [
+              "acknowledged",
+              "preparing",
+              "building",
+              "starting",
+              "ready",
+              "failed",
+              "stopped",
+              "stale",
+              "unknown"
+            ]
+          },
+          "source_revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observation": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrototypeProjectRuntimeObservation"
+              }
+            ]
+          },
+          "last_observation": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrototypeProjectRuntimeObservation"
+              }
+            ]
+          }
+        }
+      },
+      "PrototypeProjectRuntimeOverview": {
+        "type": "object",
+        "required": [
+          "project_ref",
+          "setup",
+          "revision",
+          "records",
+          "before"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "setup": {
+            "type": "object",
+            "required": [
+              "recipe_id",
+              "configuration_revision"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "recipe_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "configuration_revision": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeProjectRuntimeCommand"
+            }
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      },
       "DeliveryIntakeSourceReadV1": {
         "type": "object",
         "properties": {

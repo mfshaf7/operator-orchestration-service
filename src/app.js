@@ -4013,6 +4013,44 @@ async function handlePrototypeSource({ action, config, prototypeAuthoringService
   }
 }
 
+async function handlePrototypeProjectRuntime({ action, config, projectRuntime, request, requestId, response, url }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype saved project runtime");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  if (!projectRuntime) {
+    throw new HttpError(503, "project_runtime_unavailable", "The shared project runtime is not currently available.");
+  }
+  const identity = { callerId: caller.id, operatorId, requestId };
+  const projectRef = `oos://prototype-source-requests/${requestId}/project-runtime`;
+  const publishRead = (result, recordRef, selectors) => sendSourceProjection(response, request, result, () => ({
+    recordRef, sourceOwner: "operator-orchestration-service", sourceRef: sourceReadViewRef(url, selectors),
+    sourceRevision: sourceRevisionDigest(result), sourceTimestamp: new Date().toISOString(),
+  }));
+  if (action === "overview") {
+    if ([...url.searchParams.keys()].some(key => !["limit", "before"].includes(key) || url.searchParams.getAll(key).length !== 1)) {
+      throw new HttpError(400, "project_runtime_query_invalid", "Choose a valid project history page.");
+    }
+    const selectors = { limit: Number(url.searchParams.get("limit") ?? 20),
+      before: url.searchParams.has("before") ? Number(url.searchParams.get("before")) : null };
+    publishRead(await projectRuntime.overview({ ...identity, ...selectors }), projectRef, selectors);
+    return;
+  }
+  if (action !== "read") assertDeliveryMutationAuthority(caller);
+  if (action === "run") {
+    const command = await readJsonBody(request, { canonical: true, maxBytes: 4096 });
+    sendJson(response, 202, await projectRuntime.run({ ...identity, command }));
+    return;
+  }
+  if (action === "reconcile") {
+    const input = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!input || Object.keys(input).length) throw new HttpError(400, "project_runtime_command_invalid", "Use the original command without replacement input.");
+  }
+  const commandId = decodeURIComponent(url.pathname.split("/")[6]);
+  const result = await projectRuntime.reconcile({ ...identity, commandId }, action === "reconcile");
+  if (action === "read") publishRead(result, `${projectRef}/commands/${commandId}`);
+  else sendJson(response, 200, result);
+}
+
 async function handlePrototypeLanding({ action, config, prototypeLandingService, prototypeMaturityService, prototypeClosureService, request, response, requestId, url }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Prototype Landing");
@@ -6543,6 +6581,22 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/repository-owner-bootstrap\/requests\/[^/]+\/close$/.test(url.pathname)) {
         await handleRepositoryOwnerBootstrap({ action: "close", config, repositoryOwnerBootstrapService, request, response, url, requestId: decodeURIComponent(url.pathname.split("/")[4]) }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+\/project-runtime$/.test(url.pathname)) {
+        await handlePrototypeProjectRuntime({ action: "overview", config, projectRuntime: platformOperationService?.projectRuntime,
+          request, requestId: decodeURIComponent(url.pathname.split("/")[3]), response, url }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/project-runtime\/run$/.test(url.pathname)) {
+        await handlePrototypeProjectRuntime({ action: "run", config, projectRuntime: platformOperationService?.projectRuntime,
+          request, requestId: decodeURIComponent(url.pathname.split("/")[3]), response, url }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-source-requests\/[^/]+\/project-runtime\/commands\/[^/]+$/.test(url.pathname)) {
+        await handlePrototypeProjectRuntime({ action: "read", config, projectRuntime: platformOperationService?.projectRuntime,
+          request, requestId: decodeURIComponent(url.pathname.split("/")[3]), response, url }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-source-requests\/[^/]+\/project-runtime\/commands\/[^/]+$/.test(url.pathname)) {
+        await handlePrototypeProjectRuntime({ action: "reconcile", config, projectRuntime: platformOperationService?.projectRuntime,
+          request, requestId: decodeURIComponent(url.pathname.split("/")[3]), response, url }); return;
       }
       if (request.method === "GET" && url.pathname === "/v1/prototype-source-requests") {
         await handlePrototypeSource({ action: "list", config, prototypeAuthoringService, request, response, url }); return;

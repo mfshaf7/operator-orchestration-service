@@ -380,6 +380,8 @@ export function createRuntime({
     audit,
     config: config.platformOperation,
     fetchImpl,
+    projectRuntimeBindings: env.OOS_PROJECT_RUNTIME_BINDINGS_JSON,
+    projectSourceOwners: { prototype: prototypeAuthoringService, delivery: deliveryArtWorkSessionService },
     sourceCredentialResolvers: {
       "repository-bootstrap": repositoryOwnerBootstrapService ? {
         prepare: args => repositoryOwnerBootstrapService.prepareSourceCredential(args),

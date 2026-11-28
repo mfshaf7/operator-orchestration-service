@@ -262,3 +262,19 @@ existing baseline, project-scope, forbidden-path, provider and CGG controls stil
 apply. This does not load external project files or repository instructions.
 The Console enforces the same restriction before accepting a reply and again
 when applying the reviewed local proposal.
+
+### Prototype saved project integration
+
+The admitted Platform composition supplies `OOS_PROJECT_RUNTIME_BINDINGS_JSON`
+to the existing Broker runtime as a non-secret JSON array of exact project
+references, source-request subjects, and project scopes. The setting is absent
+from the active Console composition until the separate publication checkpoint.
+The provider and source executor retain their existing private credentials and
+snapshot storage.
+
+For an admitted source request, the runtime overview reads the current
+owner setup and retained history. Run accepts the reviewed setup revision,
+the exact saved draft revision and digest, the current command revision,
+and one operator command ID. Checking a lost response uses that same ID.
+A changed or missing setup requires review before Run. Manual editing,
+private Save, and existing Studio Preview remain independent.
