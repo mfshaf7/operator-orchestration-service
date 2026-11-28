@@ -12231,6 +12231,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     async getDeliveryWorkItemContinuationContext({
       recordId,
+      includeRecordedCompletion = false,
     }) {
       const { initiativeRecordId, state, targetNode } =
         await buildScopedDeliveryWorkItemState(recordId);
@@ -12254,6 +12255,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           recordId,
           state,
         });
+      if (includeRecordedCompletion && targetNode.type === "Feature" && targetNode.status === "done") {
+        const sections = readMarkdownSections(state.workPackagesById.get(recordId)?.description?.raw ?? "");
+        continuationContext.recorded_completion = Object.fromEntries(
+          DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES.filter(heading => sections.has(heading))
+            .map(heading => [heading, sections.get(heading)]),
+        );
+      }
       if (targetNode.type === "PI Objective") {
         const formPayload = completionStatusTransition.formPayload;
         const entry = buildCustomFieldSchemaMap(formPayload).get("PI Objective Review Outcome");

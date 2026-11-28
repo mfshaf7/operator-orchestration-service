@@ -431,6 +431,7 @@ export function createDeliveryArtWorkSessionRuntime({
     controller,
     executor: sourceExecutor.executor,
     lifecycleContext,
+    resolveArtifact: artifactService.resolveArtifact,
     sourceRealization,
     sourceCredentials,
     store,

@@ -897,6 +897,16 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
   );
   assert.equal(Object.hasOwn(target, "description"), false);
   assert.equal(result.continuationContext.previously_completed_related_items.length, 1);
+  const completedFeature = workPackages.find(entry => entry.id === 540);
+  completedFeature._links.status.title = "done";
+  completedFeature.description.raw += "\n\n## Completion Summary\n\nThe reviewed outcome was recorded.\n\n## Changed Surfaces\n\n- Recorded the approved change.";
+  const closed = await client.getDeliveryWorkItemContinuationContext({ recordId: 540, includeRecordedCompletion: true });
+  assert.deepEqual(closed.continuationContext.recorded_completion, {
+    "Completion Summary": "The reviewed outcome was recorded.",
+    "Changed Surfaces": "- Recorded the approved change.",
+  });
+  const compact = await client.getDeliveryWorkItemContinuationContext({ recordId: 540 });
+  assert.equal(compact.continuationContext.recorded_completion, undefined);
 
   const invalidResult = await client.getDeliveryWorkItemContinuationContext({ recordId: 542 });
   const invalidTarget = invalidResult.continuationContext.target_item;

@@ -10,6 +10,7 @@ import {
   DELIVERY_TARGET_PI_REQUIRED_TYPES,
 } from "./delivery-taxonomy.js";
 import { parseIdeaId } from "./idea-model.js";
+import { readCompletedChildReviewLinks } from "./delivery-art/review-packet-completion.js";
 
 function toExecutionSummaryProjection(result) {
   return {
@@ -468,6 +469,7 @@ function toDeliveryProjectQualityPackProjection(result) {
 export function createDeliveryService({
   openProjectClient,
   workSessionStore = null,
+  resolveDeliveryArtArtifact = null,
   audit,
   runtimeContext = {},
   wgcfArtReadinessClient = null,
@@ -1660,6 +1662,8 @@ export function createDeliveryService({
     async getDeliveryWorkItemContinuationContext({
       callerId,
       correlationId,
+      includeCompletedChildEvidence = false,
+      includeRecordedCompletion = false,
       workItemId,
     }) {
       const recordId = parseWorkItemId(workItemId);
@@ -1670,6 +1674,7 @@ export function createDeliveryService({
       try {
         const result = await openProjectClient.getDeliveryWorkItemContinuationContext({
           recordId,
+          ...(includeRecordedCompletion ? { includeRecordedCompletion } : {}),
         });
         assertExecutableContinuationTarget(result);
 
@@ -1690,12 +1695,18 @@ export function createDeliveryService({
         });
 
         const projection = toWorkItemContinuationContextProjection(result);
+        const evidence = includeCompletedChildEvidence && result.continuationContext.target_item?.type === "Feature"
+          ? await readCompletedChildReviewLinks({
+            context: result.continuationContext, deliveryId: projection.delivery_id,
+            store: workSessionStore, resolveArtifact: resolveDeliveryArtArtifact,
+          }) : null;
         // Local custody answers this even when the source executor is offline or the item has no repository.
         return {
           ...projection,
           source_session_present: workSessionStore
             ? workSessionStore.readByAlias(projection.work_item_id) !== null
             : null,
+          ...(evidence ? { completed_child_evidence: evidence } : {}),
         };
       } catch (error) {
         if (error instanceof OpenProjectError && error.errorClass === "not_found") {

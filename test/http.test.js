@@ -2885,8 +2885,12 @@ test("delivery session workflow-health endpoint returns the broker response", as
 
 test("delivery work-item continuation endpoint returns the broker response", async () => {
   const continuationCalls = [];
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("governance-operations-console");
+  config.callerAuth.callerSecrets = { "governance-operations-console": "console-test-secret" };
+  config.deliveryArt.workSession.callerOperatorBindings = { "governance-operations-console": "operator:test" };
   const app = createApp({
-    config: createBaseConfig(),
+    config,
     deliveryService: {
       getDeliveryWorkItemContinuationContext: async (input) => {
         continuationCalls.push(input);
@@ -2953,6 +2957,27 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
   assert.equal(continuationCalls[0].workItemId, "work-item-177");
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+  assert.equal(continuationCalls[0].includeCompletedChildEvidence, undefined);
+  const evidencePath = "/v1/delivery-work-items/work-item-177/continuation-context?include_completed_child_evidence=true";
+  const blocked = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: evidencePath,
+  });
+  assert.equal(blocked.statusCode, 403);
+  assert.equal(continuationCalls.length, 1);
+  const bound = { "x-oos-caller-id": "governance-operations-console", "x-oos-caller-secret": "console-test-secret" };
+  assert.equal((await executeRequest(app, { headers: bound, method: "GET", url: evidencePath })).statusCode, 403);
+  const evidenceResponse = await executeRequest(app, {
+    headers: { ...bound, "x-oos-operator-id": "operator:test" },
+    method: "GET",
+    url: evidencePath,
+  });
+  assert.equal(evidenceResponse.statusCode, 200);
+  assert.equal(continuationCalls[1].includeCompletedChildEvidence, true);
 });
 
 test("delivery work-item status endpoint returns a bounded broker response", async () => {

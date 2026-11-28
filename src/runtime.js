@@ -234,6 +234,7 @@ export function createRuntime({
   const deliveryService = createDeliveryService({
     audit,
     openProjectClient,
+    resolveDeliveryArtArtifact: deliveryArtArtifactService.resolveArtifact,
     workSessionStore: deliveryArtWorkSessionStore,
     wgcfArtReadinessClient,
     wgcfArtReadinessMode: config.wgcf.artReadinessMode,
