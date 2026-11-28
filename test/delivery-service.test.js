@@ -751,6 +751,74 @@ test("continuation context reads source custody for the exact Planning objective
   assert.equal((await service.getDeliveryWorkItemContinuationContext(request)).source_session_present, true);
 });
 
+test("Feature evidence follows completed direct children to their finalized Review Packets", async () => {
+  const digest = "a".repeat(64), uri = `wgcf://artifacts/delivery-art/sha256/${digest}`;
+  const related = (id, relation = "completed_child", parent = 42) => ({
+    relation,
+    item: { id, parent_id: parent, record_ref: `openproject://work_packages/${id}`, status: "done", subject: `Child ${id}` },
+  });
+  const cleanupReads = [];
+  const packetReads = [];
+  let evidenceUnavailable = false;
+  const service = createDeliveryService({
+    audit: createAudit(),
+    openProjectClient: {
+      async getDeliveryWorkItemContinuationContext() {
+        return {
+          deliveryRecordId: 40, deliveryRecordRef: "openproject://work_packages/40",
+          workItemRecordId: 42, workItemRecordRef: "openproject://work_packages/42",
+          continuationContext: {
+            target_item: { id: 42, type: "Feature" },
+            previously_completed_related_items: [
+              related(43), related(44), related(45), related(47, "completed_sibling", 40), related(48, "completed_child", 47),
+            ],
+          },
+        };
+      },
+    },
+    workSessionStore: {
+      readByAlias: () => null,
+      readCleanupReceiptByAlias(alias) {
+        cleanupReads.push(alias);
+        return {
+          delivery_id: "delivery-40", closed_by: "operator:reviewer",
+          protected_evidence_refs: [`openproject://work_packages/${alias.slice("work-item-".length)}`, uri],
+        };
+      },
+    },
+    async resolveDeliveryArtArtifact({ reference }) {
+      packetReads.push(reference);
+      if (evidenceUnavailable) throw new Error("Isolated registry failure");
+      return { artifact: {
+        artifact_type: "art_review_packet", status: "finalized", delivery_id: "delivery-40",
+        custody: { state: "durable" }, operator: { id: "operator:reviewer" },
+        covered_work_item_ids: ["work-item-43", "work-item-44", "work-item-47", "work-item-48"],
+        landing_unit: { evidence_kind: "merged_pr", repos: [
+          { pr_url: "https://github.com/example/repo/pull/433" },
+          { pr_url: "https://example.com/irrelevant" },
+        ] },
+      } };
+    },
+  });
+  const request = { callerId: "governance-operations-console", correlationId: "completion-evidence", workItemId: "work-item-42" };
+  assert.equal((await service.getDeliveryWorkItemContinuationContext(request)).completed_child_evidence, undefined);
+  assert.deepEqual(cleanupReads, []);
+  const result = await service.getDeliveryWorkItemContinuationContext({ ...request, includeCompletedChildEvidence: true });
+  assert.deepEqual(cleanupReads, ["work-item-43", "work-item-44", "work-item-45"]);
+  assert.deepEqual(packetReads, [{ digest: `sha256:${digest}`, uri }]);
+  assert.deepEqual(result.completed_child_evidence, {
+    completed_child_count: 3, matched_child_count: 2, unavailable_child_count: 0,
+    links: [{ url: "https://github.com/example/repo/pull/433", work_items: [
+      { id: 43, subject: "Child 43" }, { id: 44, subject: "Child 44" },
+    ] }],
+  });
+  evidenceUnavailable = true;
+  const failedRead = await service.getDeliveryWorkItemContinuationContext({ ...request, includeCompletedChildEvidence: true });
+  assert.deepEqual(failedRead.completed_child_evidence, {
+    completed_child_count: 3, matched_child_count: 0, unavailable_child_count: 3, links: [],
+  });
+});
+
 test("getDeliveryWorkItemStatus projects only authoritative status", async () => {
   const audit = createAudit();
   const service = createDeliveryService({

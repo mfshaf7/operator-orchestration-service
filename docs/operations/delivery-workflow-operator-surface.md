@@ -1615,6 +1615,18 @@ exact item. This is a custody read independent of the source executor and
 repository eligibility. A null value means custody is unavailable and the
 Console cannot accept non-source completion or PI Objective review.
 
+In Console Feature completion, **Find approved evidence** looks up pull
+requests from finalized Review Packets for completed direct children. Open a
+link to review it or add it to **What changed?**. The form appends the selected
+link to your draft. Review the full evidence and confirm before recording
+completion. If coverage is partial, add any remaining evidence from the
+original record. The lookup makes no changes to Delivery.
+
+Evidence and saved outcome reads use the same caller-specific credential and
+operator binding as Work Session reads. When a read fails, retry the lookup
+from the form. After a child moves in or out of the Feature, reread the
+completed work and review your draft before confirming again.
+
 Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
 elaboration after PI commitment exists, or to record backlog `User story`
 children that remain explicitly non-executable. They are not intended to create

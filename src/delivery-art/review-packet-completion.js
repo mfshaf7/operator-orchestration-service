@@ -89,6 +89,91 @@ export function landingUnitSourceEvidence(packet) {
   };
 }
 
+export async function readClosedWorkReview({ receipt, deliveryId, workItemId, resolveArtifact, packets = new Map() }) {
+  const ref = `openproject://work_packages/${workItemId.slice("work-item-".length)}`;
+  if (!receipt || receipt.delivery_id !== deliveryId || !receipt.protected_evidence_refs?.includes(ref)) {
+    return { review: null, unavailable: false };
+  }
+  if (!resolveArtifact) return { review: null, unavailable: true };
+  const references = receipt.protected_evidence_refs.filter(
+    uri => /^wgcf:\/\/artifacts\/delivery-art\/sha256\/[a-f0-9]{64}$/.test(uri),
+  );
+  const resolved = await Promise.allSettled(references.map(uri => {
+    const digest = `sha256:${uri.slice(-64)}`;
+    if (!packets.has(uri)) packets.set(uri, resolveArtifact({ reference: { uri, digest } }));
+    return packets.get(uri);
+  }));
+  const packet = resolved.map(result => result.status === "fulfilled" ? result.value.artifact : null)
+    .find(candidate => candidate?.artifact_type === "art_review_packet" && candidate.status === "finalized" &&
+      candidate.delivery_id === deliveryId && candidate.custody?.state === "durable" &&
+      candidate.operator?.id === receipt.closed_by && candidate.covered_work_item_ids.includes(workItemId));
+  if (!packet) return { review: null, unavailable: resolved.some(result => result.status === "rejected") };
+  const urls = packet.landing_unit?.evidence_kind === "merged_pr"
+    ? [...landingUnitSourceEvidence(packet).prUrls, packet.landing_unit.pr_url]
+      .filter(url => typeof url === "string" && /^https:\/\/github\.com\/[a-z0-9_.-]+\/[a-z0-9_.-]+\/pull\/[1-9][0-9]*\/?$/i.test(url))
+      .map(url => url.replace(/\/$/, "")) : [];
+  return {
+    review: {
+      covered_work_item_ids: packet.covered_work_item_ids.filter(id =>
+        receipt.protected_evidence_refs.includes(`openproject://work_packages/${id.slice("work-item-".length)}`)),
+      pull_request_urls: [...new Set(urls)],
+      verification_recorded: packet.readiness?.level === "operating-ready",
+      passed_checks: [...new Set([
+        ...(packet.evidence?.tests ?? []), ...(packet.evidence?.validations ?? []),
+        ...(packet.evidence?.runtime_and_live ?? []), ...(packet.evidence?.security_and_trust ?? []),
+      ].filter(entry => entry.result === "pass" && typeof entry.name === "string" && entry.name.trim())
+        .map(entry => entry.name.trim()))],
+    },
+    unavailable: false,
+  };
+}
+
+export async function readCompletedChildReviewLinks({ context, deliveryId, store, resolveArtifact }) {
+  const children = (context.previously_completed_related_items ?? [])
+    .filter(({ item, relation }) => relation === "completed_child" &&
+      item?.parent_id === context.target_item.id && item.status === "done" &&
+      Number.isSafeInteger(item.id) && item.id > 0 &&
+      item.record_ref === `openproject://work_packages/${item.id}`);
+  const packets = new Map();
+
+  const links = new Map();
+  let covered = 0;
+  let unavailable = 0;
+  // Limit concurrent registry reads, and reuse packets shared by several children.
+  if (store && resolveArtifact) {
+    for (let index = 0; index < children.length; index += 4) {
+      const batch = children.slice(index, index + 4);
+      const results = await Promise.allSettled(batch.map(async ({ item }) => {
+        const workItemId = `work-item-${item.id}`;
+        return readClosedWorkReview({
+          receipt: store.readCleanupReceiptByAlias(workItemId), deliveryId, workItemId, resolveArtifact, packets,
+        });
+      }));
+      for (const [offset, result] of results.entries()) {
+        if (result.status === "rejected" || result.value.unavailable) {
+          unavailable += 1;
+          continue;
+        }
+        const urls = result.value.review?.pull_request_urls ?? [];
+        if (urls.length === 0) continue;
+        covered += 1;
+        const child = batch[offset].item;
+        for (const url of urls) {
+          const items = links.get(url) ?? [];
+          items.push({ id: child.id, subject: child.subject });
+          links.set(url, items);
+        }
+      }
+    }
+  } else unavailable = children.length;
+  return {
+    completed_child_count: children.length,
+    matched_child_count: covered,
+    unavailable_child_count: unavailable,
+    links: Array.from(links, ([url, work_items]) => ({ url, work_items })),
+  };
+}
+
 export function buildReviewPacketCompletionInput(packet, workItemId) {
   const digest = reviewPacketDigest(packet);
   const source = landingUnitSourceEvidence(packet);

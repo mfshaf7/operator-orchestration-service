@@ -2806,11 +2806,17 @@ async function handleDeliveryInitiativeEvidencePacket({
 async function handleDeliveryWorkItemContinuationContext({
   config,
   deliveryService,
+  includeCompletedChildEvidence,
+  includeRecordedCompletion,
   request,
   response,
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  if (includeCompletedChildEvidence || includeRecordedCompletion) {
+    assertCallerIdentityBound(caller, "Delivery completion review details");
+    deliveryWorkSessionOperatorId(request, config, caller);
+  }
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2823,6 +2829,8 @@ async function handleDeliveryWorkItemContinuationContext({
   const record = await deliveryService.getDeliveryWorkItemContinuationContext({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
+    ...(includeCompletedChildEvidence ? { includeCompletedChildEvidence: true } : {}),
+    ...(includeRecordedCompletion ? { includeRecordedCompletion: true } : {}),
     workItemId,
   });
 
@@ -8226,6 +8234,8 @@ export function createApp({
         await handleDeliveryWorkItemContinuationContext({
           config,
           deliveryService,
+          includeCompletedChildEvidence: url.searchParams.get("include_completed_child_evidence") === "true",
+          includeRecordedCompletion: url.searchParams.get("include_completion_record") === "true",
           request,
           response,
           workItemId: url.pathname.split("/")[3],

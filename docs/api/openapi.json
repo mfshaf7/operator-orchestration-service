@@ -4466,6 +4466,18 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/WorkItemIdParam"
+          },
+          {
+            "name": "include_completed_child_evidence",
+            "in": "query",
+            "schema": { "type": "boolean", "default": false },
+            "description": "For a Feature, include approved pull request links from finalized Review Packets of completed direct children."
+          },
+          {
+            "name": "include_completion_record",
+            "in": "query",
+            "schema": { "type": "boolean", "default": false },
+            "description": "When the Feature is done, include its saved completion sections. Completion-detail options require a caller-specific credential and bound operator."
           }
         ],
         "responses": {
@@ -47719,6 +47731,41 @@
           "workflow_id"
         ],
         "properties": {
+          "completed_child_evidence": {
+            "type": "object",
+            "required": ["completed_child_count", "matched_child_count", "links"],
+            "additionalProperties": false,
+            "description": "Optional Feature evidence lookup. Coverage can be partial when retained reviews are missing or unavailable.",
+            "properties": {
+              "completed_child_count": { "type": "integer", "minimum": 0 },
+              "matched_child_count": { "type": "integer", "minimum": 0 },
+              "unavailable_child_count": { "type": "integer", "minimum": 0 },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["url", "work_items"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": { "type": "string", "format": "uri" },
+                    "work_items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "object",
+                        "required": ["id", "subject"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": { "type": "integer", "minimum": 1 },
+                          "subject": { "type": "string", "minLength": 1 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "continuation_context": {
             "type": "object",
             "additionalProperties": true
@@ -56527,6 +56574,44 @@
           "cleanup_receipt": {
             "type": "object",
             "additionalProperties": true
+          },
+          "closed_review": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "covered_work_item_ids",
+              "pull_request_urls",
+              "verification_recorded"
+            ],
+            "properties": {
+              "covered_work_item_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^work-item-[1-9][0-9]*$"
+                }
+              },
+              "pull_request_urls": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "verification_recorded": {
+                "type": "boolean"
+              },
+              "passed_checks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "closed_review_unavailable": {
+            "const": true
           },
           "cleanup": {
             "type": "object",

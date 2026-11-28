@@ -849,6 +849,17 @@ const components = {
       },
       work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContract" },
       cleanup_receipt: { type: "object", additionalProperties: true },
+      closed_review: {
+        type: "object", additionalProperties: false,
+        required: ["covered_work_item_ids", "pull_request_urls", "verification_recorded"],
+        properties: {
+          covered_work_item_ids: { type: "array", items: { type: "string", pattern: "^work-item-[1-9][0-9]*$" } },
+          pull_request_urls: { type: "array", items: { type: "string", format: "uri" } },
+          verification_recorded: { type: "boolean" },
+          passed_checks: { type: "array", items: { type: "string", minLength: 1 } },
+        },
+      },
+      closed_review_unavailable: { const: true },
       cleanup: { type: "object", additionalProperties: true },
       architecture_supersession: { type: "object", additionalProperties: true },
       architecture_supersession_receipt: {

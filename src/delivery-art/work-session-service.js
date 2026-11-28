@@ -1,5 +1,6 @@
 import { canonicalDigest } from "./canonical-json.js";
 import { normalizeWorkItemId } from "./work-session.js";
+import { readClosedWorkReview } from "./review-packet-completion.js";
 
 const COMMAND_ACTIONS = new Set([
   "start",
@@ -313,6 +314,7 @@ export function createDeliveryArtWorkSessionService({
   controller,
   executor = { available: true, id: "local-engineering-source-executor" },
   lifecycleContext = null,
+  resolveArtifact = null,
   sourceRealization = null,
   sourceCredentials = null,
   store,
@@ -424,6 +426,23 @@ export function createDeliveryArtWorkSessionService({
         authority: "platform-engineering",
         reason: "Check the recorded repository access closure for this completed session.",
       } } : {}),
+    };
+  }
+
+  async function withClosedReview(result) {
+    if (result.state !== "closed" || !result.cleanup_receipt) return result;
+    const receipt = result.cleanup_receipt;
+    const { review, unavailable } = await readClosedWorkReview({
+      receipt,
+      deliveryId: result.delivery_id ?? receipt.delivery_id,
+      workItemId: result.work_item_id,
+      resolveArtifact,
+    }).catch(() => ({ review: null, unavailable: true }));
+    return {
+      ...result,
+      delivery_id: result.delivery_id ?? receipt.delivery_id,
+      ...(review ? { closed_review: review } : {}),
+      ...(unavailable ? { closed_review_unavailable: true } : {}),
     };
   }
 
@@ -586,7 +605,9 @@ export function createDeliveryArtWorkSessionService({
       store.readByAlias(workItemId),
     ), store.readByAlias(workItemId)));
     const pending = store.readPendingRebuild?.(store.readByAlias(workItemId));
-    if (pending?.caller_id !== callerId || pending?.operator_id !== operatorId || pending?.work_item_id !== workItemId) return withClosedSourceAccess(result, callerId, operatorId);
+    if (pending?.caller_id !== callerId || pending?.operator_id !== operatorId || pending?.work_item_id !== workItemId) {
+      return withClosedReview(await withClosedSourceAccess(result, callerId, operatorId));
+    }
     return { ...result, pending_rebuild: {
       command_id: pending.command_id, expected_session_revision: pending.replacement_expected_revision,
     } };
